@@ -3,12 +3,13 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const repoRoot = path.resolve(__dirname, '..');
 
 const [
   ,
   ,
-  buildDirArg = '/home/shrawan/Auramusic/tmp/ota-build',
-  appJsonArg = '/home/shrawan/Auramusic/AuramusicExpo/app.json',
+  buildDirArg = path.join(repoRoot, '.tmp', 'ota-build'),
+  appJsonArg = path.join(repoRoot, 'app.json'),
   baseUrlArg = 'https://teamshryne.github.io/mediyo-ota',
 ] = process.argv;
 

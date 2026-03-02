@@ -3,9 +3,10 @@ set -euo pipefail
 
 MSG="${1:-OTA update}"
 
-APP_DIR="/home/shrawan/Auramusic/AuramusicExpo"
-BUILD_DIR="/home/shrawan/Auramusic/tmp/ota-build"
-OTA_REPO="/home/shrawan/Auramusic/mediyo-ota-repo"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_DIR="$SCRIPT_DIR"
+BUILD_DIR="${BUILD_DIR:-$APP_DIR/.tmp/ota-build}"
+OTA_REPO="${OTA_REPO:-$APP_DIR/../mediyo-ota-repo}"
 BASE_URL="https://teamshryne.github.io/mediyo-ota"
 APP_JSON="$APP_DIR/app.json"
 

@@ -3,7 +3,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import RNApkInstaller from '@dominicvonk/react-native-apk-installer';
 
 export const UPDATE_CONFIG_URL =
-  'https://github.com/TeamShryne/Mediyo/blob/main/version.json';
+  'https://github.com/TeamShryne/mediyo-binary-updates/blob/main/version.json';
 export const UPDATE_RELEASES_URL =
   'https://github.com/TeamShryne/Mediyo/releases';
 
