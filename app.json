@@ -2,10 +2,8 @@
   "expo": {
     "name": "Mediyo",
     "slug": "auramusic",
-    "version": "3.0",
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "version": "3.1.0.0",
+    "runtimeVersion": "3.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",

@@ -1,6 +1,6 @@
 {
   "name": "auramusic",
-  "version": "3.0",
+  "version": "3.1.0.0",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
