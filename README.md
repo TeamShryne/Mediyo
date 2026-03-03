@@ -1,110 +1,48 @@
-# 🎧 Mediyo
+# Mediyo
 
-A modern YouTube Music client built with React Native and Expo (Development Build),
-focused on reliable background playback, playback notifications, and a smooth
-listening experience.
+[![Get it on GitHub](https://img.shields.io/badge/Get%20it%20on-GitHub-181717?style=for-the-badge&logo=github)](https://github.com/TeamShryne/Mediyo/releases/latest)
 
-Mediyo is designed as a performant, native-first music application rather than
-a limited Expo Go demo.
+Mediyo is a React Native music app that provides a YouTube Music-style listening experience with search, queue-based playback, and background audio controls.
 
----
+## What The App Does
 
-## ✨ Features
+- Search tracks, albums, artists, and playlists
+- Play audio with queue management
+- Support background playback and lock-screen controls
+- Provide a mobile-first UI focused on fast listening workflows
 
-- YouTube Music streaming via InnerTube API
-- Search songs, albums, artists, and playlists
-- Music player with proper queue management
-- Playback notifications (lock screen & notification controls)
-- Reliable background and foreground audio playback
-- Library management
-- Dark theme UI optimized for long listening sessions
+## Tech Stack
 
----
-
-## 🔊 Audio & Playback
-
-Mediyo uses a custom Expo development build with native audio capabilities.
-
-- Native-backed audio playback
-- Media session integration
-- Stable background playback
-- Notification controls (play / pause / next / previous)
-
-This setup removes Expo Go limitations and enables advanced audio features.
-
----
-
-## 🧱 Tech Stack
-
-- React Native
-- Expo (Development Build)
+- React Native + Expo Development Build
 - TypeScript
 - React Navigation
-- react-native-audio-pro
-- Axios
-- InnerTube API (YouTube Music)
+- Native audio playback integration
 
----
+## Quick Start
 
-## 📦 Installation
+```bash
+npm install
+npm start
+npm run android
+```
 
-    npm install
+## Platform Support
 
----
+- Android: primary supported platform
+- iOS: experimental
 
-## ▶️ Running the App
+## Legal Disclaimer
 
-    # Start Metro
-    npm start
+Mediyo is an independent, community project and is **not affiliated with, endorsed by, or sponsored by YouTube, YouTube Music, or Google**.
 
-    # Run on Android (Development Build)
-    npm run android
+All trademarks, service marks, logos, and brand names are the property of their respective owners.
 
-Expo Go is not supported.
-A custom development client is required for native audio and notifications.
+This project does not claim ownership of third-party media content. Users are responsible for complying with applicable copyright laws, platform terms of service, and local regulations in their region.
 
----
+If you are a rights holder and believe content access through this project violates your rights, please open an issue in this repository.
 
-## 📱 Platform Support
+## Releases
 
-- Android (primary and fully supported)
-- iOS (experimental / not fully tested)
+Download the latest build from:
 
----
-
-## ⚠️ Disclaimer
-
-Mediyo is an open-source, experimental YouTube Music client.
-All content is fetched from publicly available endpoints.
-No media is hosted or redistributed by the application.
-
----
-
-## 👤 Author
-
-Team Mediyo
-
----
-
-## 📌 Notes
-
-- Uses native audio via development build
-- Designed for performance and reliability
-- Not intended as a Play Store release (currently)
-
----
-
-## OTA Updates (Self-Hosted)
-
-Mediyo now supports OTA updates for JavaScript/assets via `expo-updates`, with APK updates kept as fallback for native changes.
-
-- OTA source is configured via `expo.updates.url` in `app.json`
-- Recommended deployment model:
-  - Host bundles/assets on GitHub Pages
-  - Serve manifests from a tiny API endpoint (Worker/Function)
-- Publish commands:
-
-    npm run ota:preview
-    npm run ota:production
-
-Important: OTA cannot replace native APK updates when native modules or runtime compatibility changes.
+- https://github.com/TeamShryne/Mediyo/releases/latest

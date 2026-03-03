@@ -72,3 +72,5 @@ ehthumbs.db
 example-request/
 
 example-app/
+# Local implementation docs
+imps/STREAMING.md
