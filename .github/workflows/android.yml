@@ -32,10 +32,10 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.1.10909125" >> $GITHUB_ENV
           ls $ANDROID_HOME/ndk/26.1.10909125 || true
 
-      - name: Set up Rust 1.86
+      - name: Set up Rust 1.88
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: '1.86'
+          toolchain: '1.88'
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
 
       - name: Install cargo-ndk
