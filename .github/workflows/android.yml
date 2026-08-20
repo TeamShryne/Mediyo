@@ -1,8 +1,10 @@
 name: Android
 
 on:
-  push: { branches: [main] }
-  pull_request: { branches: [main] }
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -12,28 +14,30 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
-        with: { distribution: temurin, java-version: '17' }
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        with:
+          distribution: temurin
+          java-version: '17'
 
       - name: Install NDK 26.1.10909125
-        run: sdkmanager --install "ndk;26.1.10909125" && echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/26.1.10909125" >> $GITHUB_ENV
+        run: |
+          sdkmanager --install "ndk;26.1.10909125"
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/26.1.10909125" >> $GITHUB_ENV
 
       - name: Set up Rust 1.81
         uses: dtolnay/rust-toolchain@stable
-        with: { toolchain: "1.81", targets: "aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android" }
+        with:
+          toolchain: '1.81'
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
 
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --locked
 
-      # Heavy caches — Gradle + Rust (keep at least one rust set)
       - name: Cache Rust registry/index
         uses: actions/cache@v4
         with:
@@ -42,7 +46,8 @@ jobs:
             ~/.cargo/git
             rust/target
           key: rust-${{ runner.os }}-${{ hashFiles('rust/Cargo.lock') }}-${{ hashFiles('rust/crates/**/*.rs') }}
-          restore-keys: rust-${{ runner.os }}-
+          restore-keys: |
+            rust-${{ runner.os }}-
 
       - name: Setup Gradle (heavy cache)
         uses: gradle/actions/setup-gradle@v3
@@ -50,7 +55,7 @@ jobs:
           cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
           gradle-home-cache-cleanup: true
 
-      - name: Build Rust (cargo-ndk → jniLibs)
+      - name: Build Rust (cargo-ndk -> jniLibs)
         working-directory: rust
         run: |
           cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 --platform 24 -o ../app/src/main/jniLibs build --release -p mediyo-ffi
@@ -65,18 +70,18 @@ jobs:
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
-        with: { name: mediyo-debug-apk, path: app/build/outputs/apk/debug/*.apk }
+        with:
+          name: mediyo-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
 
-      # Autodelete caches — keep newest 20, keep at least one rust cache
       - name: Prune caches (keep 20 newest + rust)
         if: always()
-        env: { GH_TOKEN: ${{ github.token }} }
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           echo "Listing caches..."
           gh api repos/${{ github.repository }}/actions/caches --paginate -q '.actions_caches | sort_by(.created_at) | reverse | .[] | "\(.id) \(.key) \(.created_at)"' | head -n 40 || true
-          # Build keep list: newest 20 + at least one rust-*
           IDS=$(gh api repos/${{ github.repository }}/actions/caches --paginate -q '.actions_caches | sort_by(.created_at) | reverse | .[20:] | .[].id' 2>/dev/null || true)
-          # Ensure we keep one rust cache even if outside newest 20
           RUST_KEEP=$(gh api repos/${{ github.repository }}/actions/caches --paginate -q '.actions_caches | map(select(.key | startswith("rust-"))) | sort_by(.created_at) | reverse | .[0] | .id' 2>/dev/null || true)
           for id in $IDS; do
             if [ "$id" = "$RUST_KEEP" ]; then echo "keep rust $id"; continue; fi
