@@ -1,0 +1,19 @@
+[package]
+name = "mediyo-ffi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "mediyo_ffi"
+
+[dependencies]
+mediyo-core = { path = "../mediyo-core" }
+uniffi = { version = "0.28", features = ["build"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[build-dependencies]
+uniffi = { version = "0.28", features = ["build"] }
