@@ -1,34 +1,30 @@
 package com.teamshryne.mediyo.data.mediyo
 
+import com.teamshryne.mediyo.FfiHomePage
+import com.teamshryne.mediyo.FfiSearchResponse
+import com.teamshryne.mediyo.MediyoSession
 import com.teamshryne.mediyo.data.auth.AuthRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * JNI wrapper for libmediyo_ffi.so (built via cargo-ndk in CI: rust/crates/mediyo-ffi).
- * Falls back to stub data when .so not yet loaded (pre-build / preview).
- */
 @Singleton
 class MediyoBridge @Inject constructor(private val auth: AuthRepository) {
-    companion object {
-        var loaded = false
-        init { try { System.loadLibrary("mediyo_ffi"); loaded = true } catch (_: Throwable) {} }
-        @JvmStatic external fun nativeSearch(query: String, cookies: String): String
-        @JvmStatic external fun nativeHome(cookies: String): String
+    private suspend fun session(): MediyoSession {
+        val a = auth.flow.first()
+        return if (a.isLoggedIn) MediyoSession.withAll(a.cookies, a.sapisid.ifEmpty { null }, a.visitorData.ifEmpty { "" }, a.pageId.ifEmpty { null })
+        else MediyoSession.new()
     }
 
-    // High-level suspend helpers — real FFI JSON, stub fallback
-    suspend fun search(query: String): String = withContext(Dispatchers.IO) {
-        try {
-            if (loaded) nativeSearch(query, "") else """{"results":[],"filters":[]}"""
-        } catch (_: Throwable) { """{"results":[],"filters":[]}""" }
+    suspend fun search(query: String): FfiSearchResponse = withContext(Dispatchers.IO) {
+        val s = session()
+        try { s.search(query) } finally { s.close() }
     }
 
-    suspend fun home(): String = withContext(Dispatchers.IO) {
-        try { if (loaded) nativeHome("") else """{"carousels":[]}""" } catch (_: Throwable) { """{"carousels":[]}""" }
+    suspend fun home(): FfiHomePage = withContext(Dispatchers.IO) {
+        val s = session()
+        try { s.browseHome() } finally { s.close() }
     }
-
-    // Extract stream URL only via NewPipe is handled in data.playback.NewPipeResolver
 }

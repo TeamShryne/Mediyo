@@ -20,32 +20,23 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 
-data class HomeCarousel(val title: String, val items: List<HomeItem>)
-data class HomeItem(val id: String, val title: String, val subtitle: String)
-
 @HiltViewModel
 class HomeVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel() {
     var loading by mutableStateOf(true)
-    var carousels by mutableStateOf<List<HomeCarousel>>(emptyList())
+    var carousels by mutableStateOf<List<com.teamshryne.mediyo.FfiCarousel>>(emptyList())
     var error by mutableStateOf<String?>(null)
 
     suspend fun load() {
         loading = true; error = null
         try {
-            val raw = bridge.home()
-            // Parse real FFI JSON here; empty means no data, not fake data
-            if (raw.isBlank() || raw.contains("\"carousels\":[]")) {
-                carousels = emptyList()
-            } else {
-                // TODO: decode HomePage JSON into carousels
-                carousels = emptyList()
-            }
+            val page = bridge.home()
+            carousels = page.carousels
+            if (carousels.isEmpty()) error = null
         } catch (e: Throwable) {
             error = e.message ?: "Failed to load"
             carousels = emptyList()
         } finally { loading = false }
     }
-    suspend fun retry() = load()
 }
 
 @Composable
@@ -64,15 +55,15 @@ fun HomeScreen(vm: HomeVm = hiltViewModel()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Failed to load", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onErrorContainer)
                         Text(vm.error ?: "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
-                        FilledButton(onClick = { /* retry */ }) { Text("Retry") }
+                        Button(onClick = { /* TODO retry */ }) { Text("Retry") }
                     }
                 }
             }
             vm.carousels.isEmpty() -> item {
                 Card(Modifier.padding(horizontal = 16.dp).fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Column(Modifier.padding(16.dp)) {
                         Text("Nothing here yet", fontWeight = FontWeight.Medium)
-                        Text("Pull to refresh or try again later", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Pull to refresh", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -82,24 +73,20 @@ fun HomeScreen(vm: HomeVm = hiltViewModel()) {
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text(c.title, Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                             LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                items(c.items) { HomeCard(it) }
+                                items(c.items) { r ->
+                                    Card(shape = RoundedCornerShape(12.dp), modifier = Modifier.width(132.dp)) {
+                                        Column {
+                                            Box(Modifier.height(132.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant))
+                                            Column(Modifier.padding(10.dp)) {
+                                                Text(r.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1)
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun HomeCard(item: HomeItem) {
-    Card(shape = RoundedCornerShape(12.dp), modifier = Modifier.width(132.dp)) {
-        Column {
-            Box(Modifier.height(132.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant))
-            Column(Modifier.padding(10.dp)) {
-                Text(item.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1)
-                if (item.subtitle.isNotEmpty()) Text(item.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
         }
     }
@@ -112,10 +99,4 @@ private fun ShimmerCarousel() {
         Box(Modifier.width(120.dp).height(16.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(a)))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) { items(4) { Box(Modifier.size(132.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(a))) } }
     }
-}
-
-@Composable
-private fun FilledButton(onClick: () -> Unit, content: @Composable () -> Unit) {
-    var loading by remember { mutableStateOf(false) }
-    Button(onClick = onClick, enabled = !loading) { content() }
 }
