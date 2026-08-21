@@ -27,10 +27,8 @@ jobs:
       - name: Install NDK 26.1.10909125
         run: |
           echo "ANDROID_HOME=$ANDROID_HOME"
-          ls $ANDROID_HOME/cmdline-tools || true
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;26.1.10909125"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.1.10909125" >> $GITHUB_ENV
-          ls $ANDROID_HOME/ndk/26.1.10909125 || true
 
       - name: Set up Rust 1.88
         uses: dtolnay/rust-toolchain@stable
@@ -38,10 +36,18 @@ jobs:
           toolchain: '1.88'
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
 
-      - name: Install cargo-ndk
+      - name: Cache cargo-ndk binary
+        id: cache-ndk
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-ndk
+          key: cargo-ndk-4.1.2-rust-1.88-${{ runner.os }}-v1
+
+      - name: Install cargo-ndk (cached)
+        if: steps.cache-ndk.outputs.cache-hit != 'true'
         run: cargo install cargo-ndk --locked
 
-      - name: Cache Rust registry/index
+      - name: Cache Rust registry + target (incremental)
         uses: actions/cache@v4
         with:
           path: |
@@ -52,9 +58,10 @@ jobs:
           restore-keys: |
             rust-${{ runner.os }}-
 
-      - name: Setup Gradle (heavy cache)
+      - name: Setup Gradle 8.6 (heavy cache, no 9.x)
         uses: gradle/actions/setup-gradle@v3
         with:
+          gradle-version: 8.6
           cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
           gradle-home-cache-cleanup: true
 
