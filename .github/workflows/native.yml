@@ -1,0 +1,68 @@
+name: Native
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "rust/**"
+      - ".github/workflows/native.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: native-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rust toolchain (android targets)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.88'
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install NDK + platform
+        run: sdkmanager --install "ndk;27.0.12077973" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Cache cargo-ndk
+        id: cache-ndk
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-ndk
+          key: cargo-ndk-4.1.2-rust-1.88-${{ runner.os }}-v1
+
+      - name: Install cargo-ndk
+        if: steps.cache-ndk.outputs.cache-hit != 'true'
+        run: cargo install cargo-ndk --locked
+
+      - name: Rust cache (incremental)
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Build .so (arm64-v8a + armeabi-v7a + x86_64, release)
+        working-directory: rust
+        run: cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 --platform 24 -o ../app/src/main/jniLibs build --release -p mediyo-ffi
+
+      - name: Commit jniLibs if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/jniLibs
+          if git diff --cached --quiet; then
+            echo "no jniLibs changes"
+            exit 0
+          fi
+          git commit -m "chore: update native libs"
+          git push
