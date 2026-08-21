@@ -11,7 +11,7 @@ import org.schabi.newpipe.extractor.downloader.Response
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private class SimpleDownloader : Downloader {
+private class SimpleDownloader : Downloader() {
     override fun execute(request: Request): Response {
         val url = request.url()
         val headers = request.headers()
@@ -29,7 +29,7 @@ private class SimpleDownloader : Downloader {
         val latestUrl = conn.url.toString()
         val respHeaders = mutableMapOf<String, List<String>>()
         conn.headerFields?.forEach { (k, v) -> if (k != null) respHeaders[k] = v }
-        return Response(code.toString(), body, respHeaders, latestUrl, null)
+        return Response(code, body, respHeaders, latestUrl, null)
     }
 }
 
