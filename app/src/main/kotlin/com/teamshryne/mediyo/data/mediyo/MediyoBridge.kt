@@ -17,7 +17,7 @@ class MediyoBridge @Inject constructor(private val auth: AuthRepository) {
     private suspend fun session(): MediyoSession {
         val a = auth.flow.first()
         return if (a.isLoggedIn) MediyoSession.withAll(a.cookies, a.sapisid.ifEmpty { null }, a.visitorData.ifEmpty { "" }, a.pageId.ifEmpty { null })
-        else MediyoSession.new()
+        else MediyoSession()
     }
 
     suspend fun search(query: String): FfiSearchResponse = withContext(Dispatchers.IO) {
