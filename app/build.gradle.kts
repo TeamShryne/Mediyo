@@ -40,7 +40,12 @@ android {
     buildFeatures { compose = true }
     composeOptions { kotlinCompilerExtensionVersion = "1.5.8" }
 
-    packaging { jniLibs { useLegacyPackaging = false } }
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+            pickFirsts += listOf("**/libjnidispatch.so", "**/libmediyo_ffi.so")
+        }
+    }
 }
 
 dependencies {
