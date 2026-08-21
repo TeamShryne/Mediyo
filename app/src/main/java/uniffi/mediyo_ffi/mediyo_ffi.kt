@@ -1745,6 +1745,7 @@ data class FfiAlbumPage (
     var `title`: kotlin.String, 
     var `artist`: kotlin.String?, 
     var `year`: kotlin.String?, 
+    var `thumbnails`: List<FfiThumbnail>, 
     var `tracks`: List<FfiSearchResult>, 
     var `carousels`: List<FfiCarousel>, 
     var `continuation`: kotlin.String?
@@ -1762,6 +1763,7 @@ public object FfiConverterTypeFfiAlbumPage: FfiConverterRustBuffer<FfiAlbumPage>
             FfiConverterString.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterOptionalString.read(buf),
+            FfiConverterSequenceTypeFfiThumbnail.read(buf),
             FfiConverterSequenceTypeFfiSearchResult.read(buf),
             FfiConverterSequenceTypeFfiCarousel.read(buf),
             FfiConverterOptionalString.read(buf),
@@ -1772,6 +1774,7 @@ public object FfiConverterTypeFfiAlbumPage: FfiConverterRustBuffer<FfiAlbumPage>
             FfiConverterString.allocationSize(value.`title`) +
             FfiConverterOptionalString.allocationSize(value.`artist`) +
             FfiConverterOptionalString.allocationSize(value.`year`) +
+            FfiConverterSequenceTypeFfiThumbnail.allocationSize(value.`thumbnails`) +
             FfiConverterSequenceTypeFfiSearchResult.allocationSize(value.`tracks`) +
             FfiConverterSequenceTypeFfiCarousel.allocationSize(value.`carousels`) +
             FfiConverterOptionalString.allocationSize(value.`continuation`)
@@ -1781,6 +1784,7 @@ public object FfiConverterTypeFfiAlbumPage: FfiConverterRustBuffer<FfiAlbumPage>
             FfiConverterString.write(value.`title`, buf)
             FfiConverterOptionalString.write(value.`artist`, buf)
             FfiConverterOptionalString.write(value.`year`, buf)
+            FfiConverterSequenceTypeFfiThumbnail.write(value.`thumbnails`, buf)
             FfiConverterSequenceTypeFfiSearchResult.write(value.`tracks`, buf)
             FfiConverterSequenceTypeFfiCarousel.write(value.`carousels`, buf)
             FfiConverterOptionalString.write(value.`continuation`, buf)
@@ -1794,6 +1798,7 @@ data class FfiArtistPage (
     var `subscriberCount`: kotlin.String?, 
     var `monthlyAudience`: kotlin.String?, 
     var `description`: kotlin.String?, 
+    var `thumbnails`: List<FfiThumbnail>, 
     var `topSongs`: List<FfiSearchResult>, 
     var `carousels`: List<FfiCarousel>, 
     var `continuation`: kotlin.String?, 
@@ -1815,6 +1820,7 @@ public object FfiConverterTypeFfiArtistPage: FfiConverterRustBuffer<FfiArtistPag
             FfiConverterOptionalString.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterOptionalString.read(buf),
+            FfiConverterSequenceTypeFfiThumbnail.read(buf),
             FfiConverterSequenceTypeFfiSearchResult.read(buf),
             FfiConverterSequenceTypeFfiCarousel.read(buf),
             FfiConverterOptionalString.read(buf),
@@ -1829,6 +1835,7 @@ public object FfiConverterTypeFfiArtistPage: FfiConverterRustBuffer<FfiArtistPag
             FfiConverterOptionalString.allocationSize(value.`subscriberCount`) +
             FfiConverterOptionalString.allocationSize(value.`monthlyAudience`) +
             FfiConverterOptionalString.allocationSize(value.`description`) +
+            FfiConverterSequenceTypeFfiThumbnail.allocationSize(value.`thumbnails`) +
             FfiConverterSequenceTypeFfiSearchResult.allocationSize(value.`topSongs`) +
             FfiConverterSequenceTypeFfiCarousel.allocationSize(value.`carousels`) +
             FfiConverterOptionalString.allocationSize(value.`continuation`) +
@@ -1842,6 +1849,7 @@ public object FfiConverterTypeFfiArtistPage: FfiConverterRustBuffer<FfiArtistPag
             FfiConverterOptionalString.write(value.`subscriberCount`, buf)
             FfiConverterOptionalString.write(value.`monthlyAudience`, buf)
             FfiConverterOptionalString.write(value.`description`, buf)
+            FfiConverterSequenceTypeFfiThumbnail.write(value.`thumbnails`, buf)
             FfiConverterSequenceTypeFfiSearchResult.write(value.`topSongs`, buf)
             FfiConverterSequenceTypeFfiCarousel.write(value.`carousels`, buf)
             FfiConverterOptionalString.write(value.`continuation`, buf)
@@ -2212,6 +2220,7 @@ public object FfiConverterTypeFfiNavButton: FfiConverterRustBuffer<FfiNavButton>
 data class FfiPlaylistPage (
     var `title`: kotlin.String, 
     var `trackCount`: kotlin.String?, 
+    var `thumbnails`: List<FfiThumbnail>, 
     var `tracks`: List<FfiSearchResult>, 
     var `continuation`: kotlin.String?
 ) {
@@ -2227,6 +2236,7 @@ public object FfiConverterTypeFfiPlaylistPage: FfiConverterRustBuffer<FfiPlaylis
         return FfiPlaylistPage(
             FfiConverterString.read(buf),
             FfiConverterOptionalString.read(buf),
+            FfiConverterSequenceTypeFfiThumbnail.read(buf),
             FfiConverterSequenceTypeFfiSearchResult.read(buf),
             FfiConverterOptionalString.read(buf),
         )
@@ -2235,6 +2245,7 @@ public object FfiConverterTypeFfiPlaylistPage: FfiConverterRustBuffer<FfiPlaylis
     override fun allocationSize(value: FfiPlaylistPage) = (
             FfiConverterString.allocationSize(value.`title`) +
             FfiConverterOptionalString.allocationSize(value.`trackCount`) +
+            FfiConverterSequenceTypeFfiThumbnail.allocationSize(value.`thumbnails`) +
             FfiConverterSequenceTypeFfiSearchResult.allocationSize(value.`tracks`) +
             FfiConverterOptionalString.allocationSize(value.`continuation`)
     )
@@ -2242,6 +2253,7 @@ public object FfiConverterTypeFfiPlaylistPage: FfiConverterRustBuffer<FfiPlaylis
     override fun write(value: FfiPlaylistPage, buf: ByteBuffer) {
             FfiConverterString.write(value.`title`, buf)
             FfiConverterOptionalString.write(value.`trackCount`, buf)
+            FfiConverterSequenceTypeFfiThumbnail.write(value.`thumbnails`, buf)
             FfiConverterSequenceTypeFfiSearchResult.write(value.`tracks`, buf)
             FfiConverterOptionalString.write(value.`continuation`, buf)
     }
@@ -2292,7 +2304,10 @@ public object FfiConverterTypeFfiQueue: FfiConverterRustBuffer<FfiQueue> {
 data class FfiQueueItem (
     var `title`: kotlin.String, 
     var `videoId`: kotlin.String, 
-    var `artists`: List<kotlin.String>
+    var `artists`: List<kotlin.String>, 
+    var `album`: kotlin.String?, 
+    var `duration`: kotlin.String?, 
+    var `thumbnails`: List<FfiThumbnail>
 ) {
     
     companion object
@@ -2307,19 +2322,28 @@ public object FfiConverterTypeFfiQueueItem: FfiConverterRustBuffer<FfiQueueItem>
             FfiConverterString.read(buf),
             FfiConverterString.read(buf),
             FfiConverterSequenceString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterSequenceTypeFfiThumbnail.read(buf),
         )
     }
 
     override fun allocationSize(value: FfiQueueItem) = (
             FfiConverterString.allocationSize(value.`title`) +
             FfiConverterString.allocationSize(value.`videoId`) +
-            FfiConverterSequenceString.allocationSize(value.`artists`)
+            FfiConverterSequenceString.allocationSize(value.`artists`) +
+            FfiConverterOptionalString.allocationSize(value.`album`) +
+            FfiConverterOptionalString.allocationSize(value.`duration`) +
+            FfiConverterSequenceTypeFfiThumbnail.allocationSize(value.`thumbnails`)
     )
 
     override fun write(value: FfiQueueItem, buf: ByteBuffer) {
             FfiConverterString.write(value.`title`, buf)
             FfiConverterString.write(value.`videoId`, buf)
             FfiConverterSequenceString.write(value.`artists`, buf)
+            FfiConverterOptionalString.write(value.`album`, buf)
+            FfiConverterOptionalString.write(value.`duration`, buf)
+            FfiConverterSequenceTypeFfiThumbnail.write(value.`thumbnails`, buf)
     }
 }
 
@@ -2405,7 +2429,10 @@ data class FfiSearchResult (
     var `category`: kotlin.String, 
     var `year`: kotlin.String?, 
     var `duration`: kotlin.String?, 
-    var `explicit`: kotlin.Boolean
+    var `explicit`: kotlin.Boolean, 
+    var `thumbnails`: List<FfiThumbnail>, 
+    var `artists`: List<kotlin.String>, 
+    var `album`: kotlin.String?
 ) {
     
     companion object
@@ -2425,6 +2452,9 @@ public object FfiConverterTypeFfiSearchResult: FfiConverterRustBuffer<FfiSearchR
             FfiConverterOptionalString.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterBoolean.read(buf),
+            FfiConverterSequenceTypeFfiThumbnail.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterOptionalString.read(buf),
         )
     }
 
@@ -2436,7 +2466,10 @@ public object FfiConverterTypeFfiSearchResult: FfiConverterRustBuffer<FfiSearchR
             FfiConverterString.allocationSize(value.`category`) +
             FfiConverterOptionalString.allocationSize(value.`year`) +
             FfiConverterOptionalString.allocationSize(value.`duration`) +
-            FfiConverterBoolean.allocationSize(value.`explicit`)
+            FfiConverterBoolean.allocationSize(value.`explicit`) +
+            FfiConverterSequenceTypeFfiThumbnail.allocationSize(value.`thumbnails`) +
+            FfiConverterSequenceString.allocationSize(value.`artists`) +
+            FfiConverterOptionalString.allocationSize(value.`album`)
     )
 
     override fun write(value: FfiSearchResult, buf: ByteBuffer) {
@@ -2448,6 +2481,9 @@ public object FfiConverterTypeFfiSearchResult: FfiConverterRustBuffer<FfiSearchR
             FfiConverterOptionalString.write(value.`year`, buf)
             FfiConverterOptionalString.write(value.`duration`, buf)
             FfiConverterBoolean.write(value.`explicit`, buf)
+            FfiConverterSequenceTypeFfiThumbnail.write(value.`thumbnails`, buf)
+            FfiConverterSequenceString.write(value.`artists`, buf)
+            FfiConverterOptionalString.write(value.`album`, buf)
     }
 }
 
@@ -2458,6 +2494,8 @@ data class FfiSong (
     var `videoId`: kotlin.String, 
     var `artists`: List<kotlin.String>, 
     var `album`: kotlin.String?, 
+    var `duration`: kotlin.String?, 
+    var `thumbnails`: List<FfiThumbnail>, 
     var `lyricsBrowseId`: kotlin.String?
 ) {
     
@@ -2475,6 +2513,8 @@ public object FfiConverterTypeFfiSong: FfiConverterRustBuffer<FfiSong> {
             FfiConverterSequenceString.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterOptionalString.read(buf),
+            FfiConverterSequenceTypeFfiThumbnail.read(buf),
+            FfiConverterOptionalString.read(buf),
         )
     }
 
@@ -2483,6 +2523,8 @@ public object FfiConverterTypeFfiSong: FfiConverterRustBuffer<FfiSong> {
             FfiConverterString.allocationSize(value.`videoId`) +
             FfiConverterSequenceString.allocationSize(value.`artists`) +
             FfiConverterOptionalString.allocationSize(value.`album`) +
+            FfiConverterOptionalString.allocationSize(value.`duration`) +
+            FfiConverterSequenceTypeFfiThumbnail.allocationSize(value.`thumbnails`) +
             FfiConverterOptionalString.allocationSize(value.`lyricsBrowseId`)
     )
 
@@ -2491,6 +2533,8 @@ public object FfiConverterTypeFfiSong: FfiConverterRustBuffer<FfiSong> {
             FfiConverterString.write(value.`videoId`, buf)
             FfiConverterSequenceString.write(value.`artists`, buf)
             FfiConverterOptionalString.write(value.`album`, buf)
+            FfiConverterOptionalString.write(value.`duration`, buf)
+            FfiConverterSequenceTypeFfiThumbnail.write(value.`thumbnails`, buf)
             FfiConverterOptionalString.write(value.`lyricsBrowseId`, buf)
     }
 }
@@ -2973,6 +3017,34 @@ public object FfiConverterSequenceTypeFfiSearchResult: FfiConverterRustBuffer<Li
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeFfiSearchResult.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeFfiThumbnail: FfiConverterRustBuffer<List<FfiThumbnail>> {
+    override fun read(buf: ByteBuffer): List<FfiThumbnail> {
+        val len = buf.getInt()
+        return List<FfiThumbnail>(len) {
+            FfiConverterTypeFfiThumbnail.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<FfiThumbnail>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeFfiThumbnail.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<FfiThumbnail>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeFfiThumbnail.write(it, buf)
         }
     }
 }
