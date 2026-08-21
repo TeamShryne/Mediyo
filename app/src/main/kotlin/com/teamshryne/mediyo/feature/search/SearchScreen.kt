@@ -15,6 +15,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import com.teamshryne.mediyo.FfiSearchResult
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import kotlinx.coroutines.launch
 
@@ -23,29 +24,26 @@ class SearchVm @Inject constructor(val bridge: MediyoBridge) : ViewModel() {
     var query by mutableStateOf("")
     var selected by mutableStateOf("All")
     var loading by mutableStateOf(false)
-    var results by mutableStateOf<List<SearchItem>>(emptyList())
+    var results by mutableStateOf<List<FfiSearchResult>>(emptyList())
+    var filters by mutableStateOf<List<com.teamshryne.mediyo.FfiSearchFilter>>(emptyList())
     var hasSearched by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
-    val filters = listOf("All", "Songs", "Videos", "Albums", "Playlists")
+    val filterLabels = listOf("All", "Songs", "Videos", "Albums", "Playlists")
 
     suspend fun search() {
         if (query.isBlank()) return
         loading = true; hasSearched = true; error = null
         try {
-            val raw = bridge.search(query)
-            if (raw.isBlank() || raw.contains("\"results\":[]")) {
-                results = emptyList()
-            } else {
-                // TODO: decode SearchResponse JSON into results
-                results = emptyList()
-            }
+            val res = bridge.search(query)
+            results = res.results
+            filters = res.filters
+            if (filters.isEmpty()) filters = emptyList()
         } catch (e: Throwable) {
             error = e.message ?: "Search failed"
             results = emptyList()
         } finally { loading = false }
     }
 }
-data class SearchItem(val id: String, val title: String, val type: String)
 
 @Composable
 fun SearchScreen(vm: SearchVm = hiltViewModel()) {
@@ -60,7 +58,7 @@ fun SearchScreen(vm: SearchVm = hiltViewModel()) {
                     singleLine = true, shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()
                 )
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(vm.filters) { f -> FilterChip(selected = vm.selected == f, onClick = { vm.selected = f }, label = { Text(f) }) }
+                    items(vm.filterLabels) { f -> FilterChip(selected = vm.selected == f, onClick = { vm.selected = f }, label = { Text(f) }) }
                 }
                 Button(onClick = { scope.launch { vm.search() } }, Modifier.fillMaxWidth(), enabled = vm.query.isNotBlank() && !vm.loading) {
                     Text(if (vm.loading) "Searching…" else "Search")
@@ -91,7 +89,7 @@ fun SearchScreen(vm: SearchVm = hiltViewModel()) {
                 Card(Modifier.padding(horizontal = 16.dp).fillMaxWidth()) {
                     Column(Modifier.padding(16.dp)) {
                         Text("No results for \"${vm.query}\"", style = MaterialTheme.typography.bodyMedium)
-                        Text("Try different keywords or filter", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Try different keywords", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -99,8 +97,8 @@ fun SearchScreen(vm: SearchVm = hiltViewModel()) {
                 val r = vm.results[i]
                 Card(Modifier.padding(horizontal = 16.dp).fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
                     Row(Modifier.padding(12.dp).fillMaxWidth(), Arrangement.SpaceBetween) {
-                        Text(r.title, style = MaterialTheme.typography.bodyMedium)
-                        AssistChip(onClick = {}, label = { Text(r.type) })
+                        Text(r.title, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f), maxLines = 1)
+                        AssistChip(onClick = {}, label = { Text(r.category) })
                     }
                 }
             }

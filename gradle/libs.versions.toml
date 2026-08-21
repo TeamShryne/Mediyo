@@ -14,6 +14,7 @@ media3 = "1.2.1"
 coroutines = "1.7.3"
 serialization = "1.6.2"
 newpipe = "v0.26.5"
+jna = "5.14.0"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version = "1.12.0" }
@@ -42,6 +43,7 @@ compose-material-icons = { module = "androidx.compose.material:material-icons-ex
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 newpipe-extractor = { module = "com.github.TeamNewPipe:NewPipeExtractor", version.ref = "newpipe" }
+jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
