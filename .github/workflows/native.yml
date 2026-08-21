@@ -51,9 +51,10 @@ jobs:
         run: cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 --platform 24 -o ../app/src/main/jniLibs build --release -p mediyo-ffi
 
       - name: Generate UniFFI Kotlin bindings
+        working-directory: rust
         run: |
-          rm -rf app/src/main/java/uniffi
-          cargo run --bin uniffi-bindgen --release --manifest-path rust/Cargo.toml -- generate --library app/src/main/jniLibs/arm64-v8a/libmediyo_ffi.so --language kotlin --out-dir app/src/main/java --no-format
+          rm -rf ../app/src/main/java/uniffi
+          cargo run --bin uniffi-bindgen --release -- generate --library ../app/src/main/jniLibs/arm64-v8a/libmediyo_ffi.so --language kotlin --out-dir ../app/src/main/java --no-format
 
       - name: Commit jniLibs + bindings if changed
         run: |
