@@ -59,6 +59,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          # stash built libs, pull latest, restore
+          git stash push -m "jniLibs" --keep-index || true
+          git fetch origin
+          git rebase origin/main || (git rebase --abort; git reset --hard origin/main)
+          git stash pop || true
           git add app/src/main/jniLibs
           if git diff --cached --quiet; then
             echo "no jniLibs changes"
