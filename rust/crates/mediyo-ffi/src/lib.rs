@@ -37,6 +37,9 @@ impl MediyoSession {
 #[derive(Debug, Clone, uniffi::Record)] pub struct FfiSearchResult {
     pub title: String, pub video_id: Option<String>, pub browse_id: Option<String>, pub playlist_id: Option<String>,
     pub category: String, pub year: Option<String>, pub duration: Option<String>, pub explicit: bool,
+    pub thumbnails: Vec<FfiThumbnail>,
+    pub artists: Vec<String>,
+    pub album: Option<String>,
 }
 #[derive(Debug, Clone, uniffi::Record)] pub struct FfiSearchFilter { pub label: String, pub query: String, pub params: Option<String> }
 #[derive(Debug, Clone, uniffi::Record)] pub struct FfiSearchResponse { pub results: Vec<FfiSearchResult>, pub filters: Vec<FfiSearchFilter>, pub continuation: Option<String> }
@@ -44,7 +47,13 @@ impl MediyoSession {
 #[derive(Debug, Clone, uniffi::Record)] pub struct FfiViewAll { pub browse_id: String, pub params: Option<String> }
 #[derive(Debug, Clone, uniffi::Record)] pub struct FfiWatchEndpoint { pub video_id: Option<String>, pub playlist_id: String, pub params: Option<String> }
 fn to_ffi_search(r: mediyo_core::model::SearchResult) -> FfiSearchResult {
-    FfiSearchResult { title: r.title, video_id: r.video_id, browse_id: r.browse_id, playlist_id: r.playlist_id, category: format!("{:?}", r.category), year: r.year, duration: r.duration, explicit: r.explicit }
+    FfiSearchResult {
+        title: r.title.clone(), video_id: r.video_id.clone(), browse_id: r.browse_id.clone(), playlist_id: r.playlist_id.clone(),
+        category: format!("{:?}", r.category), year: r.year.clone(), duration: r.duration.clone(), explicit: r.explicit,
+        thumbnails: r.thumbnails.into_iter().map(to_ffi_thumb).collect(),
+        artists: r.artists.into_iter().map(|a| a.name).collect(),
+        album: r.album.map(|a| a.name),
+    }
 }
 fn to_ffi_thumb(t: mediyo_core::parser::thumbnails::Thumbnail) -> FfiThumbnail { FfiThumbnail { url: t.url, width: t.width, height: t.height } }
 
@@ -71,11 +80,20 @@ fn to_ffi_thumb(t: mediyo_core::parser::thumbnails::Thumbnail) -> FfiThumbnail {
 #[derive(Debug, Clone, uniffi::Record)] pub struct FfiNavButton { pub label: String, pub browse_id: String, pub params: Option<String> }
 #[derive(Debug, Clone, uniffi::Record)] pub struct FfiArtistPage {
     pub name: String, pub subscriber_count: Option<String>, pub monthly_audience: Option<String>, pub description: Option<String>,
+    pub thumbnails: Vec<FfiThumbnail>,
     pub top_songs: Vec<FfiSearchResult>, pub carousels: Vec<FfiCarousel>, pub continuation: Option<String>,
     pub play_button: Option<FfiWatchEndpoint>, pub radio_button: Option<FfiWatchEndpoint>, pub share_entity: Option<String>,
 }
-#[derive(Debug, Clone, uniffi::Record)] pub struct FfiAlbumPage { pub title: String, pub artist: Option<String>, pub year: Option<String>, pub tracks: Vec<FfiSearchResult>, pub carousels: Vec<FfiCarousel>, pub continuation: Option<String> }
-#[derive(Debug, Clone, uniffi::Record)] pub struct FfiPlaylistPage { pub title: String, pub track_count: Option<String>, pub tracks: Vec<FfiSearchResult>, pub continuation: Option<String> }
+#[derive(Debug, Clone, uniffi::Record)] pub struct FfiAlbumPage {
+    pub title: String, pub artist: Option<String>, pub year: Option<String>,
+    pub thumbnails: Vec<FfiThumbnail>,
+    pub tracks: Vec<FfiSearchResult>, pub carousels: Vec<FfiCarousel>, pub continuation: Option<String>
+}
+#[derive(Debug, Clone, uniffi::Record)] pub struct FfiPlaylistPage {
+    pub title: String, pub track_count: Option<String>,
+    pub thumbnails: Vec<FfiThumbnail>,
+    pub tracks: Vec<FfiSearchResult>, pub continuation: Option<String>
+}
 #[derive(Debug, Clone, uniffi::Record)] pub struct FfiListPage { pub items: Vec<FfiSearchResult>, pub continuation: Option<String> }
 fn to_ffi_carousel(c: mediyo_core::model::Carousel) -> FfiCarousel { FfiCarousel { title: c.title, items: c.items.into_iter().map(to_ffi_search).collect(), continuation: c.continuation } }
 fn to_ffi_watch_ep(e: mediyo_core::model::WatchEndpoint) -> FfiWatchEndpoint { FfiWatchEndpoint { video_id: e.video_id, playlist_id: e.playlist_id, params: e.params } }
@@ -98,17 +116,17 @@ fn to_ffi_watch_ep(e: mediyo_core::model::WatchEndpoint) -> FfiWatchEndpoint { F
 #[uniffi::export] pub fn browse_artist(session: Arc<MediyoSession>, browse_id: String) -> Result<FfiArtistPage, MediyoError> {
     let g = session.inner.lock().unwrap();
     let p = mediyo_core::api::browse::artist(&g, &browse_id)?;
-    Ok(FfiArtistPage { name: p.name, subscriber_count: p.subscriber_count, monthly_audience: p.monthly_audience, description: p.description, top_songs: p.top_songs.into_iter().map(to_ffi_search).collect(), carousels: p.carousels.into_iter().map(to_ffi_carousel).collect(), continuation: p.continuation, play_button: p.play_button.map(to_ffi_watch_ep), radio_button: p.radio_button.map(to_ffi_watch_ep), share_entity: p.share_entity })
+    Ok(FfiArtistPage { name: p.name, subscriber_count: p.subscriber_count, monthly_audience: p.monthly_audience, description: p.description, thumbnails: p.thumbnails.into_iter().map(to_ffi_thumb).collect(), top_songs: p.top_songs.into_iter().map(to_ffi_search).collect(), carousels: p.carousels.into_iter().map(to_ffi_carousel).collect(), continuation: p.continuation, play_button: p.play_button.map(to_ffi_watch_ep), radio_button: p.radio_button.map(to_ffi_watch_ep), share_entity: p.share_entity })
 }
 #[uniffi::export] pub fn browse_album(session: Arc<MediyoSession>, browse_id: String) -> Result<FfiAlbumPage, MediyoError> {
     let g = session.inner.lock().unwrap();
     let p = mediyo_core::api::browse::album(&g, &browse_id)?;
-    Ok(FfiAlbumPage { title: p.title, artist: p.artist.map(|a| a.name), year: p.year, tracks: p.tracks.into_iter().map(to_ffi_search).collect(), carousels: p.carousels.into_iter().map(to_ffi_carousel).collect(), continuation: p.continuation })
+    Ok(FfiAlbumPage { title: p.title, artist: p.artist.map(|a| a.name), year: p.year, thumbnails: p.thumbnails.into_iter().map(to_ffi_thumb).collect(), tracks: p.tracks.into_iter().map(to_ffi_search).collect(), carousels: p.carousels.into_iter().map(to_ffi_carousel).collect(), continuation: p.continuation })
 }
 #[uniffi::export] pub fn browse_playlist(session: Arc<MediyoSession>, browse_id: String) -> Result<FfiPlaylistPage, MediyoError> {
     let g = session.inner.lock().unwrap();
     let p = mediyo_core::api::browse::playlist(&g, &browse_id)?;
-    Ok(FfiPlaylistPage { title: p.title, track_count: p.track_count, tracks: p.tracks.into_iter().map(to_ffi_search).collect(), continuation: p.continuation })
+    Ok(FfiPlaylistPage { title: p.title, track_count: p.track_count, thumbnails: p.thumbnails.into_iter().map(to_ffi_thumb).collect(), tracks: p.tracks.into_iter().map(to_ffi_search).collect(), continuation: p.continuation })
 }
 #[uniffi::export] pub fn browse_list_page(session: Arc<MediyoSession>, browse_id: String, params: Option<String>) -> Result<FfiListPage, MediyoError> {
     let g = session.inner.lock().unwrap();
@@ -128,24 +146,39 @@ fn to_ffi_watch_ep(e: mediyo_core::model::WatchEndpoint) -> FfiWatchEndpoint { F
 }
 
 // ── watch ──────────────────────────────────────────────────────────────────
-#[derive(Debug, Clone, uniffi::Record)] pub struct FfiQueueItem { pub title: String, pub video_id: String, pub artists: Vec<String> }
+#[derive(Debug, Clone, uniffi::Record)] pub struct FfiQueueItem {
+    pub title: String, pub video_id: String, pub artists: Vec<String>,
+    pub album: Option<String>, pub duration: Option<String>, pub thumbnails: Vec<FfiThumbnail>
+}
 #[derive(Debug, Clone, uniffi::Record)] pub struct FfiQueue { pub playlist_id: String, pub is_infinite: bool, pub items: Vec<FfiQueueItem>, pub continuation: Option<String> }
-#[derive(Debug, Clone, uniffi::Record)] pub struct FfiSong { pub title: String, pub video_id: String, pub artists: Vec<String>, pub album: Option<String>, pub lyrics_browse_id: Option<String> }
+#[derive(Debug, Clone, uniffi::Record)] pub struct FfiSong {
+    pub title: String, pub video_id: String, pub artists: Vec<String>, pub album: Option<String>,
+    pub duration: Option<String>, pub thumbnails: Vec<FfiThumbnail>, pub lyrics_browse_id: Option<String>
+}
 #[derive(Debug, Clone, uniffi::Record)] pub struct FfiLyrics { pub lines: Vec<String> }
 #[uniffi::export] pub fn watch_get_song(session: Arc<MediyoSession>, video_id: String, playlist_id: Option<String>) -> Result<FfiSong, MediyoError> {
     let g = session.inner.lock().unwrap();
     let s = mediyo_core::api::watch::get_song(&g, &video_id, playlist_id.as_deref())?;
-    Ok(FfiSong { title: s.title, video_id: s.video_id, artists: s.artists.into_iter().map(|a| a.name).collect(), album: s.album, lyrics_browse_id: s.lyrics_browse_id })
+    Ok(FfiSong {
+        title: s.title, video_id: s.video_id, artists: s.artists.into_iter().map(|a| a.name).collect(), album: s.album,
+        duration: s.duration, thumbnails: s.thumbnail.into_iter().map(|u| FfiThumbnail{url:u, width:0, height:0}).collect(), lyrics_browse_id: s.lyrics_browse_id
+    })
 }
 #[uniffi::export] pub fn watch_get_queue(session: Arc<MediyoSession>, video_id: String, playlist_id: Option<String>) -> Result<FfiQueue, MediyoError> {
     let g = session.inner.lock().unwrap();
     let q = mediyo_core::api::watch::get_queue(&g, &video_id, playlist_id.as_deref())?;
-    Ok(FfiQueue { playlist_id: q.playlist_id, is_infinite: q.is_infinite, items: q.items.into_iter().map(|i| FfiQueueItem{title:i.title, video_id:i.video_id, artists:i.artists.into_iter().map(|a|a.name).collect()}).collect(), continuation: q.continuation })
+    Ok(FfiQueue { playlist_id: q.playlist_id, is_infinite: q.is_infinite, items: q.items.into_iter().map(|i| FfiQueueItem{
+        title:i.title, video_id:i.video_id, artists:i.artists.into_iter().map(|a|a.name).collect(), album:i.album, duration:i.duration,
+        thumbnails: i.thumbnail.into_iter().map(|u| FfiThumbnail{url:u, width:0, height:0}).collect()
+    }).collect(), continuation: q.continuation })
 }
 #[uniffi::export] pub fn watch_extend_queue(session: Arc<MediyoSession>, token: String) -> Result<FfiQueue, MediyoError> {
     let g = session.inner.lock().unwrap();
     let q = mediyo_core::api::watch::extend_queue(&g, &token)?;
-    Ok(FfiQueue { playlist_id: q.playlist_id, is_infinite: q.is_infinite, items: q.items.into_iter().map(|i| FfiQueueItem{title:i.title, video_id:i.video_id, artists:i.artists.into_iter().map(|a|a.name).collect()}).collect(), continuation: q.continuation })
+    Ok(FfiQueue { playlist_id: q.playlist_id, is_infinite: q.is_infinite, items: q.items.into_iter().map(|i| FfiQueueItem{
+        title:i.title, video_id:i.video_id, artists:i.artists.into_iter().map(|a|a.name).collect(), album:i.album, duration:i.duration,
+        thumbnails: i.thumbnail.into_iter().map(|u| FfiThumbnail{url:u, width:0, height:0}).collect()
+    }).collect(), continuation: q.continuation })
 }
 #[uniffi::export] pub fn watch_get_lyrics(session: Arc<MediyoSession>, browse_id: String) -> Result<FfiLyrics, MediyoError> {
     let g = session.inner.lock().unwrap();
