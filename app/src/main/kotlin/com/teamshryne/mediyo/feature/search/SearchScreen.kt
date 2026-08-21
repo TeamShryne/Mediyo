@@ -13,7 +13,7 @@ import javax.inject.Inject
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import kotlinx.coroutines.launch
 
-@HiltViewModel class SearchVm @Inject constructor(private val bridge: MediyoBridge): ViewModel(){
+@HiltViewModel class SearchVm @Inject constructor(val bridge: MediyoBridge): ViewModel(){
     var query by mutableStateOf(""); var result by mutableStateOf(""); var filters by mutableStateOf(listOf("Songs","Videos","Albums"))
 }
 
@@ -30,7 +30,7 @@ import kotlinx.coroutines.launch
             }
         }
         item{
-            Button(onClick={ scope.launch{ vm.result = vm.query.ifEmpty{"try"} .let{ bridge.search(it).take(300) } } }){ Text("Search (mediyo-core + continuation)") }
+            Button(onClick={ scope.launch{ vm.result = vm.query.ifEmpty{"try"} .let{ vm.bridge.search(it).take(300) } } }){ Text("Search (mediyo-core + continuation)") }
         }
         item{ Card{ Text(vm.result.ifEmpty{ "Results with chips + 20/page continuation via musicShelfContinuation will appear here." }, Modifier.padding(12.dp)) } }
     }
