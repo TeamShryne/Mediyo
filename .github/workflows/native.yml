@@ -1,11 +1,6 @@
 name: Native
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "rust/**"
-      - ".github/workflows/native.yml"
   workflow_dispatch:
 
 permissions:
