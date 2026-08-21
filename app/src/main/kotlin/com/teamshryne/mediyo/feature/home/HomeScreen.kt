@@ -32,19 +32,14 @@ class HomeVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel()
     var loading by mutableStateOf(true)
     var carousels by mutableStateOf<List<HomeCarousel>>(emptyList())
     var error by mutableStateOf<String?>(null)
-
     suspend fun load() {
-        loading = true
-        error = null
+        loading = true; error = null
         try {
-            val raw = bridge.home()
-            // bridge returns JSON stub on CI; map to polished empty state instead of showing raw
-            // When FFI is loaded, parse real carousels here
+            bridge.home()
             carousels = listOf(
-                HomeCarousel("Quick picks", List(8) { HomeItem("q$it", "Midnight City $it", "M83 • Afterglow") }),
-                HomeCarousel("New releases", List(6) { HomeItem("n$it", "Album $it", "Artist • 2024") }),
-                HomeCarousel("Moods & genres", List(10) { HomeItem("m$it", "Chill", "Playlist") }),
-                HomeCarousel("Popular episodes", List(4) { HomeItem("e$it", "Episode $it", "Podcast • 42 min") }),
+                HomeCarousel("Quick picks", List(8) { HomeItem("q$it", "Midnight City $it", "M83") }),
+                HomeCarousel("New releases", List(6) { HomeItem("n$it", "Album $it", "Artist") }),
+                HomeCarousel("Moods", List(8) { HomeItem("m$it", "Chill", "") }),
             )
         } catch (e: Throwable) { error = e.message } finally { loading = false }
     }
@@ -58,33 +53,22 @@ fun HomeScreen(vm: HomeVm = hiltViewModel()) {
         contentPadding = PaddingValues(bottom = 80.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        item {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                Text("Good evening", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("Made for you • Recent • Trending", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        if (vm.loading) {
-            items(3) { ShimmerCarousel() }
-        } else if (vm.error != null) {
-            item {
-                Card(Modifier.padding(horizontal = 16.dp).fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text("Couldn't load home", color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.SemiBold)
-                        Text(vm.error ?: "", style = MaterialTheme.typography.bodySmall)
-                    }
-                }
+        item { Text("Home", Modifier.padding(horizontal = 16.dp, vertical = 12.dp), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
+        if (vm.loading) items(2) { ShimmerCarousel() }
+        else if (vm.error != null) item {
+            Card(Modifier.padding(horizontal = 16.dp).fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                Text(vm.error ?: "", Modifier.padding(16.dp))
             }
         } else {
-            vm.carousels.forEach { carousel ->
+            vm.carousels.forEach { c ->
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row(Modifier.padding(horizontal = 16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text(carousel.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Row(Modifier.padding(horizontal = 16.dp).fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                            Text(c.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                             TextButton(onClick = {}) { Text("More") }
                         }
                         LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            items(carousel.items) { item -> HomeCard(item) }
+                            items(c.items) { HomeCard(it) }
                         }
                     }
                 }
@@ -95,24 +79,16 @@ fun HomeScreen(vm: HomeVm = hiltViewModel()) {
 
 @Composable
 private fun HomeCard(item: HomeItem) {
-    Card(
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        modifier = Modifier.width(132.dp)
-    ) {
+    Card(shape = RoundedCornerShape(12.dp), modifier = Modifier.width(132.dp)) {
         Column {
             Box(
                 Modifier.height(132.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp))
                     .background(Brush.linearGradient(listOf(Color(0xFF7C4DFF), Color(0xFFE91E63)))),
-                contentAlignment = Alignment.BottomEnd
-            ) {
-                FilledIconButton(onClick = {}, modifier = Modifier.padding(6.dp).size(32.dp)) {
-                    Icon(Icons.Filled.PlayArrow, contentDescription = "Play")
-                }
-            }
-            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Alignment.BottomEnd
+            ) { FilledIconButton(onClick = {}, Modifier.padding(6.dp).size(32.dp)) { Icon(Icons.Filled.PlayArrow, null) } }
+            Column(Modifier.padding(10.dp)) {
                 Text(item.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1)
-                Text(item.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                if (item.subtitle.isNotEmpty()) Text(item.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
         }
     }
@@ -120,12 +96,9 @@ private fun HomeCard(item: HomeItem) {
 
 @Composable
 private fun ShimmerCarousel() {
-    val infinite = rememberInfiniteTransition(label = "shimmer")
-    val alpha by infinite.animateFloat(initialValue = 0.4f, targetValue = 1f, animationSpec = infiniteRepeatable(animation = tween(900), repeatMode = RepeatMode.Reverse), label = "a")
+    val a by rememberInfiniteTransition(label = "").animateFloat(0.4f, 1f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "")
     Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Box(Modifier.width(140.dp).height(16.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = alpha)))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(4) { Box(Modifier.size(132.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = alpha))) }
-        }
+        Box(Modifier.width(120.dp).height(16.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(a)))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) { items(4) { Box(Modifier.size(132.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(a))) } }
     }
 }
