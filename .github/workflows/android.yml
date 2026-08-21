@@ -7,14 +7,71 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Cancel stale runs — saves runners + caches (from Strym)
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   actions: write
 
 jobs:
-  build:
+  native:
+    name: Native lib (cargo-ndk)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain (android targets)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.88'
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - name: Android SDK (cmdline tools, licenses accepted)
+        uses: android-actions/setup-android@v4
+
+      - name: Install NDK + platform/build-tools
+        run: |
+          sdkmanager --install "ndk;27.0.12077973" \
+                     "platforms;android-35" \
+                     "build-tools;35.0.0"
+
+      - name: Cache cargo-ndk binary (heavy — compile once)
+        id: cache-ndk
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-ndk
+          key: cargo-ndk-4.1.2-rust-1.88-${{ runner.os }}-v1
+
+      - name: Install cargo-ndk
+        if: steps.cache-ndk.outputs.cache-hit != 'true'
+        run: cargo install cargo-ndk --locked
+
+      - name: Rust cache (incremental — registry + target, after JNI for next hit)
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Build .so (arm64-v8a + armeabi-v7a + x86_64, release)
+        working-directory: rust
+        run: cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 --platform 24 -o ../app/src/main/jniLibs build --release -p mediyo-ffi
+
+      - name: Upload jniLibs
+        uses: actions/upload-artifact@v4
+        with:
+          name: jniLibs
+          path: app/src/main/jniLibs
+          if-no-files-found: error
+
+  apk:
+    name: APK + lint
+    needs: native
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
     steps:
       - uses: actions/checkout@v4
 
@@ -24,78 +81,65 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Install NDK 26.1.10909125
+      - name: Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install platform + build-tools
         run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;26.1.10909125"
-          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.1.10909125" >> $GITHUB_ENV
+          sdkmanager --install "platforms;android-35" \
+                     "build-tools;35.0.0"
 
-      - name: Set up Rust 1.88
-        uses: dtolnay/rust-toolchain@stable
+      - name: Gradle cache (heavy, cleanup unused)
+        uses: gradle/actions/setup-gradle@v4
         with:
-          toolchain: '1.88'
-          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
-
-      - name: Cache cargo-ndk binary
-        id: cache-ndk
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/bin/cargo-ndk
-          key: cargo-ndk-4.1.2-rust-1.88-${{ runner.os }}-v1
-
-      - name: Install cargo-ndk (cached)
-        if: steps.cache-ndk.outputs.cache-hit != 'true'
-        run: cargo install cargo-ndk --locked
-
-      - name: Cache Rust registry + target (incremental)
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            rust/target
-          key: rust-${{ runner.os }}-${{ hashFiles('rust/Cargo.lock') }}-${{ hashFiles('rust/crates/**/*.rs') }}
-          restore-keys: |
-            rust-${{ runner.os }}-
-
-      - name: Setup Gradle 8.6 (heavy cache, no 9.x)
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: 8.6
-          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
           gradle-home-cache-cleanup: true
 
-      - name: Build Rust (cargo-ndk -> jniLibs)
-        working-directory: rust
-        run: |
-          cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 --platform 24 -o ../app/src/main/jniLibs build --release -p mediyo-ffi
-          ls -R ../app/src/main/jniLibs || true
+      - name: Download native libs
+        uses: actions/download-artifact@v4
+        with:
+          name: jniLibs
+          path: app/src/main/jniLibs
 
-      - name: Assemble Debug + Lint
+      - name: Build debug APK + lint
         run: |
           chmod +x gradlew || true
           ./gradlew --no-daemon assembleDebug lintDebug --stacktrace
         env:
-          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
+          ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/27.0.12077973
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: mediyo-debug-apk
           path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
 
-      - name: Prune caches (keep 20 newest + rust)
-        if: always()
+  prune:
+    name: Prune stale caches
+    needs: [apk]
+    runs-on: ubuntu-latest
+    if: always()
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      # Separate job so Gradle/Rust post-save steps finish first (Strym pattern)
+      # Keep newest 12 (~2 runs) + always keep newest Rust cache
+      - name: Keep 12 newest + newest Rust
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          echo "Listing caches..."
-          gh api repos/${{ github.repository }}/actions/caches --paginate -q '.actions_caches | sort_by(.created_at) | reverse | .[] | "\(.id) \(.key) \(.created_at)"' | head -n 40 || true
-          IDS=$(gh api repos/${{ github.repository }}/actions/caches --paginate -q '.actions_caches | sort_by(.created_at) | reverse | .[20:] | .[].id' 2>/dev/null || true)
-          RUST_KEEP=$(gh api repos/${{ github.repository }}/actions/caches --paginate -q '.actions_caches | map(select(.key | startswith("rust-"))) | sort_by(.created_at) | reverse | .[0] | .id' 2>/dev/null || true)
-          for id in $IDS; do
-            if [ "$id" = "$RUST_KEEP" ]; then echo "keep rust $id"; continue; fi
-            echo "deleting cache $id"
-            gh api -X DELETE repos/${{ github.repository }}/actions/caches/$id || true
+          set -euo pipefail
+          REPO="${{ github.repository }}"
+          caches=$(gh api "repos/$REPO/actions/caches?per_page=100" -q '.actions_caches | sort_by(.created_at) | reverse | map({id, key})')
+          newest_rust_id=$(echo "$caches" | jq -r '[.[] | select(.key | test("rust"; "i"))][0].id // empty')
+          echo "newest rust cache: $newest_rust_id"
+          for id in $(echo "$caches" | jq -r '.[12:][].id'); do
+            if [ "$id" = "$newest_rust_id" ]; then
+              echo "keeping newest rust cache $id"
+              continue
+            fi
+            echo "deleting stale cache $id"
+            gh api -X DELETE "repos/$REPO/actions/caches/$id" > /dev/null
           done
-          echo "Prune done — kept 20 newest + rust $RUST_KEEP"
+          echo "Prune done — kept 12 newest + rust $newest_rust_id"
