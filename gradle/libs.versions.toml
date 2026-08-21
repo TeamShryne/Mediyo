@@ -13,7 +13,7 @@ coil = "2.5.0"
 media3 = "1.2.1"
 coroutines = "1.7.3"
 serialization = "1.6.2"
-newpipe = "0.22.10"
+newpipe = "v0.26.5"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version = "1.12.0" }
