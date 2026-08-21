@@ -23,7 +23,7 @@ import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 @HiltViewModel
 class HomeVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel() {
     var loading by mutableStateOf(true)
-    var carousels by mutableStateOf<List<com.teamshryne.mediyo.FfiCarousel>>(emptyList())
+    var carousels by mutableStateOf<List<uniffi.mediyo_ffi.FfiCarousel>>(emptyList())
     var error by mutableStateOf<String?>(null)
 
     suspend fun load() {
