@@ -12,8 +12,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -76,9 +78,10 @@ fun HomeScreen(vm: HomeVm = hiltViewModel()) {
                                 items(c.items) { r ->
                                     Card(shape = RoundedCornerShape(12.dp), modifier = Modifier.width(132.dp)) {
                                         Column {
-                                            Box(Modifier.height(132.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant))
+                                            AsyncImage(model = r.thumbnails.firstOrNull()?.url, contentDescription = null, modifier = Modifier.height(132.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop)
                                             Column(Modifier.padding(10.dp)) {
                                                 Text(r.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1)
+                                                Text(r.artists.joinToString(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                                             }
                                         }
                                     }
