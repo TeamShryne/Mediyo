@@ -55,20 +55,18 @@ jobs:
         run: |
           rm -rf ../app/src/main/java/uniffi
           cargo run --bin uniffi-bindgen --release -- generate --library ../app/src/main/jniLibs/arm64-v8a/libmediyo_ffi.so --language kotlin --out-dir ../app/src/main/java --no-format
+          test -d ../app/src/main/java/uniffi || { echo "::error::bindgen produced no output"; exit 1; }
+          find ../app/src/main/java/uniffi -name "*.kt" | head
 
       - name: Commit jniLibs + bindings if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          # stash built libs, pull latest, restore
-          git stash push -m "jniLibs" --keep-index || true
-          git fetch origin
-          git rebase origin/main || (git rebase --abort; git reset --hard origin/main)
-          git stash pop || true
-          git add app/src/main/jniLibs app/src/main/java/uniffi
+          git add -A app/src/main/jniLibs app/src/main/java rust/Cargo.lock
           if git diff --cached --quiet; then
-            echo "no jniLibs changes"
+            echo "no changes"
             exit 0
           fi
-          git commit -m "chore: update native libs"
+          git commit -m "chore: update native libs and bindings"
+          git pull --rebase --autostash origin main
           git push
