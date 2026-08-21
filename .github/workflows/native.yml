@@ -52,9 +52,8 @@ jobs:
 
       - name: Generate UniFFI Kotlin bindings
         run: |
-          cargo install uniffi-bindgen --version 0.28.3 --locked
           rm -rf app/src/main/java/uniffi
-          uniffi-bindgen generate --library app/src/main/jniLibs/arm64-v8a/libmediyo_ffi.so --language kotlin --out-dir app/src/main/java --no-format
+          cargo run --bin uniffi-bindgen --release --manifest-path rust/Cargo.toml -- generate --library app/src/main/jniLibs/arm64-v8a/libmediyo_ffi.so --language kotlin --out-dir app/src/main/java --no-format
 
       - name: Commit jniLibs + bindings if changed
         run: |
