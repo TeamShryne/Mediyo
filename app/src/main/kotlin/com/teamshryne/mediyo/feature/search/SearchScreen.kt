@@ -15,7 +15,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import com.teamshryne.mediyo.FfiSearchResult
+import uniffi.mediyo_ffi.FfiSearchResult
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import kotlinx.coroutines.launch
 
@@ -25,7 +25,7 @@ class SearchVm @Inject constructor(val bridge: MediyoBridge) : ViewModel() {
     var selected by mutableStateOf("All")
     var loading by mutableStateOf(false)
     var results by mutableStateOf<List<FfiSearchResult>>(emptyList())
-    var filters by mutableStateOf<List<com.teamshryne.mediyo.FfiSearchFilter>>(emptyList())
+    var filters by mutableStateOf<List<uniffi.mediyo_ffi.FfiSearchFilter>>(emptyList())
     var hasSearched by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
     val filterLabels = listOf("All", "Songs", "Videos", "Albums", "Playlists")
