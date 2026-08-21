@@ -71,7 +71,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.newpipe.extractor)
-    implementation(libs.jna)
+    implementation("net.java.dev.jna:jna:5.14.0@aar")
 
     val bom = libs.compose.bom
     implementation(platform(bom))
