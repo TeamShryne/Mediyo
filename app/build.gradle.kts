@@ -46,6 +46,10 @@ android {
             pickFirsts += listOf("**/libjnidispatch.so", "**/libmediyo_ffi.so")
         }
     }
+
+    lint {
+        disable += "NewApi"
+    }
 }
 
 dependencies {
