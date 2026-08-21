@@ -80,16 +80,16 @@ class MainActivity : ComponentActivity() {
                 ) { pad ->
                     Box(Modifier.padding(pad)) {
                         NavHost(navController = nav, startDestination = Tab.Home.route) {
-                            composable(Tab.Home.route) { HomeScreen() }
-                            composable(Tab.Search.route) { SearchScreen() }
+                            composable(Tab.Home.route) { HomeScreen(nav, playerVm) }
+                            composable(Tab.Search.route) { SearchScreen(nav, playerVm) }
                             composable(Tab.Library.route) { LibraryScreen() }
                             composable(Tab.Settings.route) { SettingsScreen() }
-                            composable("playlist/{id}") { PlaylistScreen(it.arguments?.getString("id") ?: "") }
-                            composable("album/{id}") { AlbumScreen(it.arguments?.getString("id") ?: "") }
-                            composable("artist/{id}") { ArtistScreen(it.arguments?.getString("id") ?: "") }
-                            composable("podcast/{id}") { PodcastScreen(it.arguments?.getString("id") ?: "") }
-                            composable("episodes/{id}") { EpisodesScreen(it.arguments?.getString("id") ?: "") }
-                            composable("list/{id}") { GenericListScreen(it.arguments?.getString("id") ?: "") }
+                            composable("playlist/{id}") { PlaylistScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
+                            composable("album/{id}") { AlbumScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
+                            composable("artist/{id}") { ArtistScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
+                            composable("podcast/{id}") { PodcastScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
+                            composable("episodes/{id}") { EpisodesScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
+                            composable("list/{id}") { GenericListScreen(it.arguments?.getString("id") ?: "", null, nav, playerVm) }
                             composable("profile") { ProfileScreen() }
                         }
                     }

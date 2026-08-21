@@ -46,8 +46,18 @@ class SearchVm @Inject constructor(val bridge: MediyoBridge) : ViewModel() {
 }
 
 @Composable
-fun SearchScreen(vm: SearchVm = hiltViewModel()) {
+fun SearchScreen(nav: androidx.navigation.NavController, player: com.teamshryne.mediyo.feature.player.PlayerViewModel, vm: SearchVm = hiltViewModel()) {
     val scope = rememberCoroutineScope()
+    fun handle(r: FfiSearchResult) {
+        when {
+            r.videoId != null -> player.play(r.videoId!!, r.title, r.artists.joinToString(), r.thumbnails.firstOrNull()?.url)
+            r.browseId != null && r.category.contains("Album", true) -> nav.navigate("album/${r.browseId}")
+            r.browseId != null && r.category.contains("Artist", true) -> nav.navigate("artist/${r.browseId}")
+            r.browseId != null && r.category.contains("Playlist", true) -> nav.navigate("playlist/${r.browseId}")
+            r.browseId != null -> nav.navigate("list/${r.browseId}")
+            r.playlistId != null -> nav.navigate("playlist/${r.playlistId}")
+        }
+    }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 80.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -95,7 +105,7 @@ fun SearchScreen(vm: SearchVm = hiltViewModel()) {
             }
             else -> items(vm.results.size) { i ->
                 val r = vm.results[i]
-                Card(Modifier.padding(horizontal = 16.dp).fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+                Card(onClick = { handle(r) }, modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
                     Row(Modifier.padding(12.dp).fillMaxWidth(), Arrangement.SpaceBetween) {
                         Text(r.title, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f), maxLines = 1)
                         AssistChip(onClick = {}, label = { Text(r.category) })

@@ -1,5 +1,6 @@
 package com.teamshryne.mediyo.feature.episodes
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -25,15 +26,16 @@ import com.teamshryne.mediyo.data.mediyo.MediyoBridge
     suspend fun load(id:String){ loading=true; try{ items=bridge.listPage(id, null).items } catch(e:Throwable){error=e.message} finally{loading=false} }
 }
 
-@Composable fun EpisodesScreen(browseId:String, vm: EpisodesVm = hiltViewModel()){
+@Composable fun EpisodesScreen(browseId:String, nav: androidx.navigation.NavController? = null, player: com.teamshryne.mediyo.feature.player.PlayerViewModel? = null, vm: EpisodesVm = hiltViewModel()){
     LaunchedEffect(browseId){ vm.load(browseId) }
+    fun play(r: uniffi.mediyo_ffi.FfiSearchResult){ r.videoId?.let{ player?.play(it, r.title, r.artists.joinToString(), r.thumbnails.firstOrNull()?.url) } }
     when{
         vm.loading -> Box(Modifier.fillMaxSize(), Alignment.Center){ CircularProgressIndicator() }
         vm.error!=null -> Card(Modifier.padding(16.dp).fillMaxWidth(), colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.errorContainer)){ Text(vm.error?:"", Modifier.padding(16.dp)) }
         else -> LazyColumn(contentPadding=PaddingValues(bottom=80.dp)){
             item{ Text("Episodes", Modifier.padding(16.dp), style=MaterialTheme.typography.headlineSmall, fontWeight=FontWeight.Bold) }
             items(vm.items){ r ->
-                ListItem(headlineContent={Text(r.title, maxLines=2)}, supportingContent={Text("${r.artists.joinToString()} • ${r.duration?:""}", maxLines=1)}, leadingContent={AsyncImage(model=r.thumbnails.firstOrNull()?.url, contentDescription=null, modifier=Modifier.size(56.dp).clip(RoundedCornerShape(8.dp)), contentScale=ContentScale.Crop)})
+                ListItem(headlineContent={Text(r.title, maxLines=2)}, supportingContent={Text("${r.artists.joinToString()} • ${r.duration?:""}", maxLines=1)}, leadingContent={AsyncImage(model=r.thumbnails.firstOrNull()?.url, contentDescription=null, modifier=Modifier.size(56.dp).clip(RoundedCornerShape(8.dp)), contentScale=ContentScale.Crop)}, modifier=Modifier.clickable{ play(r) })
                 Divider()
             }
         }

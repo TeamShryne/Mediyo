@@ -1,5 +1,6 @@
 package com.teamshryne.mediyo.feature.artist
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -29,8 +30,16 @@ import com.teamshryne.mediyo.data.mediyo.MediyoBridge
     suspend fun load(id:String){ loading=true; try{ val p=bridge.artist(id); name=p.name; subs=p.subscriberCount; thumb=p.thumbnails.firstOrNull()?.url; topSongs=p.topSongs; carousels=p.carousels } catch(e:Throwable){error=e.message} finally{loading=false} }
 }
 
-@Composable fun ArtistScreen(browseId:String, vm: ArtistVm = hiltViewModel()){
+@Composable fun ArtistScreen(browseId:String, nav: androidx.navigation.NavController? = null, player: com.teamshryne.mediyo.feature.player.PlayerViewModel? = null, vm: ArtistVm = hiltViewModel()){
     LaunchedEffect(browseId){ vm.load(browseId) }
+    fun handle(r: uniffi.mediyo_ffi.FfiSearchResult){
+        when {
+            r.videoId != null -> player?.play(r.videoId!!, r.title, r.artists.joinToString(), r.thumbnails.firstOrNull()?.url)
+            r.browseId != null && r.category.contains("Album", true) -> nav?.navigate("album/${r.browseId}")
+            r.browseId != null && r.category.contains("Playlist", true) -> nav?.navigate("playlist/${r.browseId}")
+            r.browseId != null -> nav?.navigate("list/${r.browseId}")
+        }
+    }
     when{
         vm.loading -> Box(Modifier.fillMaxSize(), Alignment.Center){ CircularProgressIndicator() }
         vm.error!=null -> Card(Modifier.padding(16.dp).fillMaxWidth(), colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.errorContainer)){ Text(vm.error?:"", Modifier.padding(16.dp)) }
@@ -46,7 +55,7 @@ import com.teamshryne.mediyo.data.mediyo.MediyoBridge
             if(vm.topSongs.isNotEmpty()){
                 item{ Text("Top songs", Modifier.padding(horizontal=16.dp), style=MaterialTheme.typography.titleMedium, fontWeight=FontWeight.SemiBold) }
                 items(vm.topSongs){ t ->
-                    ListItem(headlineContent={Text(t.title, maxLines=1)}, supportingContent={Text(t.artists.joinToString(), maxLines=1)}, leadingContent={AsyncImage(model=t.thumbnails.firstOrNull()?.url, contentDescription=null, modifier=Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)))})
+                    ListItem(headlineContent={Text(t.title, maxLines=1)}, supportingContent={Text(t.artists.joinToString(), maxLines=1)}, leadingContent={AsyncImage(model=t.thumbnails.firstOrNull()?.url, contentDescription=null, modifier=Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)))}, modifier=Modifier.clickable{ handle(t) })
                 }
             }
             vm.carousels.forEach{ c ->
@@ -55,7 +64,7 @@ import com.teamshryne.mediyo.data.mediyo.MediyoBridge
                         Text(c.title, Modifier.padding(horizontal=16.dp), style=MaterialTheme.typography.titleSmall, fontWeight=FontWeight.SemiBold)
                         LazyRow(contentPadding=PaddingValues(horizontal=16.dp), horizontalArrangement=Arrangement.spacedBy(12.dp)){
                             items(c.items){ r ->
-                                Card(shape=RoundedCornerShape(12.dp), modifier=Modifier.width(132.dp)){
+                                Card(onClick={ handle(r) }, shape=RoundedCornerShape(12.dp), modifier=Modifier.width(132.dp)){
                                     Column{ AsyncImage(model=r.thumbnails.firstOrNull()?.url, contentDescription=null, modifier=Modifier.height(132.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)), contentScale=ContentScale.Crop); Text(r.title, Modifier.padding(8.dp), maxLines=1, style=MaterialTheme.typography.bodySmall) }
                                 }
                             }

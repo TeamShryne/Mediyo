@@ -1,5 +1,6 @@
 package com.teamshryne.mediyo.feature.podcast
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -25,8 +26,9 @@ import com.teamshryne.mediyo.data.mediyo.MediyoBridge
     suspend fun load(id:String){ loading=true; try{ items=bridge.podcast(id).items } catch(e:Throwable){error=e.message} finally{loading=false} }
 }
 
-@Composable fun PodcastScreen(browseId:String, vm: PodcastVm = hiltViewModel()){
+@Composable fun PodcastScreen(browseId:String, nav: androidx.navigation.NavController? = null, player: com.teamshryne.mediyo.feature.player.PlayerViewModel? = null, vm: PodcastVm = hiltViewModel()){
     LaunchedEffect(browseId){ vm.load(browseId) }
+    fun play(r: uniffi.mediyo_ffi.FfiSearchResult){ r.videoId?.let{ player?.play(it, r.title, r.artists.joinToString(), r.thumbnails.firstOrNull()?.url) } }
     when{
         vm.loading -> Box(Modifier.fillMaxSize(), Alignment.Center){ CircularProgressIndicator() }
         vm.error!=null -> Card(Modifier.padding(16.dp).fillMaxWidth(), colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.errorContainer)){ Text(vm.error?:"", Modifier.padding(16.dp)) }
@@ -37,7 +39,8 @@ import com.teamshryne.mediyo.data.mediyo.MediyoBridge
                     headlineContent={Text(r.title, maxLines=2)},
                     supportingContent={Text(r.artists.joinToString(), maxLines=1)},
                     leadingContent={AsyncImage(model=r.thumbnails.firstOrNull()?.url, contentDescription=null, modifier=Modifier.size(64.dp).clip(RoundedCornerShape(8.dp)), contentScale=ContentScale.Crop)},
-                    trailingContent={Text(r.duration?:"", style=MaterialTheme.typography.bodySmall)}
+                    trailingContent={Text(r.duration?:"", style=MaterialTheme.typography.bodySmall)},
+                    modifier=Modifier.clickable{ play(r) }
                 )
                 Divider()
             }

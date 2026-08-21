@@ -1,5 +1,6 @@
 package com.teamshryne.mediyo.feature.list
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -25,14 +26,23 @@ import com.teamshryne.mediyo.data.mediyo.MediyoBridge
     suspend fun load(id:String, params:String?){ loading=true; try{ items=bridge.listPage(id, params).items } catch(e:Throwable){error=e.message} finally{loading=false} }
 }
 
-@Composable fun GenericListScreen(browseId:String, params:String? = null, vm: ListVm = hiltViewModel()){
+@Composable fun GenericListScreen(browseId:String, params:String? = null, nav: androidx.navigation.NavController? = null, player: com.teamshryne.mediyo.feature.player.PlayerViewModel? = null, vm: ListVm = hiltViewModel()){
     LaunchedEffect(browseId, params){ vm.load(browseId, params) }
+    fun handle(r: uniffi.mediyo_ffi.FfiSearchResult){
+        when {
+            r.videoId != null -> player?.play(r.videoId!!, r.title, r.artists.joinToString(), r.thumbnails.firstOrNull()?.url)
+            r.browseId != null && r.category.contains("Album", true) -> nav?.navigate("album/${r.browseId}")
+            r.browseId != null && r.category.contains("Artist", true) -> nav?.navigate("artist/${r.browseId}")
+            r.browseId != null -> nav?.navigate("list/${r.browseId}")
+            r.playlistId != null -> nav?.navigate("playlist/${r.playlistId}")
+        }
+    }
     when{
         vm.loading -> Box(Modifier.fillMaxSize(), Alignment.Center){ CircularProgressIndicator() }
         vm.error!=null -> Card(Modifier.padding(16.dp).fillMaxWidth(), colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.errorContainer)){ Text(vm.error?:"", Modifier.padding(16.dp)) }
         else -> LazyColumn(contentPadding=PaddingValues(bottom=80.dp)){
             items(vm.items){ r ->
-                ListItem(headlineContent={Text(r.title, maxLines=1)}, supportingContent={Text(r.artists.joinToString(), maxLines=1)}, leadingContent={AsyncImage(model=r.thumbnails.firstOrNull()?.url, contentDescription=null, modifier=Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)), contentScale=ContentScale.Crop)}, trailingContent={Text(r.duration?:"", style=MaterialTheme.typography.bodySmall)})
+                ListItem(headlineContent={Text(r.title, maxLines=1)}, supportingContent={Text(r.artists.joinToString(), maxLines=1)}, leadingContent={AsyncImage(model=r.thumbnails.firstOrNull()?.url, contentDescription=null, modifier=Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)), contentScale=ContentScale.Crop)}, trailingContent={Text(r.duration?:"", style=MaterialTheme.typography.bodySmall)}, modifier=Modifier.clickable{ handle(r) })
                 Divider()
             }
         }
