@@ -8,6 +8,10 @@ license.workspace = true
 crate-type = ["cdylib", "lib"]
 name = "mediyo_ffi"
 
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+
 [dependencies]
 mediyo-core = { path = "../mediyo-core" }
 uniffi = { version = "0.28", features = ["build"] }
