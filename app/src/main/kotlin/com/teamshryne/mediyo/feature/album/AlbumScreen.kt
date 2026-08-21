@@ -1,5 +1,6 @@
 package com.teamshryne.mediyo.feature.album
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -28,8 +29,9 @@ import com.teamshryne.mediyo.data.mediyo.MediyoBridge
     suspend fun load(id: String){ loading=true; try{ val p=bridge.album(id); title=p.title; artist=p.artist?:""; year=p.year?:""; thumb=p.thumbnails.firstOrNull()?.url; tracks=p.tracks } catch(e:Throwable){error=e.message} finally{loading=false} }
 }
 
-@Composable fun AlbumScreen(browseId: String, vm: AlbumVm = hiltViewModel()){
+@Composable fun AlbumScreen(browseId: String, nav: androidx.navigation.NavController? = null, player: com.teamshryne.mediyo.feature.player.PlayerViewModel? = null, vm: AlbumVm = hiltViewModel()){
     LaunchedEffect(browseId){ vm.load(browseId) }
+    fun play(r: uniffi.mediyo_ffi.FfiSearchResult){ r.videoId?.let{ player?.play(it, r.title, r.artists.joinToString(), r.thumbnails.firstOrNull()?.url) } }
     when{
         vm.loading -> Box(Modifier.fillMaxSize(), Alignment.Center){ CircularProgressIndicator() }
         vm.error!=null -> Card(Modifier.padding(16.dp).fillMaxWidth(), colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.errorContainer)){ Text(vm.error?:"", Modifier.padding(16.dp)) }
@@ -39,11 +41,11 @@ import com.teamshryne.mediyo.data.mediyo.MediyoBridge
                     AsyncImage(model=vm.thumb, contentDescription=null, modifier=Modifier.size(200.dp).clip(RoundedCornerShape(12.dp)), contentScale=ContentScale.Crop)
                     Text(vm.title, style=MaterialTheme.typography.headlineSmall, fontWeight=FontWeight.Bold, modifier=Modifier.fillMaxWidth())
                     Text("${vm.artist} • ${vm.year}", style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant, modifier=Modifier.fillMaxWidth())
-                    Button(onClick={}, modifier=Modifier.fillMaxWidth()){ Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(8.dp)); Text("Play") }
+                    Button(onClick={ vm.tracks.firstOrNull()?.let{ play(it) } }, modifier=Modifier.fillMaxWidth()){ Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(8.dp)); Text("Play") }
                 }
             }
             items(vm.tracks){ t ->
-                ListItem(headlineContent={Text(t.title, maxLines=1)}, supportingContent={Text(t.artists.joinToString(), maxLines=1)}, leadingContent={AsyncImage(model=t.thumbnails.firstOrNull()?.url, contentDescription=null, modifier=Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)))}, trailingContent={Text(t.duration?:"", style=MaterialTheme.typography.bodySmall)})
+                ListItem(headlineContent={Text(t.title, maxLines=1)}, supportingContent={Text(t.artists.joinToString(), maxLines=1)}, leadingContent={AsyncImage(model=t.thumbnails.firstOrNull()?.url, contentDescription=null, modifier=Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)))}, trailingContent={Text(t.duration?:"", style=MaterialTheme.typography.bodySmall)}, modifier=Modifier.clickable{ play(t) })
                 Divider()
             }
         }

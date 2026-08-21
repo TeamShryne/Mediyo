@@ -1,5 +1,6 @@
 package com.teamshryne.mediyo.feature.playlist
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -33,8 +34,9 @@ import com.teamshryne.mediyo.data.mediyo.MediyoBridge
     }
 }
 
-@Composable fun PlaylistScreen(browseId: String, vm: PlaylistVm = hiltViewModel()) {
+@Composable fun PlaylistScreen(browseId: String, nav: androidx.navigation.NavController? = null, player: com.teamshryne.mediyo.feature.player.PlayerViewModel? = null, vm: PlaylistVm = hiltViewModel()) {
     LaunchedEffect(browseId) { vm.load(browseId) }
+    fun play(r: uniffi.mediyo_ffi.FfiSearchResult) { r.videoId?.let { player?.play(it, r.title, r.artists.joinToString(), r.thumbnails.firstOrNull()?.url) } }
     when {
         vm.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
         vm.error != null -> Card(Modifier.padding(16.dp).fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
@@ -47,8 +49,8 @@ import com.teamshryne.mediyo.data.mediyo.MediyoBridge
                     Text(vm.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.fillMaxWidth())
                     Text(vm.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.fillMaxWidth())
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                        Button(onClick = {}, modifier = Modifier.weight(1f)) { Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(8.dp)); Text("Play") }
-                        FilledTonalButton(onClick = {}, modifier = Modifier.weight(1f)) { Icon(Icons.Filled.Shuffle, null); Spacer(Modifier.width(8.dp)); Text("Shuffle") }
+                        Button(onClick = { vm.tracks.firstOrNull()?.let { play(it) } }, modifier = Modifier.weight(1f)) { Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(8.dp)); Text("Play") }
+                        FilledTonalButton(onClick = { vm.tracks.firstOrNull()?.let { play(it) } }, modifier = Modifier.weight(1f)) { Icon(Icons.Filled.Shuffle, null); Spacer(Modifier.width(8.dp)); Text("Shuffle") }
                     }
                 }
             }
@@ -57,7 +59,8 @@ import com.teamshryne.mediyo.data.mediyo.MediyoBridge
                     headlineContent = { Text(t.title, maxLines = 1) },
                     supportingContent = { Text(t.artists.joinToString(), maxLines = 1) },
                     leadingContent = { AsyncImage(model = t.thumbnails.firstOrNull()?.url, contentDescription = null, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop) },
-                    trailingContent = { Text(t.duration ?: "", style = MaterialTheme.typography.bodySmall) }
+                    trailingContent = { Text(t.duration ?: "", style = MaterialTheme.typography.bodySmall) },
+                    modifier = Modifier.clickable { play(t) }
                 )
                 Divider()
             }

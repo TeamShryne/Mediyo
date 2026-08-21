@@ -42,8 +42,18 @@ class HomeVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel()
 }
 
 @Composable
-fun HomeScreen(vm: HomeVm = hiltViewModel()) {
+fun HomeScreen(nav: androidx.navigation.NavController, player: com.teamshryne.mediyo.feature.player.PlayerViewModel, vm: HomeVm = hiltViewModel()) {
     LaunchedEffect(Unit) { vm.load() }
+    fun handle(r: uniffi.mediyo_ffi.FfiSearchResult) {
+        when {
+            r.videoId != null -> player.play(r.videoId!!, r.title, r.artists.joinToString(), r.thumbnails.firstOrNull()?.url)
+            r.browseId != null && r.category.contains("Album", true) -> nav.navigate("album/${r.browseId}")
+            r.browseId != null && r.category.contains("Artist", true) -> nav.navigate("artist/${r.browseId}")
+            r.browseId != null && r.category.contains("Playlist", true) -> nav.navigate("playlist/${r.browseId}")
+            r.browseId != null -> nav.navigate("list/${r.browseId}")
+            r.playlistId != null -> nav.navigate("playlist/${r.playlistId}")
+        }
+    }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 80.dp),
@@ -76,7 +86,7 @@ fun HomeScreen(vm: HomeVm = hiltViewModel()) {
                             Text(c.title, Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                             LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 items(c.items) { r ->
-                                    Card(shape = RoundedCornerShape(12.dp), modifier = Modifier.width(132.dp)) {
+                                    Card(onClick = { handle(r) }, shape = RoundedCornerShape(12.dp), modifier = Modifier.width(132.dp)) {
                                         Column {
                                             AsyncImage(model = r.thumbnails.firstOrNull()?.url, contentDescription = null, modifier = Modifier.height(132.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop)
                                             Column(Modifier.padding(10.dp)) {
