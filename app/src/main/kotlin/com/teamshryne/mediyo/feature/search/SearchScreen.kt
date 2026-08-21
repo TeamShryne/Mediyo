@@ -25,13 +25,23 @@ class SearchVm @Inject constructor(val bridge: MediyoBridge) : ViewModel() {
     var loading by mutableStateOf(false)
     var results by mutableStateOf<List<SearchItem>>(emptyList())
     var hasSearched by mutableStateOf(false)
+    var error by mutableStateOf<String?>(null)
     val filters = listOf("All", "Songs", "Videos", "Albums", "Playlists")
+
     suspend fun search() {
         if (query.isBlank()) return
-        loading = true; hasSearched = true
+        loading = true; hasSearched = true; error = null
         try {
-            bridge.search(query)
-            results = List(12) { SearchItem("s$it", "Result $it", if (selected == "All") "Song" else selected) }
+            val raw = bridge.search(query)
+            if (raw.isBlank() || raw.contains("\"results\":[]")) {
+                results = emptyList()
+            } else {
+                // TODO: decode SearchResponse JSON into results
+                results = emptyList()
+            }
+        } catch (e: Throwable) {
+            error = e.message ?: "Search failed"
+            results = emptyList()
         } finally { loading = false }
     }
 }
@@ -50,25 +60,42 @@ fun SearchScreen(vm: SearchVm = hiltViewModel()) {
                     singleLine = true, shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()
                 )
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(vm.filters) { f ->
-                        FilterChip(selected = vm.selected == f, onClick = { vm.selected = f }, label = { Text(f) })
-                    }
+                    items(vm.filters) { f -> FilterChip(selected = vm.selected == f, onClick = { vm.selected = f }, label = { Text(f) }) }
                 }
                 Button(onClick = { scope.launch { vm.search() } }, Modifier.fillMaxWidth(), enabled = vm.query.isNotBlank() && !vm.loading) {
                     Text(if (vm.loading) "Searching…" else "Search")
                 }
+                if (vm.error != null) {
+                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer), modifier = Modifier.fillMaxWidth()) {
+                        Text(vm.error ?: "", Modifier.padding(12.dp), color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
             }
         }
-        if (!vm.hasSearched) {
-            item {
+        when {
+            !vm.hasSearched -> item {
                 LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(listOf("Chill", "Workout", "Trending", "Lo-fi")) { s -> SuggestionChip(onClick = { vm.query = s; scope.launch { vm.search() } }, label = { Text(s) }) }
                 }
             }
-        } else if (vm.loading) {
-            items(6) { Card(Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(56.dp)) {} }
-        } else {
-            items(vm.results.size) { i ->
+            vm.loading -> items(6) { Card(Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(56.dp)) {} }
+            vm.error != null -> item {
+                Card(Modifier.padding(horizontal = 16.dp).fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Search failed", style = MaterialTheme.typography.bodyMedium)
+                        TextButton(onClick = { scope.launch { vm.search() } }) { Text("Retry") }
+                    }
+                }
+            }
+            vm.results.isEmpty() -> item {
+                Card(Modifier.padding(horizontal = 16.dp).fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("No results for \"${vm.query}\"", style = MaterialTheme.typography.bodyMedium)
+                        Text("Try different keywords or filter", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            else -> items(vm.results.size) { i ->
                 val r = vm.results[i]
                 Card(Modifier.padding(horizontal = 16.dp).fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
                     Row(Modifier.padding(12.dp).fillMaxWidth(), Arrangement.SpaceBetween) {
