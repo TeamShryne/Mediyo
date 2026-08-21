@@ -28,6 +28,7 @@ sealed class Tab(val route: String, val label: String, val icon: androidx.compos
     data object Settings : Tab("settings", "Settings", Icons.Filled.Settings)
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
