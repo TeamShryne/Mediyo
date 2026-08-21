@@ -6,23 +6,30 @@ import kotlinx.coroutines.withContext
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.downloader.Downloader
+import org.schabi.newpipe.extractor.downloader.Request
+import org.schabi.newpipe.extractor.downloader.Response
 import javax.inject.Inject
 import javax.inject.Singleton
-import java.io.IOException
-import java.util.HashMap
 
 private class SimpleDownloader : Downloader {
-    override fun download(url: String, headers: Map<String, List<String>>?): org.schabi.newpipe.extractor.downloader.Downloader.Response {
+    override fun execute(request: Request): Response {
+        val url = request.url()
+        val headers = request.headers()
         val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-        conn.requestMethod = "GET"
-        headers?.forEach { (k, v) -> v.forEach { conn.addRequestProperty(k, it) } }
+        conn.requestMethod = request.httpMethod()
+        headers.forEach { (k, v) -> v.forEach { conn.addRequestProperty(k, it) } }
+        // handle POST body if present
+        request.dataToSend()?.let { data ->
+            conn.doOutput = true
+            conn.outputStream.write(data)
+        }
         conn.connect()
         val code = conn.responseCode
-        val body = try { conn.inputStream.bufferedReader().readText() } catch (e: IOException) { conn.errorStream?.bufferedReader()?.readText() ?: "" }
+        val body = try { conn.inputStream.bufferedReader().readText() } catch (e: Exception) { conn.errorStream?.bufferedReader()?.readText() ?: "" }
         val latestUrl = conn.url.toString()
-        val respHeaders = HashMap<String, List<String>>()
+        val respHeaders = mutableMapOf<String, List<String>>()
         conn.headerFields?.forEach { (k, v) -> if (k != null) respHeaders[k] = v }
-        return org.schabi.newpipe.extractor.downloader.Downloader.Response(code.toString(), body, respHeaders, latestUrl, null)
+        return Response(code.toString(), body, respHeaders, latestUrl, null)
     }
 }
 
