@@ -20,9 +20,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.teamshryne.mediyo.core.design.*
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import uniffi.mediyo_ffi.FfiSearchResult
 
@@ -32,16 +34,18 @@ class HomeVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel()
     var carousels by mutableStateOf<List<uniffi.mediyo_ffi.FfiCarousel>>(emptyList())
     var error by mutableStateOf<String?>(null)
 
-    suspend fun load() {
+    fun load() {
         loading = true; error = null
-        try {
-            val page = bridge.home()
-            carousels = page.carousels
-            if (carousels.isEmpty()) error = null
-        } catch (e: Throwable) {
-            error = e.message ?: "Failed to load"
-            carousels = emptyList()
-        } finally { loading = false }
+        viewModelScope.launch {
+            try {
+                val page = bridge.home()
+                carousels = page.carousels
+                if (carousels.isEmpty()) error = null
+            } catch (e: Throwable) {
+                error = e.message ?: "Failed to load"
+                carousels = emptyList()
+            } finally { loading = false }
+        }
     }
 }
 

@@ -19,6 +19,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import com.teamshryne.mediyo.core.design.ErrorState
 import com.teamshryne.mediyo.core.design.TrackRow
@@ -26,6 +27,7 @@ import com.teamshryne.mediyo.core.design.immersiveBrush
 import com.teamshryne.mediyo.core.design.rememberDominantColors
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel class AlbumVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel() {
@@ -33,13 +35,15 @@ import javax.inject.Inject
     var title by mutableStateOf(""); var artist by mutableStateOf(""); var year by mutableStateOf("")
     var thumb by mutableStateOf<String?>(null)
     var tracks by mutableStateOf<List<uniffi.mediyo_ffi.FfiSearchResult>>(emptyList())
-    suspend fun load(id: String) {
+    fun load(id: String) {
         loading = true; error = null
-        try {
-            val p = bridge.album(id)
-            title = p.title; artist = p.artist ?: ""; year = p.year ?: ""
-            thumb = p.thumbnails.firstOrNull()?.url; tracks = p.tracks
-        } catch (e: Throwable) { error = e.message } finally { loading = false }
+        viewModelScope.launch {
+            try {
+                val p = bridge.album(id)
+                title = p.title; artist = p.artist ?: ""; year = p.year ?: ""
+                thumb = p.thumbnails.firstOrNull()?.url; tracks = p.tracks
+            } catch (e: Throwable) { error = e.message } finally { loading = false }
+        }
     }
 }
 
