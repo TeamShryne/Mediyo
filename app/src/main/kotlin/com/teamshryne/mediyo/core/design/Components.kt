@@ -339,7 +339,7 @@ fun TrackRow(
 
 // ── Play / Shuffle actions ───────────────────────────────────────────────────
 @Composable
-fun ActionPill(text: String, icon: ImageVector, filled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun ActionPill(text: String, icon: ImageVector, filled: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     if (filled) {
         Button(onClick = onClick, shape = CircleShape, contentPadding = PaddingValues(horizontal = 22.dp, vertical = 10.dp), modifier = modifier) {
             Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -397,8 +397,8 @@ fun InfiniteScrollHandler(
     listState: LazyListState,
     itemCount: Int,
     enabled: Boolean,
-    onLoadMore: () -> Unit,
-    threshold: Int = 6
+    threshold: Int = 6,
+    onLoadMore: () -> Unit
 ) {
     val currentEnabled by rememberUpdatedState(enabled)
     val currentCount by rememberUpdatedState(itemCount)
