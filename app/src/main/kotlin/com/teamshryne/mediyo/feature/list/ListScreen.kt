@@ -11,6 +11,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.teamshryne.mediyo.core.design.ErrorState
+import com.teamshryne.mediyo.core.design.InfiniteScrollHandler
+import com.teamshryne.mediyo.core.design.LoadingFooter
 import com.teamshryne.mediyo.core.design.TrackRow
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -19,11 +21,27 @@ import javax.inject.Inject
 
 @HiltViewModel class ListVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel() {
     var loading by mutableStateOf(true); var error by mutableStateOf<String?>(null)
+    var loadingMore by mutableStateOf(false); var continuation by mutableStateOf<String?>(null)
     var items by mutableStateOf<List<uniffi.mediyo_ffi.FfiSearchResult>>(emptyList())
     fun load(id: String, params: String?) {
-        loading = true; error = null
+        loading = true; error = null; continuation = null
         viewModelScope.launch {
-            try { items = bridge.listPage(id, params).items } catch (e: Throwable) { error = e.message } finally { loading = false }
+            try {
+                val p = bridge.listPage(id, params)
+                items = p.items; continuation = p.continuation.takeIf { p.items.isNotEmpty() }
+            } catch (e: Throwable) { error = e.message } finally { loading = false }
+        }
+    }
+    fun loadMore() {
+        val token = continuation ?: return
+        if (loadingMore || loading) return
+        loadingMore = true
+        viewModelScope.launch {
+            try {
+                val p = bridge.nextPage(token)
+                if (p.items.isNotEmpty()) items = items + p.items
+                continuation = if (p.items.isEmpty()) null else p.continuation
+            } catch (_: Throwable) { continuation = null } finally { loadingMore = false }
         }
     }
 }
@@ -53,14 +71,22 @@ fun GenericListScreen(
         vm.error != null -> ErrorState(vm.error ?: "Failed to load") { vm.load(browseId, params) }
         else -> {
             val playingId = player?.state?.collectAsState()?.value?.videoId
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)) {
+            val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)) {
                 items(vm.items.size) { i ->
                     val r = vm.items[i]
                     TrackRow(item = r, isPlaying = playingId != null && playingId == r.videoId, showArtwork = true) {
                         handle(r)
                     }
                 }
+                item(key = "list_footer") { LoadingFooter(vm.loadingMore) }
             }
+
+            InfiniteScrollHandler(
+                listState = listState,
+                itemCount = vm.items.size + 1,
+                enabled = vm.continuation != null && !vm.loading
+            ) { vm.loadMore() }
         }
     }
 }

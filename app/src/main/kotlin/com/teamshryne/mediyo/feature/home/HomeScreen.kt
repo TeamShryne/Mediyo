@@ -31,20 +31,39 @@ import uniffi.mediyo_ffi.FfiSearchResult
 @HiltViewModel
 class HomeVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel() {
     var loading by mutableStateOf(true)
+    var loadingMore by mutableStateOf(false)
     var carousels by mutableStateOf<List<uniffi.mediyo_ffi.FfiCarousel>>(emptyList())
+    var continuation by mutableStateOf<String?>(null)
     var error by mutableStateOf<String?>(null)
 
     fun load() {
-        loading = true; error = null
+        loading = true; error = null; continuation = null
         viewModelScope.launch {
             try {
                 val page = bridge.home()
-                carousels = page.carousels
+                carousels = page.carousels.filter { it.items.isNotEmpty() }
+                continuation = page.continuation.takeIf { carousels.isNotEmpty() }
                 if (carousels.isEmpty()) error = null
             } catch (e: Throwable) {
                 error = e.message ?: "Failed to load"
                 carousels = emptyList()
             } finally { loading = false }
+        }
+    }
+
+    fun loadMore() {
+        val token = continuation ?: return
+        if (loadingMore || loading) return
+        loadingMore = true
+        viewModelScope.launch {
+            try {
+                val page = bridge.homeContinue(token)
+                val fresh = page.carousels.filter { it.items.isNotEmpty() }
+                if (fresh.isNotEmpty()) carousels = carousels + fresh
+                continuation = if (fresh.isEmpty()) null else page.continuation
+            } catch (_: Throwable) {
+                continuation = null
+            } finally { loadingMore = false }
         }
     }
 }
@@ -57,6 +76,7 @@ fun HomeScreen(
 ) {
     LaunchedEffect(Unit) { vm.load() }
     val greeting = rememberGreeting()
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
 
     fun open(r: FfiSearchResult, shelf: List<FfiSearchResult>) {
         when {
@@ -70,6 +90,7 @@ fun HomeScreen(
     }
 
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(26.dp)
@@ -155,9 +176,16 @@ fun HomeScreen(
                         }
                     }
                 }
+                item(key = "home_footer") { LoadingFooter(vm.loadingMore) }
             }
         }
     }
+
+    InfiniteScrollHandler(
+        listState = listState,
+        itemCount = vm.carousels.size + 1,
+        enabled = vm.continuation != null && !vm.loading && vm.error == null
+    ) { vm.loadMore() }
 }
 
 @Composable
