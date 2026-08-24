@@ -669,6 +669,7 @@ fn append_continuation_items(items: &Value, out: &mut Vec<SearchResult>) -> Resu
             match rname {
                 "musicResponsiveListItemRenderer" => out.push(parse_search_result(item)?),
                 "musicTwoRowItemRenderer" => out.push(parse_two_row_item(item)?),
+                "musicMultiRowListItemRenderer" => out.push(parse_multi_row_item(item)?),
                 "continuationItemRenderer" => {
                     continuation = payload
                         .pointer("/continuationEndpoint/continuationCommand/token")
