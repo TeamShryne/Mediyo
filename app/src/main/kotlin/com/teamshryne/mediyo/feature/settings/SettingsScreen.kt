@@ -10,8 +10,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
-import dagger.hilt.android.lifecycle.HiltViewModel
-import javax.inject.Inject
+import com.teamshryne.mediyo.core.design.SectionHeader
 import com.teamshryne.mediyo.data.cache.CacheRepository
 import com.teamshryne.mediyo.data.cache.CachePrefs
 import kotlinx.coroutines.launch
@@ -30,29 +29,78 @@ fun SettingsScreen(vm: SettingsVm = hiltViewModel()) {
     var stats by remember { mutableStateOf("—") }
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { stats = vm.stats().let { "${it.totalBytes / 1024} KB" } }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 80.dp, top = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        item { Text("Storage", Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
+
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(22.dp)
+    ) {
         item {
-            Card(Modifier.padding(horizontal = 16.dp).fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-                        Text(stats, style = MaterialTheme.typography.bodyMedium)
-                        Text("${prefs.maxBytes / 1024 / 1024} MB", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                "Settings",
+                style = MaterialTheme.typography.displaySmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(horizontal = 20.dp)
+            )
+        }
+        item { SectionHeader("Storage & cache") }
+        item {
+            Card(
+                Modifier.padding(horizontal = 20.dp).fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+            ) {
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Cache used", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                        Text(stats, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    LinearProgressIndicator(progress = { 0.4f }, modifier = Modifier.fillMaxWidth().height(6.dp))
+                    LinearProgressIndicator(
+                        progress = { 0.4f },
+                        modifier = Modifier.fillMaxWidth().height(6.dp),
+                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                    )
+                    Text(
+                        "Limit ${prefs.maxBytes / 1024 / 1024} MB",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilledTonalButton(onClick = { scope.launch { vm.clear(null); stats = vm.stats().let { "${it.totalBytes / 1024} KB" } } }, Modifier.weight(1f)) { Text("Clear all") }
-                        OutlinedButton(onClick = { scope.launch { vm.clear("search") } }) { Text("Search") }
-                        OutlinedButton(onClick = { scope.launch { vm.clear("browse") } }) { Text("Browse") }
+                        FilledTonalButton(
+                            onClick = { scope.launch { vm.clear(null); stats = vm.stats().let { "${it.totalBytes / 1024} KB" } } },
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.weight(1f)
+                        ) { Text("Clear all") }
+                        OutlinedButton(
+                            onClick = { scope.launch { vm.clear("search") } },
+                            shape = RoundedCornerShape(14.dp)
+                        ) { Text("Search") }
+                        OutlinedButton(
+                            onClick = { scope.launch { vm.clear("browse") } },
+                            shape = RoundedCornerShape(14.dp)
+                        ) { Text("Browse") }
                     }
                 }
             }
         }
+        item { SectionHeader("Network") }
         item {
-            Card(Modifier.padding(horizontal = 16.dp).fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+            Card(
+                Modifier.padding(horizontal = 20.dp).fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+            ) {
                 Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = prefs.wifiOnly, onClick = { scope.launch { vm.setPrefs(prefs.copy(wifiOnly = !prefs.wifiOnly)) } }, label = { Text("Wi-Fi only") })
-                    FilterChip(selected = prefs.offlineOnly, onClick = { scope.launch { vm.setPrefs(prefs.copy(offlineOnly = !prefs.offlineOnly)) } }, label = { Text("Offline") })
+                    FilterChip(
+                        selected = prefs.wifiOnly,
+                        onClick = { scope.launch { vm.setPrefs(prefs.copy(wifiOnly = !prefs.wifiOnly)) } },
+                        label = { Text("Wi-Fi only") }
+                    )
+                    FilterChip(
+                        selected = prefs.offlineOnly,
+                        onClick = { scope.launch { vm.setPrefs(prefs.copy(offlineOnly = !prefs.offlineOnly)) } },
+                        label = { Text("Offline") }
+                    )
                 }
             }
         }

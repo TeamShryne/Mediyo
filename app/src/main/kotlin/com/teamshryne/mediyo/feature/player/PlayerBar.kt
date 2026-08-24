@@ -1,50 +1,282 @@
 package com.teamshryne.mediyo.feature.player
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.RepeatOne
+import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.teamshryne.mediyo.core.design.DominantColors
+import com.teamshryne.mediyo.core.design.MarqueeText
+import com.teamshryne.mediyo.core.design.formatTime
+import com.teamshryne.mediyo.core.design.immersiveBrush
+import com.teamshryne.mediyo.core.design.rememberDominantColors
 
-@Composable fun MiniPlayer(state: PlayerState, onToggle: () -> Unit, onExpand: () -> Unit) {
+// ─────────────────────────────────────────────────────────────────────────────
+// Mini player — floating pill above the nav bar (Spotify style)
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+fun MiniPlayer(state: PlayerState, onToggle: () -> Unit, onNext: () -> Unit, onExpand: () -> Unit) {
     if (state.title.isEmpty()) return
     Card(
         onClick = onExpand,
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp)
+            .shadow(elevation = 12.dp, shape = RoundedCornerShape(12.dp), ambientColor = Color.Black, spotColor = Color.Black)
     ) {
-        Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            AsyncImage(model = state.artwork, contentDescription = null, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
-            Column(Modifier.weight(1f)) {
-                Text(state.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
-                Text(state.artist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        Column {
+            Row(
+                Modifier.padding(start = 8.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AsyncImage(
+                    model = state.artwork,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp))
+                )
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    MarqueeText(state.title, MaterialTheme.typography.labelLarge, MaterialTheme.colorScheme.onSurface)
+                    MarqueeText(state.artist, MaterialTheme.typography.bodySmall, MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                IconButton(onClick = onToggle, modifier = Modifier.size(40.dp)) {
+                    if (state.isBuffering) {
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(
+                            if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            contentDescription = if (state.isPlaying) "Pause" else "Play",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+                IconButton(onClick = onNext, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Filled.SkipNext, contentDescription = "Next", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
-            IconButton(onClick = onToggle) { Icon(if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, contentDescription = null) }
+            LinearProgressIndicator(
+                progress = { state.progress },
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.fillMaxWidth().height(2.dp)
+            )
         }
-        LinearProgressIndicator(progress = { state.progress }, modifier = Modifier.fillMaxWidth().height(2.dp))
     }
 }
 
-@Composable fun FullPlayer(state: PlayerState, onToggle: () -> Unit, onCollapse: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        TextButton(onClick = onCollapse, modifier = Modifier.align(Alignment.Start)) { Text("Minimize") }
-        AsyncImage(model = state.artwork, contentDescription = null, modifier = Modifier.size(280.dp).clip(RoundedCornerShape(20.dp)), contentScale = ContentScale.Crop)
-        Text(state.title, style = MaterialTheme.typography.headlineSmall)
-        Text(state.artist, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Row(horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onToggle, modifier = Modifier.size(64.dp)) {
-                Icon(if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(48.dp))
+// ─────────────────────────────────────────────────────────────────────────────
+// Full player — immersive, artwork-tinted (Apple Music / Spotify hybrid)
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+fun FullPlayer(
+    state: PlayerState,
+    contextLabel: String,
+    onToggle: () -> Unit,
+    onNext: () -> Unit,
+    onPrevious: () -> Unit,
+    onSeek: (Float) -> Unit,
+    onToggleShuffle: () -> Unit,
+    onToggleRepeat: () -> Unit,
+    onCollapse: () -> Unit
+) {
+    val dominant: DominantColors = rememberDominantColors(state.artwork)
+    var liked by remember { mutableStateOf(false) }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(immersiveBrush(dominant))
+    ) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(top = 8.dp, start = 24.dp, end = 24.dp, bottom = 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+        // Top bar
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            IconButton(onClick = onCollapse) {
+                Icon(Icons.Filled.ExpandMore, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(30.dp))
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("PLAYING FROM", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.7f), letterSpacing = 1.5.sp)
+                Text(contextLabel, style = MaterialTheme.typography.labelLarge, color = Color.White, maxLines = 1)
+            }
+            IconButton(onClick = {}) {
+                Icon(Icons.Filled.MoreVert, contentDescription = null, tint = Color.White.copy(alpha = 0.85f))
             }
         }
-        Slider(value = state.progress, onValueChange = {}, modifier = Modifier.fillMaxWidth())
+
+        Spacer(Modifier.weight(0.5f))
+
+        // Artwork
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .shadow(32.dp, RoundedCornerShape(18.dp), ambientColor = Color.Black, spotColor = Color.Black)
+                .clip(RoundedCornerShape(18.dp))
+                .background(Color.White.copy(alpha = 0.06f))
+        ) {
+            AsyncImage(
+                model = state.artwork,
+                contentDescription = state.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+
+        Spacer(Modifier.height(28.dp))
+
+        // Title / artist / like
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(Modifier.weight(1f)) {
+                MarqueeText(state.title, MaterialTheme.typography.headlineSmall, Color.White)
+                Spacer(Modifier.height(2.dp))
+                MarqueeText(state.artist, MaterialTheme.typography.bodyMedium, Color.White.copy(alpha = 0.72f))
+            }
+            IconButton(onClick = { liked = !liked }) {
+                Icon(
+                    if (liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                    contentDescription = "Like",
+                    tint = if (liked) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.9f)
+                )
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // Scrubber
+        var dragging by remember { mutableStateOf(false) }
+        var dragValue by remember { mutableStateOf(0f) }
+        val shown = if (dragging) dragValue else state.progress
+        Slider(
+            value = shown.coerceIn(0f, 1f),
+            onValueChange = { dragging = true; dragValue = it },
+            onValueChangeFinished = { onSeek(dragValue); dragging = false },
+            colors = SliderDefaults.colors(
+                activeTrackColor = Color.White,
+                inactiveTrackColor = Color.White.copy(alpha = 0.25f),
+                thumbColor = Color.White,
+                activeTickColor = Color.Transparent,
+                inactiveTickColor = Color.Transparent
+            ),
+            modifier = Modifier.fillMaxWidth().height(26.dp)
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            val dur = state.durationMs
+            Text(
+                formatTime(if (dragging) (dur * dragValue).toLong() else state.positionMs),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White.copy(alpha = 0.65f)
+            )
+            Text(formatTime(dur), style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.65f))
+        }
+
+        // Transport controls
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            val shuffleActive by animateColorAsState(
+                if (state.shuffle) Color.White else Color.White.copy(alpha = 0.55f), label = "shuffle"
+            )
+            IconButton(onClick = onToggleShuffle) {
+                Icon(Icons.Filled.Shuffle, contentDescription = "Shuffle", tint = shuffleActive)
+            }
+            IconButton(onClick = onPrevious, modifier = Modifier.size(56.dp)) {
+                Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous", tint = Color.White, modifier = Modifier.size(38.dp))
+            }
+            FilledIconButton(
+                onClick = onToggle,
+                shape = CircleShape,
+                colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color.White, contentColor = Color.Black),
+                modifier = Modifier.size(74.dp)
+            ) {
+                if (state.isBuffering) {
+                    CircularProgressIndicator(Modifier.size(26.dp), color = Color.Black, strokeWidth = 2.5.dp)
+                } else {
+                    Icon(
+                        if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                        contentDescription = if (state.isPlaying) "Pause" else "Play",
+                        modifier = Modifier.size(38.dp)
+                    )
+                }
+            }
+            IconButton(onClick = onNext, modifier = Modifier.size(56.dp)) {
+                Icon(Icons.Filled.SkipNext, contentDescription = "Next", tint = Color.White, modifier = Modifier.size(38.dp))
+            }
+            IconButton(onClick = onToggleRepeat) {
+                Icon(
+                    if (state.repeatOne) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
+                    contentDescription = "Repeat",
+                    tint = if (state.repeatOne) Color.White else Color.White.copy(alpha = 0.55f)
+                )
+            }
+        }
+
+        Spacer(Modifier.weight(0.5f))
+
+        // Bottom utilities
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (state.queueSize > 1) {
+                Text(
+                    "${state.queueIndex + 1} of ${state.queueSize}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.6f)
+                )
+            } else {
+                Text(
+                    state.artist,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.45f),
+                    maxLines = 1
+                )
+            }
+        }
+        }
     }
 }

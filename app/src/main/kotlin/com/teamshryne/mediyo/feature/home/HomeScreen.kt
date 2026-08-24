@@ -1,26 +1,30 @@
 package com.teamshryne.mediyo.feature.home
 
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
+import com.teamshryne.mediyo.core.design.*
+import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import com.teamshryne.mediyo.data.mediyo.MediyoBridge
+import uniffi.mediyo_ffi.FfiSearchResult
 
 @HiltViewModel
 class HomeVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel() {
@@ -42,11 +46,17 @@ class HomeVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel()
 }
 
 @Composable
-fun HomeScreen(nav: androidx.navigation.NavController, player: com.teamshryne.mediyo.feature.player.PlayerViewModel, vm: HomeVm = hiltViewModel()) {
+fun HomeScreen(
+    nav: androidx.navigation.NavController,
+    player: com.teamshryne.mediyo.feature.player.PlayerViewModel,
+    vm: HomeVm = hiltViewModel()
+) {
     LaunchedEffect(Unit) { vm.load() }
-    fun handle(r: uniffi.mediyo_ffi.FfiSearchResult) {
+    val greeting = rememberGreeting()
+
+    fun open(r: FfiSearchResult, shelf: List<FfiSearchResult>) {
         when {
-            r.videoId != null -> player.play(r.videoId!!, r.title, r.artists.joinToString(), r.thumbnails.firstOrNull()?.url)
+            r.videoId != null -> player.playFrom(shelf, r)
             r.browseId != null && r.category.contains("Album", true) -> nav.navigate("album/${r.browseId}")
             r.browseId != null && r.category.contains("Artist", true) -> nav.navigate("artist/${r.browseId}")
             r.browseId != null && r.category.contains("Playlist", true) -> nav.navigate("playlist/${r.browseId}")
@@ -54,47 +64,88 @@ fun HomeScreen(nav: androidx.navigation.NavController, player: com.teamshryne.me
             r.playlistId != null -> nav.navigate("playlist/${r.playlistId}")
         }
     }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 80.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+        contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(26.dp)
     ) {
-        item { Text("Home", Modifier.padding(horizontal = 16.dp, vertical = 12.dp), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
-        when {
-            vm.loading -> items(2) { ShimmerCarousel() }
-            vm.error != null -> item {
-                Card(Modifier.padding(horizontal = 16.dp).fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Failed to load", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onErrorContainer)
-                        Text(vm.error ?: "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
-                        Button(onClick = { /* TODO retry */ }) { Text("Retry") }
-                    }
+        // ── Header ──
+        item {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        greeting,
+                        style = MaterialTheme.typography.displaySmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        "What do you want to listen to?",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Box(
+                    Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                        .clickable { nav.navigate("profile") },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Filled.Person, contentDescription = "Profile", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
+        }
+
+        when {
+            vm.loading -> items(3) { ShimmerShelf(round = it == 1) }
+            vm.error != null -> item { ErrorState(vm.error ?: "Unknown error") { vm.load() } }
             vm.carousels.isEmpty() -> item {
-                Card(Modifier.padding(horizontal = 16.dp).fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text("Nothing here yet", fontWeight = FontWeight.Medium)
-                        Text("Pull to refresh", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
+                EmptyState("Nothing here yet", "Pull down or reopen the app to refresh your feed")
             }
             else -> {
-                vm.carousels.forEach { c ->
+                // Quick picks from the first shelf
+                val firstItems = vm.carousels.firstOrNull()?.items.orEmpty()
+                if (firstItems.size >= 4) {
                     item {
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text(c.title, Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                            LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            SectionHeader("Quick picks")
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                items(firstItems.take(8)) { r ->
+                                    MediaTile(
+                                        title = r.title,
+                                        artworkUrl = r.thumbnails.firstOrNull()?.url
+                                    ) { open(r, firstItems) }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                vm.carousels.forEachIndexed { ci, c ->
+                    item(key = "shelf_$ci") {
+                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                            SectionHeader(c.title)
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
                                 items(c.items) { r ->
-                                    Card(onClick = { handle(r) }, shape = RoundedCornerShape(12.dp), modifier = Modifier.width(132.dp)) {
-                                        Column {
-                                            AsyncImage(model = r.thumbnails.firstOrNull()?.url, contentDescription = null, modifier = Modifier.height(132.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop)
-                                            Column(Modifier.padding(10.dp)) {
-                                                Text(r.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1)
-                                                Text(r.artists.joinToString(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                                            }
-                                        }
-                                    }
+                                    MediaCard(
+                                        title = r.title,
+                                        subtitle = r.artists.joinToString(),
+                                        artworkUrl = r.thumbnails.firstOrNull()?.url,
+                                        round = r.category.contains("Artist", true),
+                                        onClick = { open(r, c.items) }
+                                    )
                                 }
                             }
                         }
@@ -106,10 +157,21 @@ fun HomeScreen(nav: androidx.navigation.NavController, player: com.teamshryne.me
 }
 
 @Composable
-private fun ShimmerCarousel() {
-    val a by rememberInfiniteTransition(label = "").animateFloat(0.4f, 1f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "")
-    Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Box(Modifier.width(120.dp).height(16.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(a)))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) { items(4) { Box(Modifier.size(132.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(a))) } }
+private fun ShimmerShelf(round: Boolean = false) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Box(
+            Modifier
+                .padding(horizontal = 20.dp)
+                .width(150.dp)
+                .height(22.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .shimmer()
+        )
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            items(4) { MediaCardShimmer(round = round) }
+        }
     }
 }
