@@ -14,6 +14,7 @@ import com.teamshryne.mediyo.core.design.ErrorState
 import com.teamshryne.mediyo.core.design.InfiniteScrollHandler
 import com.teamshryne.mediyo.core.design.LoadingFooter
 import com.teamshryne.mediyo.core.design.TrackRow
+import com.teamshryne.mediyo.core.design.appendUnique
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
@@ -39,8 +40,9 @@ import javax.inject.Inject
         viewModelScope.launch {
             try {
                 val p = bridge.nextPage(token)
-                if (p.items.isNotEmpty()) items = items + p.items
-                continuation = if (p.items.isEmpty()) null else p.continuation
+                val before = items.size
+                items = items.appendUnique(p.items)
+                continuation = if (p.items.isEmpty() || items.size == before) null else p.continuation
             } catch (_: Throwable) { continuation = null } finally { loadingMore = false }
         }
     }
@@ -85,7 +87,7 @@ fun GenericListScreen(
             InfiniteScrollHandler(
                 listState = listState,
                 itemCount = vm.items.size + 1,
-                enabled = vm.continuation != null && !vm.loading
+                enabled = vm.continuation != null && !vm.loading && !vm.loadingMore
             ) { vm.loadMore() }
         }
     }

@@ -155,12 +155,18 @@ pub fn parse_album_page(resp: &Value) -> Result<AlbumPage> {
         match name {
             "musicShelfRenderer" | "musicPlaylistShelfRenderer" => {
                 continuation = append_list_items(payload, &mut tracks)?;
+                if continuation.is_none() {
+                    continuation = shelf_level_token(payload);
+                }
             }
             "musicCarouselShelfRenderer" => {
                 carousels.push(parse_carousel(payload)?);
             }
             _ => {}
         }
+    }
+    if continuation.is_none() {
+        continuation = section_list_token(resp);
     }
 
     Ok(AlbumPage {
@@ -191,7 +197,15 @@ pub fn parse_playlist_page(resp: &Value) -> Result<PlaylistPage> {
         };
         if name == "musicPlaylistShelfRenderer" || name == "musicShelfRenderer" {
             continuation = append_list_items(payload, &mut tracks)?;
+            // Some shelves (radio mixes) carry the token at shelf level
+            // instead of a sentinel item inside contents.
+            if continuation.is_none() {
+                continuation = shelf_level_token(payload);
+            }
         }
+    }
+    if continuation.is_none() {
+        continuation = section_list_token(resp);
     }
 
     Ok(PlaylistPage {
@@ -222,9 +236,14 @@ pub fn parse_list_continuation(resp: &Value) -> Result<ListPage> {
         .and_then(Value::as_array)
     {
         for action in actions {
-            if let Some(items_arr) =
-                action.pointer("/appendContinuationItemsAction/continuationItems")
-            {
+            // append = normal next page; reload = shelf re-render (some radio
+            // continuations use it — content may overlap, callers dedupe).
+            let items_arr = action
+                .pointer("/appendContinuationItemsAction/continuationItems")
+                .or_else(|| {
+                    action.pointer("/reloadContinuationItemsAction/continuationItems")
+                });
+            if let Some(items_arr) = items_arr {
                 if let Some(tok) = append_continuation_items(items_arr, &mut items)? {
                     continuation = Some(tok);
                 }
@@ -529,6 +548,34 @@ fn secondary_sections(resp: &Value) -> Vec<&Value> {
     .and_then(Value::as_array)
     .map(|a| a.iter().collect())
     .unwrap_or_default()
+}
+
+/// Continuation token stored on the shelf itself
+/// (`musicShelfRenderer.continuations[0]`) rather than as a sentinel item.
+fn shelf_level_token(payload: &Value) -> Option<String> {
+    payload
+        .pointer("/continuations/0/nextContinuationData/continuation")
+        .or_else(|| {
+            payload
+                .pointer("/continuations/0/reloadContinuationData/continuation")
+        })
+        .and_then(|v| v.as_str())
+        .map(String::from)
+}
+
+/// Continuation token on the wrapping sectionListRenderer (radio mixes put
+/// their token there instead of inside the shelf).
+fn section_list_token(resp: &Value) -> Option<String> {
+    resp.pointer(
+        "/contents/twoColumnBrowseResultsRenderer/secondaryContents/sectionListRenderer/continuations/0/nextContinuationData/continuation",
+    )
+    .or_else(|| {
+        resp.pointer(
+            "/contents/singleColumnBrowseResultsRenderer/tabs/0/tabRenderer/content/sectionListRenderer/continuations/0/nextContinuationData/continuation",
+        )
+    })
+    .and_then(|v| v.as_str())
+    .map(String::from)
 }
 
 fn parse_responsive_header(header: &Value) -> Result<HeaderInfo> {

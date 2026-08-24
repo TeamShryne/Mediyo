@@ -184,7 +184,7 @@ fun HomeScreen(
     InfiniteScrollHandler(
         listState = listState,
         itemCount = vm.carousels.size + 1,
-        enabled = vm.continuation != null && !vm.loading && vm.error == null
+        enabled = vm.continuation != null && !vm.loading && !vm.loadingMore && vm.error == null
     ) { vm.loadMore() }
 }
 

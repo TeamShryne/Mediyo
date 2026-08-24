@@ -390,7 +390,8 @@ fun EmptyState(title: String, subtitle: String, modifier: Modifier = Modifier) {
 
 /**
  * Triggers [onLoadMore] when the end of a lazy list approaches.
- * Attach to the same LazyListState used by the list; guard repeated calls in the VM.
+ * Re-arms whenever [itemCount] grows, so lists that don't yet fill the
+ * viewport keep loading pages automatically until they do.
  */
 @Composable
 fun InfiniteScrollHandler(
@@ -401,16 +402,34 @@ fun InfiniteScrollHandler(
     onLoadMore: () -> Unit
 ) {
     val currentEnabled by rememberUpdatedState(enabled)
-    val currentCount by rememberUpdatedState(itemCount)
     val currentLoadMore by rememberUpdatedState(onLoadMore)
-    LaunchedEffect(listState) {
+    LaunchedEffect(listState, itemCount) {
         snapshotFlow {
             val lastIdx = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-            lastIdx >= 0 && lastIdx >= (currentCount - threshold).coerceAtLeast(0)
+            lastIdx >= 0 && lastIdx >= (itemCount - threshold).coerceAtLeast(0)
         }.collect { nearEnd ->
             if (nearEnd && currentEnabled) currentLoadMore()
         }
     }
+}
+
+// ── Pagination helpers ───────────────────────────────────────────────────────
+
+private fun FfiSearchResult.uniqueKey(): String =
+    videoId ?: browseId ?: playlistId ?: ("title:$title")
+
+/**
+ * Appends [newItems] while skipping anything already present (matched by
+ * videoId/browseId/playlistId, falling back to title). Protects against
+ * servers re-serving overlapping or repeated pages.
+ */
+fun List<FfiSearchResult>.appendUnique(newItems: List<FfiSearchResult>): List<FfiSearchResult> {
+    if (newItems.isEmpty()) return this
+    val seen = HashSet<String>(size + newItems.size)
+    forEach { seen += it.uniqueKey() }
+    val out = ArrayList(this)
+    for (n in newItems) if (seen.add(n.uniqueKey())) out += n
+    return out
 }
 
 /** Slim centered spinner shown at the bottom of a paginating list. */

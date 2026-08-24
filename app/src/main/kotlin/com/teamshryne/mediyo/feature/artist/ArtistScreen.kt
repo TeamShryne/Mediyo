@@ -27,8 +27,9 @@ import com.teamshryne.mediyo.core.design.ErrorState
 import com.teamshryne.mediyo.core.design.InfiniteScrollHandler
 import com.teamshryne.mediyo.core.design.LoadingFooter
 import com.teamshryne.mediyo.core.design.MediaCard
-import com.teamshryne.mediyo.core.design.SectionHeader
 import com.teamshryne.mediyo.core.design.TrackRow
+import com.teamshryne.mediyo.core.design.appendUnique
+import com.teamshryne.mediyo.core.design.SectionHeader
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
@@ -61,8 +62,9 @@ import uniffi.mediyo_ffi.FfiSearchResult
         viewModelScope.launch {
             try {
                 val p = bridge.nextPage(token)
-                if (p.items.isNotEmpty()) topSongs = topSongs + p.items
-                continuation = if (p.items.isEmpty()) null else p.continuation
+                val before = topSongs.size
+                topSongs = topSongs.appendUnique(p.items)
+                continuation = if (p.items.isEmpty() || topSongs.size == before) null else p.continuation
             } catch (_: Throwable) { continuation = null } finally { loadingMore = false }
         }
     }
