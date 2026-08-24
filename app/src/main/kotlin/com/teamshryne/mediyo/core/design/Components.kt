@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.composed
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -213,7 +214,7 @@ fun MediaCard(
 
 /** Wide horizontal tile used for playlists/mixes in compact shelves. */
 @Composable
-fun MediaTile(title: String, artworkUrl: String?, onClick: () -> Unit, width: Dp = 180.dp) {
+fun MediaTile(title: String, artworkUrl: String?, width: Dp = 180.dp, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .width(width)

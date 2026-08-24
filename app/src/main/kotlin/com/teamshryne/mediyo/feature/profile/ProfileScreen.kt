@@ -14,18 +14,22 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import com.teamshryne.mediyo.core.design.ErrorState
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 
 @HiltViewModel class ProfileVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel() {
     var loading by mutableStateOf(true); var error by mutableStateOf<String?>(null)
     var name by mutableStateOf(""); var handle by mutableStateOf<String?>(null); var photo by mutableStateOf<String?>(null)
-    suspend fun load() {
+    fun load() {
         loading = true; error = null
-        try { val a = bridge.account(); name = a.name; handle = a.handle; photo = a.photoUrl } catch (e: Throwable) { error = e.message } finally { loading = false }
+        viewModelScope.launch {
+            try { val a = bridge.account(); name = a.name; handle = a.handle; photo = a.photoUrl } catch (e: Throwable) { error = e.message } finally { loading = false }
+        }
     }
 }
 

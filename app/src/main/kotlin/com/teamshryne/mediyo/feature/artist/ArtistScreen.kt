@@ -21,6 +21,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import com.teamshryne.mediyo.core.design.ErrorState
 import com.teamshryne.mediyo.core.design.MediaCard
@@ -28,6 +29,7 @@ import com.teamshryne.mediyo.core.design.SectionHeader
 import com.teamshryne.mediyo.core.design.TrackRow
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import uniffi.mediyo_ffi.FfiSearchResult
 
@@ -37,14 +39,16 @@ import uniffi.mediyo_ffi.FfiSearchResult
     var thumb by mutableStateOf<String?>(null)
     var topSongs by mutableStateOf<List<FfiSearchResult>>(emptyList())
     var carousels by mutableStateOf<List<uniffi.mediyo_ffi.FfiCarousel>>(emptyList())
-    suspend fun load(id: String) {
+    fun load(id: String) {
         loading = true; error = null
-        try {
-            val p = bridge.artist(id)
-            name = p.name; subs = p.subscriberCount
-            thumb = p.thumbnails.firstOrNull()?.url
-            topSongs = p.topSongs; carousels = p.carousels
-        } catch (e: Throwable) { error = e.message } finally { loading = false }
+        viewModelScope.launch {
+            try {
+                val p = bridge.artist(id)
+                name = p.name; subs = p.subscriberCount
+                thumb = p.thumbnails.firstOrNull()?.url
+                topSongs = p.topSongs; carousels = p.carousels
+            } catch (e: Throwable) { error = e.message } finally { loading = false }
+        }
     }
 }
 

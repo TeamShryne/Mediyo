@@ -13,7 +13,9 @@ import androidx.lifecycle.ViewModel
 import com.teamshryne.mediyo.core.design.SectionHeader
 import com.teamshryne.mediyo.data.cache.CacheRepository
 import com.teamshryne.mediyo.data.cache.CachePrefs
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 @HiltViewModel
 class SettingsVm @Inject constructor(private val repo: CacheRepository) : ViewModel() {

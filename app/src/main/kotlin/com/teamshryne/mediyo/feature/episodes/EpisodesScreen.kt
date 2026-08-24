@@ -9,19 +9,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.teamshryne.mediyo.core.design.ErrorState
 import com.teamshryne.mediyo.core.design.SectionHeader
 import com.teamshryne.mediyo.core.design.TrackRow
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel class EpisodesVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel() {
     var loading by mutableStateOf(true); var error by mutableStateOf<String?>(null)
     var items by mutableStateOf<List<uniffi.mediyo_ffi.FfiSearchResult>>(emptyList())
-    suspend fun load(id: String) {
+    fun load(id: String) {
         loading = true; error = null
-        try { items = bridge.listPage(id, null).items } catch (e: Throwable) { error = e.message } finally { loading = false }
+        viewModelScope.launch {
+            try { items = bridge.listPage(id, null).items } catch (e: Throwable) { error = e.message } finally { loading = false }
+        }
     }
 }
 
