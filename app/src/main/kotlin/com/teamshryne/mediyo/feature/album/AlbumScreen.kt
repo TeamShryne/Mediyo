@@ -22,6 +22,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import com.teamshryne.mediyo.core.design.ErrorState
+import com.teamshryne.mediyo.core.design.InfiniteScrollHandler
+import com.teamshryne.mediyo.core.design.LoadingFooter
 import com.teamshryne.mediyo.core.design.TrackRow
 import com.teamshryne.mediyo.core.design.immersiveBrush
 import com.teamshryne.mediyo.core.design.rememberDominantColors
@@ -32,17 +34,31 @@ import javax.inject.Inject
 
 @HiltViewModel class AlbumVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel() {
     var loading by mutableStateOf(true); var error by mutableStateOf<String?>(null)
+    var loadingMore by mutableStateOf(false); var continuation by mutableStateOf<String?>(null)
     var title by mutableStateOf(""); var artist by mutableStateOf(""); var year by mutableStateOf("")
     var thumb by mutableStateOf<String?>(null)
     var tracks by mutableStateOf<List<uniffi.mediyo_ffi.FfiSearchResult>>(emptyList())
     fun load(id: String) {
-        loading = true; error = null
+        loading = true; error = null; continuation = null
         viewModelScope.launch {
             try {
                 val p = bridge.album(id)
                 title = p.title; artist = p.artist ?: ""; year = p.year ?: ""
                 thumb = p.thumbnails.firstOrNull()?.url; tracks = p.tracks
+                continuation = p.continuation.takeIf { p.tracks.isNotEmpty() }
             } catch (e: Throwable) { error = e.message } finally { loading = false }
+        }
+    }
+    fun loadMore() {
+        val token = continuation ?: return
+        if (loadingMore || loading) return
+        loadingMore = true
+        viewModelScope.launch {
+            try {
+                val p = bridge.nextPage(token)
+                if (p.items.isNotEmpty()) tracks = tracks + p.items
+                continuation = if (p.items.isEmpty()) null else p.continuation
+            } catch (_: Throwable) { continuation = null } finally { loadingMore = false }
         }
     }
 }
@@ -62,7 +78,8 @@ fun AlbumScreen(
         else -> {
             val dominant = rememberDominantColors(vm.thumb)
             val playingId = player?.state?.collectAsState()?.value?.videoId
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+            val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
                 item {
                     Column(
                         Modifier
@@ -140,7 +157,14 @@ fun AlbumScreen(
                         t.videoId?.let { player?.playFrom(vm.tracks, t) }
                     }
                 }
+                item(key = "album_footer") { LoadingFooter(vm.loadingMore) }
             }
+
+            InfiniteScrollHandler(
+                listState = listState,
+                itemCount = vm.tracks.size + 1,
+                enabled = vm.continuation != null && !vm.loading
+            ) { vm.loadMore() }
         }
     }
 }

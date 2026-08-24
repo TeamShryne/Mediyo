@@ -24,6 +24,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import com.teamshryne.mediyo.core.design.ErrorState
+import com.teamshryne.mediyo.core.design.InfiniteScrollHandler
+import com.teamshryne.mediyo.core.design.LoadingFooter
 import com.teamshryne.mediyo.core.design.MediaCard
 import com.teamshryne.mediyo.core.design.SectionHeader
 import com.teamshryne.mediyo.core.design.TrackRow
@@ -35,19 +37,33 @@ import uniffi.mediyo_ffi.FfiSearchResult
 
 @HiltViewModel class ArtistVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel() {
     var loading by mutableStateOf(true); var error by mutableStateOf<String?>(null)
+    var loadingMore by mutableStateOf(false); var continuation by mutableStateOf<String?>(null)
     var name by mutableStateOf(""); var subs by mutableStateOf<String?>(null)
     var thumb by mutableStateOf<String?>(null)
     var topSongs by mutableStateOf<List<FfiSearchResult>>(emptyList())
     var carousels by mutableStateOf<List<uniffi.mediyo_ffi.FfiCarousel>>(emptyList())
     fun load(id: String) {
-        loading = true; error = null
+        loading = true; error = null; continuation = null
         viewModelScope.launch {
             try {
                 val p = bridge.artist(id)
                 name = p.name; subs = p.subscriberCount
                 thumb = p.thumbnails.firstOrNull()?.url
                 topSongs = p.topSongs; carousels = p.carousels
+                continuation = p.continuation.takeIf { p.topSongs.isNotEmpty() }
             } catch (e: Throwable) { error = e.message } finally { loading = false }
+        }
+    }
+    fun loadMore() {
+        val token = continuation ?: return
+        if (loadingMore || loading) return
+        loadingMore = true
+        viewModelScope.launch {
+            try {
+                val p = bridge.nextPage(token)
+                if (p.items.isNotEmpty()) topSongs = topSongs + p.items
+                continuation = if (p.items.isEmpty()) null else p.continuation
+            } catch (_: Throwable) { continuation = null } finally { loadingMore = false }
         }
     }
 }
@@ -75,7 +91,8 @@ fun ArtistScreen(
         vm.error != null -> ErrorState(vm.error ?: "Failed to load") { vm.load(browseId) }
         else -> {
             val playingId = player?.state?.collectAsState()?.value?.videoId
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+            val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
                 // ── Hero ──
                 item {
                     Box(Modifier.fillMaxWidth()) {
@@ -165,7 +182,15 @@ fun ArtistScreen(
                         }
                     }
                 }
+
+                item(key = "artist_footer") { LoadingFooter(vm.loadingMore) }
             }
+
+            InfiniteScrollHandler(
+                listState = listState,
+                itemCount = vm.topSongs.size + vm.carousels.size + 1,
+                enabled = vm.continuation != null && !vm.loading
+            ) { vm.loadMore() }
         }
     }
 }

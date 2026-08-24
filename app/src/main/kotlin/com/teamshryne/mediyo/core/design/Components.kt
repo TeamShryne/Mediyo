@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -382,5 +383,41 @@ fun EmptyState(title: String, subtitle: String, modifier: Modifier = Modifier) {
     ) {
         Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
         Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+    }
+}
+
+// ── Infinite scroll ──────────────────────────────────────────────────────────
+
+/**
+ * Triggers [onLoadMore] when the end of a lazy list approaches.
+ * Attach to the same LazyListState used by the list; guard repeated calls in the VM.
+ */
+@Composable
+fun InfiniteScrollHandler(
+    listState: LazyListState,
+    itemCount: Int,
+    enabled: Boolean,
+    onLoadMore: () -> Unit,
+    threshold: Int = 6
+) {
+    val currentEnabled by rememberUpdatedState(enabled)
+    val currentCount by rememberUpdatedState(itemCount)
+    val currentLoadMore by rememberUpdatedState(onLoadMore)
+    LaunchedEffect(listState) {
+        snapshotFlow {
+            val lastIdx = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            lastIdx >= 0 && lastIdx >= (currentCount - threshold).coerceAtLeast(0)
+        }.collect { nearEnd ->
+            if (nearEnd && currentEnabled) currentLoadMore()
+        }
+    }
+}
+
+/** Slim centered spinner shown at the bottom of a paginating list. */
+@Composable
+fun LoadingFooter(visible: Boolean, modifier: Modifier = Modifier) {
+    if (!visible) return
+    Box(modifier.fillMaxWidth().padding(vertical = 20.dp), contentAlignment = Alignment.Center) {
+        CircularProgressIndicator(modifier = Modifier.size(26.dp), strokeWidth = 2.5.dp)
     }
 }
