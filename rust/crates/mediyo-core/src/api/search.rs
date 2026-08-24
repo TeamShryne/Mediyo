@@ -78,6 +78,26 @@ pub fn parse_search_response(resp: &Value) -> Result<SearchResponse> {
                         }
                     }
                 }
+                "musicShelfRenderer" => {
+                    // Filtered searches (Songs/Artists/Albums/...) return a bare
+                    // musicShelfRenderer section instead of itemSectionRenderer.
+                    if let Some(items) = payload.get("contents").and_then(Value::as_array) {
+                        for item in items {
+                            let Some((rname, _)) = parser::renderer(item) else {
+                                continue;
+                            };
+                            match rname {
+                                "musicResponsiveListItemRenderer" => {
+                                    results.push(parse_search_result(item)?)
+                                }
+                                "musicTwoRowItemRenderer" => {
+                                    results.push(crate::model::search::parse_two_row_item(item)?)
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
                 "musicCardShelfRenderer" => {
                     // Top-result card: contents[0] is a result renderer.
                     if let Some(inner) = payload.get("contents").and_then(Value::as_array) {

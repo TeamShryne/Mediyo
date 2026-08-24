@@ -32,6 +32,7 @@ import com.teamshryne.mediyo.core.design.ErrorState
 import com.teamshryne.mediyo.core.design.InfiniteScrollHandler
 import com.teamshryne.mediyo.core.design.LoadingFooter
 import com.teamshryne.mediyo.core.design.SectionHeader
+import com.teamshryne.mediyo.core.design.appendUnique
 import com.teamshryne.mediyo.core.design.shimmer
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -89,8 +90,9 @@ class SearchVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel
         viewModelScope.launch {
             try {
                 val res = bridge.searchNext(token)
-                results = results + res.results
-                continuation = res.continuation
+                val before = results.size
+                results = results.appendUnique(res.results)
+                continuation = if (res.results.isEmpty() || results.size == before) null else res.continuation
             } catch (_: Throwable) {
                 continuation = null
             } finally { loadingMore = false }

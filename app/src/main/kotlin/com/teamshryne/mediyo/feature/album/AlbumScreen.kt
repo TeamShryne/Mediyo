@@ -25,6 +25,7 @@ import com.teamshryne.mediyo.core.design.ErrorState
 import com.teamshryne.mediyo.core.design.InfiniteScrollHandler
 import com.teamshryne.mediyo.core.design.LoadingFooter
 import com.teamshryne.mediyo.core.design.TrackRow
+import com.teamshryne.mediyo.core.design.appendUnique
 import com.teamshryne.mediyo.core.design.immersiveBrush
 import com.teamshryne.mediyo.core.design.rememberDominantColors
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
@@ -56,8 +57,9 @@ import javax.inject.Inject
         viewModelScope.launch {
             try {
                 val p = bridge.nextPage(token)
-                if (p.items.isNotEmpty()) tracks = tracks + p.items
-                continuation = if (p.items.isEmpty()) null else p.continuation
+                val before = tracks.size
+                tracks = tracks.appendUnique(p.items)
+                continuation = if (p.items.isEmpty() || tracks.size == before) null else p.continuation
             } catch (_: Throwable) { continuation = null } finally { loadingMore = false }
         }
     }
@@ -163,7 +165,7 @@ fun AlbumScreen(
             InfiniteScrollHandler(
                 listState = listState,
                 itemCount = vm.tracks.size + 1,
-                enabled = vm.continuation != null && !vm.loading
+                enabled = vm.continuation != null && !vm.loading && !vm.loadingMore
             ) { vm.loadMore() }
         }
     }
