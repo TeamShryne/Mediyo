@@ -17,6 +17,7 @@ private class SimpleDownloader : Downloader() {
         val headers = request.headers()
         val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
         conn.requestMethod = request.httpMethod()
+        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.157 Safari/537.36")
         headers.forEach { (k, v) -> v.forEach { conn.addRequestProperty(k, it) } }
         // handle POST body if present
         request.dataToSend()?.let { data ->
@@ -25,11 +26,10 @@ private class SimpleDownloader : Downloader() {
         }
         conn.connect()
         val code = conn.responseCode
-        val body = try { conn.inputStream.bufferedReader().readText() } catch (e: Exception) { conn.errorStream?.bufferedReader()?.readText() ?: "" }
+        val respHeaders = conn.headerFields?.filterKeys { it != null }?.mapKeys { it.key as String } ?: emptyMap()
         val latestUrl = conn.url.toString()
-        val respHeaders = mutableMapOf<String, List<String>>()
-        conn.headerFields?.forEach { (k, v) -> if (k != null) respHeaders[k] = v }
-        return Response(code, body, respHeaders, latestUrl, null)
+        val body = try { conn.inputStream.bufferedReader().readText() } catch (e: Exception) { conn.errorStream?.bufferedReader()?.readText() ?: "" }
+        return Response(code, conn.responseMessage, respHeaders, body, latestUrl)
     }
 }
 
@@ -39,7 +39,7 @@ class NewPipeResolver @Inject constructor() {
     private fun ensureInit() {
         if (inited) return
         try {
-            NewPipe.init(SimpleDownloader(), null)
+            NewPipe.init(SimpleDownloader())
             inited = true
         } catch (e: Throwable) { Log.e("NewPipe", "init failed", e) }
     }
