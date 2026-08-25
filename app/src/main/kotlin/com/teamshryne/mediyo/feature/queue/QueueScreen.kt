@@ -29,7 +29,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import coil.compose.AsyncImage
 import com.teamshryne.mediyo.data.queue.QueuePrefs
+import com.teamshryne.mediyo.domain.model.ART_ROW_PX
 import com.teamshryne.mediyo.domain.model.Track
+import com.teamshryne.mediyo.domain.model.thumbSized
 import com.teamshryne.mediyo.feature.player.PlayerViewModel
 import com.teamshryne.mediyo.playback.PlaybackQueueManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -269,7 +271,7 @@ private fun QueueRowContent(
         Modifier.fillMaxWidth().background(if (isActive) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp)).combinedClickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        AsyncImage(model = track.artworkUrl, contentDescription = null, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest))
+        AsyncImage(model = track.artworkUrl.thumbSized(ART_ROW_PX), contentDescription = null, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest))
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(track.title, style = MaterialTheme.typography.bodyMedium, fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Medium, color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
