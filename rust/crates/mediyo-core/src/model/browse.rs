@@ -566,10 +566,8 @@ fn secondary_sections(resp: &Value) -> Vec<&Value> {
 fn shelf_level_token(payload: &Value) -> Option<String> {
     payload
         .pointer("/continuations/0/nextContinuationData/continuation")
-        .or_else(|| {
-            payload
-                .pointer("/continuations/0/reloadContinuationData/continuation")
-        })
+        .or_else(|| payload.pointer("/continuations/0/reloadContinuationData/continuation"))
+        .or_else(|| payload.pointer("/continuations/0/nextRadioContinuationData/continuation"))
         .and_then(|v| v.as_str())
         .map(String::from)
 }
