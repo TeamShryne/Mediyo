@@ -164,9 +164,6 @@ class PlaybackService : MediaSessionService() {
 
             override fun handleCustomCommand(session: MediaSession, action: String, extras: Bundle): Boolean =
                 defaultProvider.handleCustomCommand(session, action, extras)
-
-            override fun getNotificationChannelInfo(): MediaNotification.Provider.NotificationChannelInfo =
-                defaultProvider.notificationChannelInfo
         })
 
         val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
