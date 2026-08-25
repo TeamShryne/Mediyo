@@ -32,6 +32,7 @@ import com.teamshryne.mediyo.core.design.rememberDominantColors
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import com.teamshryne.mediyo.domain.model.PlayOrigin
 import com.teamshryne.mediyo.domain.model.Track
+import com.teamshryne.mediyo.domain.model.bestThumbUrl
 import com.teamshryne.mediyo.domain.model.toDomainTrack
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
@@ -49,7 +50,7 @@ import javax.inject.Inject
             try {
                 val p = bridge.album(id)
                 title = p.title; artist = p.artist ?: ""; year = p.year ?: ""
-                thumb = p.thumbnails.firstOrNull()?.url; tracks = p.tracks
+                thumb = p.thumbnails.bestThumbUrl(); tracks = p.tracks
                 continuation = p.continuation.takeIf { p.tracks.isNotEmpty() }
             } catch (e: Throwable) { error = e.message } finally { loading = false }
         }

@@ -8,6 +8,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import com.teamshryne.mediyo.data.playback.NewPipeResolver
 import com.teamshryne.mediyo.domain.model.PlayOrigin
 import com.teamshryne.mediyo.domain.model.Track
+import com.teamshryne.mediyo.domain.model.bestThumbUrl
 import com.teamshryne.mediyo.domain.model.toDomainTrack
 import com.teamshryne.mediyo.domain.repository.HistoryRepository
 import com.teamshryne.mediyo.domain.repository.LikeRepository
@@ -293,6 +294,6 @@ class PlayerViewModel @Inject constructor(
     }
 
     private fun FfiSearchResult.toEntry() = QueueEntry(
-        videoId ?: "", title, artists.joinToString(), thumbnails.firstOrNull()?.url
+        videoId ?: "", title, artists.joinToString(), thumbnails.bestThumbUrl()
     )
 }

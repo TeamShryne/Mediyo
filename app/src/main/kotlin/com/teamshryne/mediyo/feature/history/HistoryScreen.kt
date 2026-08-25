@@ -25,6 +25,7 @@ import com.teamshryne.mediyo.core.design.TrackMenuSheet
 import com.teamshryne.mediyo.data.local.HistoryEntryEntity
 import com.teamshryne.mediyo.domain.model.PlayOrigin
 import com.teamshryne.mediyo.domain.model.Track
+import com.teamshryne.mediyo.domain.model.upscaledThumbUrl
 import com.teamshryne.mediyo.domain.repository.HistoryRepository
 import com.teamshryne.mediyo.domain.repository.LikeRepository
 import com.teamshryne.mediyo.feature.playlist.AddToPlaylistSheet
@@ -94,7 +95,7 @@ fun HistoryScreen(
                             }.padding(horizontal = 16.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            AsyncImage(model = e.artworkUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest))
+                            AsyncImage(model = e.artworkUrl.upscaledThumbUrl(), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest))
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(e.title, style = MaterialTheme.typography.bodyMedium, color = if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface, maxLines = 1)
@@ -127,7 +128,7 @@ fun HistoryScreen(
     if (showClear) AlertDialog(onDismissRequest = { showClear = false }, title = { Text("Clear history?") }, confirmButton = { Button(onClick = { vm.clearAll(); showClear = false }) { Text("Clear") } }, dismissButton = { TextButton(onClick = { showClear = false }) { Text("Cancel") } })
 }
 
-private fun HistoryEntryEntity.toTrack() = Track(videoId = videoId, title = title, artists = if (artist.isBlank()) emptyList() else artist.split(",").map { it.trim() }, artworkUrl = artworkUrl, album = album, duration = duration, category = category)
+private fun HistoryEntryEntity.toTrack() = Track(videoId = videoId, title = title, artists = if (artist.isBlank()) emptyList() else artist.split(",").map { it.trim() }, artworkUrl = artworkUrl.upscaledThumbUrl(), album = album, duration = duration, category = category)
 
 private fun groupByDate(list: List<HistoryEntryEntity>): List<Pair<String, List<HistoryEntryEntity>>> {
     val now = Calendar.getInstance()

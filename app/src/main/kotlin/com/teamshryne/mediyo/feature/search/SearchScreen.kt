@@ -38,6 +38,7 @@ import com.teamshryne.mediyo.core.design.shimmer
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import com.teamshryne.mediyo.domain.model.PlayOrigin
 import com.teamshryne.mediyo.domain.model.Track
+import com.teamshryne.mediyo.domain.model.bestThumbUrl
 import com.teamshryne.mediyo.domain.model.toDomainTrack
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
@@ -256,7 +257,7 @@ private fun ResultRow(item: FfiSearchResult, onClick: () -> Unit, onMenu: () -> 
         verticalAlignment = Alignment.CenterVertically
     ) {
         AsyncImage(
-            model = item.thumbnails.firstOrNull()?.url,
+            model = item.thumbnails.bestThumbUrl(),
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier

@@ -29,7 +29,7 @@ fun FfiSearchResult.toDomainTrack(): Track = Track(
     title = title,
     artists = artists,
     album = album,
-    artworkUrl = thumbnails.firstOrNull()?.url,
+    artworkUrl = thumbnails.bestThumbUrl(),
     duration = duration,
     category = category,
     year = year,
@@ -44,7 +44,7 @@ fun FfiQueueItem.toDomainTrack(): Track = Track(
     artists = artists,
     album = album,
     duration = duration,
-    artworkUrl = thumbnails.firstOrNull()?.url,
+    artworkUrl = thumbnails.bestThumbUrl(),
     category = "Song"
 )
 

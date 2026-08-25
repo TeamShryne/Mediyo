@@ -32,6 +32,7 @@ import androidx.palette.graphics.Palette
 import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
+import com.teamshryne.mediyo.domain.model.bestThumbUrl
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import uniffi.mediyo_ffi.FfiSearchResult
@@ -286,7 +287,7 @@ fun TrackRow(
         }
         if (showArtwork) {
             AsyncImage(
-                model = item.thumbnails.firstOrNull()?.url,
+                model = item.thumbnails.bestThumbUrl(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier

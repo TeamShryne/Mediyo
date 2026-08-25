@@ -5,6 +5,7 @@ import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import com.teamshryne.mediyo.domain.model.PlayOrigin
 import com.teamshryne.mediyo.domain.model.PlayQueueState
 import com.teamshryne.mediyo.domain.model.Track
+import com.teamshryne.mediyo.domain.model.bestThumbUrl
 import com.teamshryne.mediyo.domain.model.toDomainTrack
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -213,7 +214,7 @@ class PlaybackQueueManager @Inject constructor(
                         title = qi.title,
                         artists = qi.artists,
                         album = qi.album,
-                        artworkUrl = qi.thumbnails.firstOrNull()?.url,
+                        artworkUrl = qi.thumbnails.bestThumbUrl(),
                         duration = qi.duration,
                         category = "Song"
                     )
