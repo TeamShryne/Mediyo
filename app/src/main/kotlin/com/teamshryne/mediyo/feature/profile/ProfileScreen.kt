@@ -139,7 +139,7 @@ fun ProfileScreen(nav: androidx.navigation.NavController? = null, vm: ProfileVm 
         else -> "Anonymous user"
     }
     val displayHandle = when {
-        isLoggedIn -> vm.handle ?: authState.handle.ifEmpty { null } ?: "Signed in"
+        isLoggedIn -> vm.handle?.takeIf { it.isNotBlank() } ?: "Signed in"
         else -> "Local visitor • Not signed in"
     }
 
@@ -349,7 +349,7 @@ fun ProfileScreen(nav: androidx.navigation.NavController? = null, vm: ProfileVm 
                                 ListItemCard(
                                     icon = Icons.Filled.Person,
                                     title = vm.name.ifEmpty { "Account" },
-                                    subtitle = vm.handle ?: authState.handle ?: "—",
+                                    subtitle = vm.handle ?: "—",
                                     onClick = {}
                                 )
                                 ListItemCard(
