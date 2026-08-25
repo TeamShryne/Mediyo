@@ -38,6 +38,9 @@ import com.teamshryne.mediyo.core.design.MarqueeText
 import com.teamshryne.mediyo.core.design.formatTime
 import com.teamshryne.mediyo.core.design.immersiveBrush
 import com.teamshryne.mediyo.core.design.rememberDominantColors
+import com.teamshryne.mediyo.domain.model.ART_HERO_PX
+import com.teamshryne.mediyo.domain.model.ART_ROW_PX
+import com.teamshryne.mediyo.domain.model.thumbSized
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mini player — floating pill above the nav bar (Spotify style)
@@ -61,7 +64,7 @@ fun MiniPlayer(state: PlayerState, onToggle: () -> Unit, onNext: () -> Unit, onE
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 AsyncImage(
-                    model = state.artwork,
+                    model = state.artwork.thumbSized(ART_ROW_PX),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp))
@@ -186,7 +189,9 @@ fun FullPlayer(
                 .background(Color.White.copy(alpha = 0.06f))
         ) {
             AsyncImage(
-                model = state.artwork,
+                // Hero is full-screen width — always request master-quality art,
+                // regardless of which (possibly small) thumbnail playback started from.
+                model = state.artwork.thumbSized(ART_HERO_PX),
                 contentDescription = state.title,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()

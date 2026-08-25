@@ -9,6 +9,23 @@ import uniffi.mediyo_ffi.FfiThumbnail
 fun List<FfiThumbnail>.bestThumbUrl(): String? =
     maxByOrNull { it.width }?.url ?: firstOrNull()?.url
 
+/** Device-pixel targets: small rows/tiles vs full-screen player hero. */
+const val ART_ROW_PX = 120
+const val ART_HERO_PX = 1200
+
+/**
+ * Derives a variant of a googleusercontent-family thumbnail URL targeting
+ * roughly [targetPx] device pixels, so each surface downloads only what it
+ * renders (rows ~ART_ROW_PX, player hero ~ART_HERO_PX) instead of sharing one
+ * size everywhere. URLs without a recognizable size segment are unchanged.
+ */
+fun String?.thumbSized(targetPx: Int): String? {
+    if (this == null) return null
+    val m = Regex("""w\d+-h\d+""").find(this) ?: return this
+    val px = targetPx.coerceAtLeast(60)
+    return replaceRange(m.range, "w$px-h$px")
+}
+
 private val ytimgSizeFile = Regex("""/(default|mqdefault|hqdefault|sddefault)\.jpg""")
 
 /**
