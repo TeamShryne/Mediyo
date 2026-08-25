@@ -7,7 +7,6 @@ import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.CommandButton
-import androidx.media3.session.ConnectionResult
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommand
@@ -15,6 +14,7 @@ import androidx.media3.session.SessionResult
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.teamshryne.mediyo.R
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -113,11 +113,11 @@ class PlaybackService : MediaSessionService() {
                 override fun onConnect(
                     session: MediaSession,
                     controller: MediaSession.ControllerInfo
-                ): ConnectionResult {
-                    val sessionCommands = ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
+                ): MediaSession.ConnectionResult {
+                    val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
                         .add(SessionCommand(ACTION_TOGGLE_LIKE, Bundle.EMPTY))
                         .build()
-                    return ConnectionResult.AcceptedResultBuilder(session)
+                    return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                         .setAvailableSessionCommands(sessionCommands)
                         .build()
                 }
