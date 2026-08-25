@@ -40,7 +40,6 @@ sealed class PlayOrigin {
     }
 }
 
-@Serializable
 data class PlayQueueState(
     val origin: PlayOrigin = PlayOrigin.Unknown,
     val entries: List<Track> = emptyList(),
