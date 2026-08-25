@@ -25,11 +25,15 @@ import coil.compose.AsyncImage
 import com.teamshryne.mediyo.core.design.ErrorState
 import com.teamshryne.mediyo.core.design.InfiniteScrollHandler
 import com.teamshryne.mediyo.core.design.LoadingFooter
+import com.teamshryne.mediyo.core.design.TrackOverflowIcon
 import com.teamshryne.mediyo.core.design.TrackRow
 import com.teamshryne.mediyo.core.design.appendUnique
 import com.teamshryne.mediyo.core.design.immersiveBrush
 import com.teamshryne.mediyo.core.design.rememberDominantColors
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
+import com.teamshryne.mediyo.domain.model.PlayOrigin
+import com.teamshryne.mediyo.domain.model.Track
+import com.teamshryne.mediyo.domain.model.toDomainTrack
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -99,6 +103,8 @@ fun PlaylistScreen(
     vm: PlaylistVm = hiltViewModel()
 ) {
     LaunchedEffect(browseId) { vm.load(browseId) }
+    var menuItem by remember { mutableStateOf<uniffi.mediyo_ffi.FfiSearchResult?>(null) }
+    var showAddTrack by remember { mutableStateOf<Track?>(null) }
 
     when {
         vm.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
@@ -161,7 +167,10 @@ fun PlaylistScreen(
                             )
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 FilledIconButton(
-                                    onClick = { vm.tracks.firstOrNull()?.let { player?.playFrom(vm.tracks, it) } },
+                                    onClick = {
+                                        val first = vm.tracks.firstOrNull() ?: return@FilledIconButton
+                                        player?.playFromWithOrigin(vm.tracks, first, PlayOrigin.Playlist(browseId, vm.title))
+                                    },
                                     shape = CircleShape,
                                     colors = IconButtonDefaults.filledIconButtonColors(
                                         containerColor = MaterialTheme.colorScheme.primary,
@@ -172,7 +181,8 @@ fun PlaylistScreen(
                                 OutlinedIconButton(
                                     onClick = {
                                         player?.toggleShuffle()
-                                        vm.tracks.firstOrNull()?.let { player?.playFrom(vm.tracks, it) }
+                                        val first = vm.tracks.firstOrNull() ?: return@OutlinedIconButton
+                                        player?.playFromWithOrigin(vm.tracks, first, PlayOrigin.Playlist(browseId, vm.title))
                                     },
                                     shape = CircleShape,
                                     modifier = Modifier.size(52.dp)
@@ -183,8 +193,14 @@ fun PlaylistScreen(
                 }
                 items(vm.tracks.size) { i ->
                     val t = vm.tracks[i]
-                    TrackRow(item = t, isPlaying = playingId != null && playingId == t.videoId, number = i + 1, showArtwork = true) {
-                        t.videoId?.let { player?.playFrom(vm.tracks, t) }
+                    TrackRow(
+                        item = t,
+                        isPlaying = playingId != null && playingId == t.videoId,
+                        number = i + 1,
+                        showArtwork = true,
+                        trailing = { TrackOverflowIcon(onClick = { menuItem = t }) }
+                    ) {
+                        t.videoId?.let { player?.playFromWithOrigin(vm.tracks, t, PlayOrigin.Playlist(browseId, vm.title)) }
                     }
                 }
                 item(key = "playlist_footer") { LoadingFooter(vm.loadingMore) }
@@ -195,6 +211,21 @@ fun PlaylistScreen(
                 itemCount = vm.tracks.size + 1,
                 enabled = vm.continuation != null && !vm.loading && !vm.loadingMore
             ) { vm.loadMore() }
+
+            menuItem?.let { m ->
+                val track = m.toDomainTrack()
+                com.teamshryne.mediyo.core.design.TrackMenuSheet(
+                    track = track, show = true, onDismiss = { menuItem = null },
+                    onLike = { player?.toggleLike(track) },
+                    onAddToPlaylist = { showAddTrack = track },
+                    onPlayNext = { player?.addNext(track) },
+                    onAddToQueue = { player?.addToQueue(track) },
+                    onComments = { m.videoId?.let { nav?.navigate("comments/$it") } }
+                )
+            }
+            showAddTrack?.let { t ->
+                com.teamshryne.mediyo.feature.playlist.AddToPlaylistSheet(track = t, onDismiss = { showAddTrack = null })
+            }
         }
     }
 }

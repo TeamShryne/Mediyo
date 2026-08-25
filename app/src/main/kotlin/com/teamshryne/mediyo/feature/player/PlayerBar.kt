@@ -122,11 +122,19 @@ fun FullPlayer(
             artworkUrl = state.artwork
         )
     }
-    // observe liked state for current track
     var liked by remember { mutableStateOf(false) }
     LaunchedEffect(state.videoId) {
-        // best-effort liked check; vm not always available
-        liked = false
+        if (playerVm != null && state.videoId != null) {
+            try {
+                liked = playerVm.isCurrentLiked()
+            } catch (_: Throwable) { liked = false }
+        } else liked = false
+    }
+    // also collect flow for realtime updates when available
+    if (playerVm != null && state.videoId != null) {
+        val likedFlow = remember(state.videoId) { playerVm.isLikedFlow(state.videoId!!) }
+        val likedCollect by likedFlow.collectAsState(initial = liked)
+        LaunchedEffect(likedCollect) { liked = likedCollect }
     }
 
     Box(
@@ -193,8 +201,7 @@ fun FullPlayer(
                 MarqueeText(state.artist, MaterialTheme.typography.bodyMedium, Color.White.copy(alpha = 0.72f))
             }
             IconButton(onClick = {
-                // trigger like via playerVm if available
-                liked = !liked
+                if (playerVm != null) playerVm.toggleLikeCurrent() else liked = !liked
             }) {
                 Icon(
                     if (liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
