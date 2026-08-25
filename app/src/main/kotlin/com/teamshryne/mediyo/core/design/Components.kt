@@ -160,7 +160,7 @@ fun GlowingLoadingTitle(
     // sends it back right→left on every other cycle.
     val center = ((phase + 1f) / 2f) * (widthPx + 2 * band) - band
     val brush = Brush.linearGradient(
-        colorStops = listOf(
+        colorStops = *arrayOf(
             0.30f to base,
             0.46f to hot,
             0.54f to hot,
