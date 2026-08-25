@@ -9,6 +9,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.teamshryne.mediyo.domain.model.Track
+import com.teamshryne.mediyo.domain.model.bestThumbUrl
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,7 +93,7 @@ fun FfiTrackMenuSheet(
         Track(
             videoId = item.videoId, browseId = item.browseId, playlistId = item.playlistId,
             title = item.title, artists = item.artists, album = item.album,
-            artworkUrl = item.thumbnails.firstOrNull()?.url, duration = item.duration,
+            artworkUrl = item.thumbnails.bestThumbUrl(), duration = item.duration,
             category = item.category, year = item.year
         )
     }

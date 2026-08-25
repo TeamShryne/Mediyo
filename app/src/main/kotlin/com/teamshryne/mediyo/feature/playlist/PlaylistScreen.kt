@@ -33,6 +33,7 @@ import com.teamshryne.mediyo.core.design.rememberDominantColors
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import com.teamshryne.mediyo.domain.model.PlayOrigin
 import com.teamshryne.mediyo.domain.model.Track
+import com.teamshryne.mediyo.domain.model.bestThumbUrl
 import com.teamshryne.mediyo.domain.model.toDomainTrack
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
@@ -52,7 +53,7 @@ import javax.inject.Inject
                 val p = bridge.playlist(id)
                 android.util.Log.d("PlaylistVm","load ok id=$id title=${p.title} tracks=${p.tracks.size} header=${p.trackCount} cont=${p.continuation?.take(30)}")
                 title = p.title; subtitle = p.trackCount ?: ""
-                thumb = p.thumbnails.firstOrNull()?.url; tracks = p.tracks
+                thumb = p.thumbnails.bestThumbUrl(); tracks = p.tracks
                 continuation = p.continuation.takeIf { p.tracks.isNotEmpty() }
                 android.util.Log.d("PlaylistVm","load done cont=${continuation?.take(30)}")
             } catch (e: Throwable) {

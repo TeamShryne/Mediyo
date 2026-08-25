@@ -24,6 +24,7 @@ import androidx.lifecycle.viewModelScope
 import com.teamshryne.mediyo.core.design.*
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import com.teamshryne.mediyo.domain.model.PlayOrigin
+import com.teamshryne.mediyo.domain.model.bestThumbUrl
 import com.teamshryne.mediyo.domain.model.toDomainTrack
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
@@ -153,7 +154,7 @@ fun HomeScreen(
                                 items(firstItems.take(8)) { r ->
                                     MediaTile(
                                         title = r.title,
-                                        artworkUrl = r.thumbnails.firstOrNull()?.url
+                                        artworkUrl = r.thumbnails.bestThumbUrl()
                                     ) { open(r, firstItems, "Quick picks") }
                                 }
                             }
@@ -173,7 +174,7 @@ fun HomeScreen(
                                     MediaCard(
                                         title = r.title,
                                         subtitle = r.artists.joinToString(),
-                                        artworkUrl = r.thumbnails.firstOrNull()?.url,
+                                        artworkUrl = r.thumbnails.bestThumbUrl(),
                                         round = r.category.contains("Artist", true),
                                         onClick = { open(r, c.items, c.title) }
                                     )

@@ -31,6 +31,7 @@ import com.teamshryne.mediyo.core.design.TrackRow
 import com.teamshryne.mediyo.core.design.appendUnique
 import com.teamshryne.mediyo.core.design.SectionHeader
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
+import com.teamshryne.mediyo.domain.model.bestThumbUrl
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -49,7 +50,7 @@ import uniffi.mediyo_ffi.FfiSearchResult
             try {
                 val p = bridge.artist(id)
                 name = p.name; subs = p.subscriberCount
-                thumb = p.thumbnails.firstOrNull()?.url
+                thumb = p.thumbnails.bestThumbUrl()
                 topSongs = p.topSongs; carousels = p.carousels
                 continuation = p.continuation.takeIf { p.topSongs.isNotEmpty() }
             } catch (e: Throwable) { error = e.message } finally { loading = false }
@@ -175,7 +176,7 @@ fun ArtistScreen(
                                     MediaCard(
                                         title = r.title,
                                         subtitle = r.artists.joinToString(),
-                                        artworkUrl = r.thumbnails.firstOrNull()?.url,
+                                        artworkUrl = r.thumbnails.bestThumbUrl(),
                                         round = r.category.contains("Artist", true),
                                         onClick = { handle(r, c.items) }
                                     )

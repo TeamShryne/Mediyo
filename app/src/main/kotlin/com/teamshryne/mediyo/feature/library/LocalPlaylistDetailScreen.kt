@@ -26,6 +26,7 @@ import com.teamshryne.mediyo.core.design.TrackMenuSheet
 import com.teamshryne.mediyo.data.local.LocalPlaylistEntryEntity
 import com.teamshryne.mediyo.domain.model.PlayOrigin
 import com.teamshryne.mediyo.domain.model.Track
+import com.teamshryne.mediyo.domain.model.upscaledThumbUrl
 import com.teamshryne.mediyo.domain.repository.LikeRepository
 import com.teamshryne.mediyo.domain.repository.PlaylistRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -117,7 +118,7 @@ fun LocalPlaylistDetailScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text("${idx + 1}", style = MaterialTheme.typography.labelMedium, color = if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(28.dp))
-                        AsyncImage(model = e.artworkUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest))
+                        AsyncImage(model = e.artworkUrl.upscaledThumbUrl(), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest))
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(e.title, style = MaterialTheme.typography.bodyMedium, color = if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface, maxLines = 1)
@@ -162,5 +163,5 @@ fun LocalPlaylistDetailScreen(
 private fun LocalPlaylistEntryEntity.toTrack() = Track(
     videoId = trackVideoId, browseId = null, playlistId = null,
     title = title, artists = if (artist.isBlank()) emptyList() else artist.split(",").map { it.trim() },
-    album = album, artworkUrl = artworkUrl, duration = duration, category = category
+    album = album, artworkUrl = artworkUrl.upscaledThumbUrl(), duration = duration, category = category
 )
