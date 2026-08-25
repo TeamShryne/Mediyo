@@ -106,6 +106,23 @@ class PlaybackQueueManager @Inject constructor(
         _state.value = s.copy(entries = mutable, index = newIndex)
     }
 
+    /** Which track would [next] land on right now, without mutating state. */
+    fun peekNext(shuffle: Boolean): Track? {
+        val s = _state.value
+        if (s.entries.isEmpty() || s.index < 0) return null
+        val nextIdx = if (shuffle && s.entries.size > 1) {
+            val order = shuffleOrder
+            if (order != null && order.size == s.entries.size) {
+                val posInOrder = order.indexOf(s.index)
+                if (posInOrder >= 0 && posInOrder + 1 < order.size) order[posInOrder + 1]
+                else order.firstOrNull()
+            } else null // random shuffle can't be predicted — caller falls back
+        } else {
+            if (s.index + 1 <= s.entries.lastIndex) s.index + 1 else 0
+        }
+        return s.entries.getOrNull(nextIdx)
+    }
+
     fun next(shuffle: Boolean, repeatOne: Boolean): Int? {
         val s = _state.value
         if (s.entries.isEmpty()) return null

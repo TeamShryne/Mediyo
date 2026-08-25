@@ -1,6 +1,9 @@
 package com.teamshryne.mediyo.feature.player
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -26,6 +29,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
@@ -33,7 +37,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.compose.AsyncImagePainter
+import coil.compose.rememberAsyncImagePainter
 import com.teamshryne.mediyo.core.design.DominantColors
+import com.teamshryne.mediyo.core.design.GlowingLoadingTitle
 import com.teamshryne.mediyo.core.design.MarqueeText
 import com.teamshryne.mediyo.core.design.formatTime
 import com.teamshryne.mediyo.core.design.immersiveBrush
@@ -179,23 +186,44 @@ fun FullPlayer(
 
         Spacer(Modifier.weight(0.5f))
 
-        // Artwork
+        // Artwork — no placeholder chrome while loading: the glowing song title
+        // takes its place until the image actually decodes.
+        val artShape = RoundedCornerShape(18.dp)
+        val artPainter = rememberAsyncImagePainter(
+            model = state.artwork.thumbSized(ART_HERO_PX),
+            contentScale = ContentScale.Crop
+        )
+        val artReady = artPainter.state is AsyncImagePainter.State.Success
+        val artAlpha by animateFloatAsState(
+            targetValue = if (artReady) 1f else 0f,
+            animationSpec = tween(350),
+            label = "artAlpha"
+        )
         Box(
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .shadow(32.dp, RoundedCornerShape(18.dp), ambientColor = Color.Black, spotColor = Color.Black)
-                .clip(RoundedCornerShape(18.dp))
-                .background(Color.White.copy(alpha = 0.06f))
+                .then(
+                    if (artReady) {
+                        Modifier
+                            .shadow(32.dp, artShape, ambientColor = Color.Black, spotColor = Color.Black)
+                            .clip(artShape)
+                    } else Modifier
+                )
         ) {
-            AsyncImage(
-                // Hero is full-screen width — always request master-quality art,
-                // regardless of which (possibly small) thumbnail playback started from.
-                model = state.artwork.thumbSized(ART_HERO_PX),
+            Image(
+                painter = artPainter,
                 contentDescription = state.title,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize().alpha(artAlpha)
             )
+            if (!artReady) {
+                GlowingLoadingTitle(
+                    title = state.title,
+                    artist = state.artist,
+                    modifier = Modifier.align(Alignment.Center)
+                )
+            }
         }
 
         Spacer(Modifier.height(28.dp))
