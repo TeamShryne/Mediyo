@@ -223,22 +223,20 @@ class PlayerViewModel @Inject constructor(
         )
         resolveJob = viewModelScope.launch {
             try {
-                val url = resolver.resolveStreamUrl(vid)
-                // superseded by a newer skip while resolving → drop this stale result
+                // Like Metrolist: push new metadata instantly with a placeholder URI.
+                // The real googlevideo URL is resolved lazily by ResolvingDataSource on
+                // ExoPlayer's loader thread, so rapid next/prev never clears the
+                // notification — it just swaps metadata and rebuffers.
                 if (queueManager.currentState().current?.videoId != vid) return@launch
-                if (url == null) {
-                    _state.value = _state.value.copy(isBuffering = false)
-                    return@launch
-                }
+                val metadata = MediaMetadata.Builder()
+                    .setTitle(cur.title)
+                    .setArtist(cur.artists.joinToString(", "))
+                    .setArtworkUri(cur.artworkUrl?.let(Uri::parse))
+                    .build()
+                val placeholderUri = Uri.parse("mediyo://$vid")
                 try {
-                    // rich metadata → the media notification shows title/artist/artwork
-                    val metadata = MediaMetadata.Builder()
-                        .setTitle(cur.title)
-                        .setArtist(cur.artists.joinToString(", "))
-                        .setArtworkUri(cur.artworkUrl?.let(Uri::parse))
-                        .build()
                     player.setMediaItem(
-                        MediaItem.Builder().setUri(url).setMediaId(vid).setMediaMetadata(metadata).build()
+                        MediaItem.Builder().setUri(placeholderUri).setMediaId(vid).setMediaMetadata(metadata).build()
                     )
                     player.prepare()
                     player.play()
