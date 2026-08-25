@@ -6,9 +6,9 @@ import uniffi.mediyo_ffi.FfiThumbnail
 import java.util.UUID
 
 data class Track(
-    val videoId: String?,
-    val browseId: String?,
-    val playlistId: String?,
+    val videoId: String? = null,
+    val browseId: String? = null,
+    val playlistId: String? = null,
     val title: String,
     val artists: List<String> = emptyList(),
     val album: String? = null,

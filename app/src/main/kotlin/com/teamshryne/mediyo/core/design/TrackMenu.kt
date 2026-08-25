@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.teamshryne.mediyo.domain.model.Track
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TrackOverflowIcon(
     onClick: () -> Unit,
@@ -20,6 +21,7 @@ fun TrackOverflowIcon(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TrackMenuSheet(
     track: Track,
@@ -70,6 +72,7 @@ private fun MenuItem(icon: androidx.compose.ui.graphics.vector.ImageVector, labe
 }
 
 // Overload for FfiSearchResult convenience
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FfiTrackMenuSheet(
     item: uniffi.mediyo_ffi.FfiSearchResult,
