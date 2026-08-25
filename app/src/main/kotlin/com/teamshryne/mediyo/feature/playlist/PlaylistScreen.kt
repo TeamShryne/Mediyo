@@ -58,9 +58,16 @@ import javax.inject.Inject
         viewModelScope.launch {
             try {
                 val p = bridge.nextPage(token)
+                // Defensive: playlist continuations must be tracks (videoId != null).
+                // Similar-playlist carousels must not be appended as tracks.
+                val filtered = p.items.filter { it.videoId != null }
                 val before = tracks.size
-                tracks = tracks.appendUnique(p.items)
-                continuation = if (p.items.isEmpty() || tracks.size == before) null else p.continuation
+                tracks = tracks.appendUnique(filtered)
+                if (filtered.isEmpty()) {
+                    continuation = null
+                } else {
+                    continuation = if (tracks.size == before) null else p.continuation
+                }
             } catch (_: Throwable) { continuation = null } finally { loadingMore = false }
         }
     }

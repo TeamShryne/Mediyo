@@ -24,12 +24,25 @@ impl MediyoSession {
         Arc::new(Self { inner: Mutex::new(Session::new().with_cookies(cookie, sapisid)) })
     }
     #[uniffi::constructor] pub fn with_all(cookie: String, sapisid: Option<String>, visitor_data: String, page_id: Option<String>) -> Arc<Self> {
-        let mut client = mediyo_core::context::Client::new().with_visitor_data(visitor_data);
+        let mut client = mediyo_core::context::Client::new();
+        if !visitor_data.is_empty() {
+            client = client.with_visitor_data(visitor_data);
+        }
         if let Some(pid) = page_id { client = client.with_page_id(pid); }
         let ctx = mediyo_core::context::Context::new().with_client(client);
         Arc::new(Self { inner: Mutex::new(Session::new().with_context(ctx).with_cookies(cookie, sapisid)) })
     }
     pub fn fetch_visitor_data(&self) -> Result<String, MediyoError> { Ok(self.inner.lock().unwrap().fetch_visitor_data()?) }
+}
+
+fn ensure_visitor(session: &Arc<MediyoSession>) -> Result<(), MediyoError> {
+    let mut g = session.inner.lock().unwrap();
+    let needs = g.context().client.visitor_data.as_ref().map(|s| s.is_empty()).unwrap_or(true);
+    if needs {
+        // Best-effort: if fetching fails, propagate error so caller can handle.
+        g.fetch_visitor_data()?;
+    }
+    Ok(())
 }
 
 // ── common ───────────────────────────────────────────────────────────────
@@ -59,16 +72,19 @@ fn to_ffi_thumb(t: mediyo_core::parser::thumbnails::Thumbnail) -> FfiThumbnail {
 
 // ── search ───────────────────────────────────────────────────────────────
 #[uniffi::export] pub fn search(session: Arc<MediyoSession>, query: String) -> Result<FfiSearchResponse, MediyoError> {
+    ensure_visitor(&session)?;
     let g = session.inner.lock().unwrap();
     let r = mediyo_core::api::search::search(&g, &query)?;
     Ok(FfiSearchResponse { results: r.results.into_iter().map(to_ffi_search).collect(), filters: r.filters.into_iter().map(|f| FfiSearchFilter{label:f.label, query:f.query, params:f.params}).collect(), continuation: r.continuation })
 }
 #[uniffi::export] pub fn search_with_params(session: Arc<MediyoSession>, query: String, params: String) -> Result<FfiSearchResponse, MediyoError> {
+    ensure_visitor(&session)?;
     let g = session.inner.lock().unwrap();
     let r = mediyo_core::api::search::search_with_params(&g, &query, Some(&params))?;
     Ok(FfiSearchResponse { results: r.results.into_iter().map(to_ffi_search).collect(), filters: r.filters.into_iter().map(|f| FfiSearchFilter{label:f.label, query:f.query, params:f.params}).collect(), continuation: r.continuation })
 }
 #[uniffi::export] pub fn search_continuation(session: Arc<MediyoSession>, token: String) -> Result<FfiSearchResponse, MediyoError> {
+    ensure_visitor(&session)?;
     let g = session.inner.lock().unwrap();
     let r = mediyo_core::api::search::search_continuation(&g, &token)?;
     Ok(FfiSearchResponse { results: r.results.into_iter().map(to_ffi_search).collect(), filters: Vec::new(), continuation: r.continuation })
@@ -99,46 +115,55 @@ fn to_ffi_carousel(c: mediyo_core::model::Carousel) -> FfiCarousel { FfiCarousel
 fn to_ffi_watch_ep(e: mediyo_core::model::WatchEndpoint) -> FfiWatchEndpoint { FfiWatchEndpoint { video_id: e.video_id, playlist_id: e.playlist_id, params: e.params } }
 
 #[uniffi::export] pub fn browse_home(session: Arc<MediyoSession>) -> Result<FfiHomePage, MediyoError> {
+    ensure_visitor(&session)?;
     let g = session.inner.lock().unwrap();
     let p = mediyo_core::api::browse::home_page(&g)?;
     Ok(FfiHomePage { carousels: p.carousels.into_iter().map(to_ffi_carousel).collect(), continuation: p.continuation })
 }
 #[uniffi::export] pub fn browse_home_continue(session: Arc<MediyoSession>, token: String) -> Result<FfiHomePage, MediyoError> {
+    ensure_visitor(&session)?;
     let g = session.inner.lock().unwrap();
     let p = mediyo_core::api::browse::home_continue(&g, &token)?;
     Ok(FfiHomePage { carousels: p.carousels.into_iter().map(to_ffi_carousel).collect(), continuation: p.continuation })
 }
 #[uniffi::export] pub fn browse_explore(session: Arc<MediyoSession>) -> Result<FfiExplorePage, MediyoError> {
+    ensure_visitor(&session)?;
     let g = session.inner.lock().unwrap();
     let p = mediyo_core::api::browse::explore(&g)?;
     Ok(FfiExplorePage { nav_buttons: p.nav_buttons.into_iter().map(|b| FfiNavButton{label:b.label, browse_id:b.browse_id, params:b.params}).collect(), carousels: p.carousels.into_iter().map(to_ffi_carousel).collect() })
 }
 #[uniffi::export] pub fn browse_artist(session: Arc<MediyoSession>, browse_id: String) -> Result<FfiArtistPage, MediyoError> {
+    ensure_visitor(&session)?;
     let g = session.inner.lock().unwrap();
     let p = mediyo_core::api::browse::artist(&g, &browse_id)?;
     Ok(FfiArtistPage { name: p.name, subscriber_count: p.subscriber_count, monthly_audience: p.monthly_audience, description: p.description, thumbnails: p.thumbnails.into_iter().map(to_ffi_thumb).collect(), top_songs: p.top_songs.into_iter().map(to_ffi_search).collect(), carousels: p.carousels.into_iter().map(to_ffi_carousel).collect(), continuation: p.continuation, play_button: p.play_button.map(to_ffi_watch_ep), radio_button: p.radio_button.map(to_ffi_watch_ep), share_entity: p.share_entity })
 }
 #[uniffi::export] pub fn browse_album(session: Arc<MediyoSession>, browse_id: String) -> Result<FfiAlbumPage, MediyoError> {
+    ensure_visitor(&session)?;
     let g = session.inner.lock().unwrap();
     let p = mediyo_core::api::browse::album(&g, &browse_id)?;
     Ok(FfiAlbumPage { title: p.title, artist: p.artist.map(|a| a.name), year: p.year, thumbnails: p.thumbnails.into_iter().map(to_ffi_thumb).collect(), tracks: p.tracks.into_iter().map(to_ffi_search).collect(), carousels: p.carousels.into_iter().map(to_ffi_carousel).collect(), continuation: p.continuation })
 }
 #[uniffi::export] pub fn browse_playlist(session: Arc<MediyoSession>, browse_id: String) -> Result<FfiPlaylistPage, MediyoError> {
+    ensure_visitor(&session)?;
     let g = session.inner.lock().unwrap();
     let p = mediyo_core::api::browse::playlist(&g, &browse_id)?;
     Ok(FfiPlaylistPage { title: p.title, track_count: p.track_count, thumbnails: p.thumbnails.into_iter().map(to_ffi_thumb).collect(), tracks: p.tracks.into_iter().map(to_ffi_search).collect(), continuation: p.continuation })
 }
 #[uniffi::export] pub fn browse_list_page(session: Arc<MediyoSession>, browse_id: String, params: Option<String>) -> Result<FfiListPage, MediyoError> {
+    ensure_visitor(&session)?;
     let g = session.inner.lock().unwrap();
     let p = mediyo_core::api::browse::list_page(&g, &browse_id, params.as_deref())?;
     Ok(FfiListPage { items: p.items.into_iter().map(to_ffi_search).collect(), continuation: p.continuation })
 }
 #[uniffi::export] pub fn browse_next_page(session: Arc<MediyoSession>, token: String) -> Result<FfiListPage, MediyoError> {
+    ensure_visitor(&session)?;
     let g = session.inner.lock().unwrap();
     let p = mediyo_core::api::browse::next_page(&g, &token)?;
     Ok(FfiListPage { items: p.items.into_iter().map(to_ffi_search).collect(), continuation: p.continuation })
 }
 #[uniffi::export] pub fn browse_podcast(session: Arc<MediyoSession>, browse_id: String) -> Result<FfiListPage, MediyoError> {
+    ensure_visitor(&session)?;
     let g = session.inner.lock().unwrap();
     let resp = g.request("browse", serde_json::json!({"browseId": browse_id}))?;
     let p = mediyo_core::model::browse::parse_list_page(&resp)?;
@@ -157,6 +182,7 @@ fn to_ffi_watch_ep(e: mediyo_core::model::WatchEndpoint) -> FfiWatchEndpoint { F
 }
 #[derive(Debug, Clone, uniffi::Record)] pub struct FfiLyrics { pub lines: Vec<String> }
 #[uniffi::export] pub fn watch_get_song(session: Arc<MediyoSession>, video_id: String, playlist_id: Option<String>) -> Result<FfiSong, MediyoError> {
+    ensure_visitor(&session)?;
     let g = session.inner.lock().unwrap();
     let s = mediyo_core::api::watch::get_song(&g, &video_id, playlist_id.as_deref())?;
     Ok(FfiSong {
@@ -165,6 +191,7 @@ fn to_ffi_watch_ep(e: mediyo_core::model::WatchEndpoint) -> FfiWatchEndpoint { F
     })
 }
 #[uniffi::export] pub fn watch_get_queue(session: Arc<MediyoSession>, video_id: String, playlist_id: Option<String>) -> Result<FfiQueue, MediyoError> {
+    ensure_visitor(&session)?;
     let g = session.inner.lock().unwrap();
     let q = mediyo_core::api::watch::get_queue(&g, &video_id, playlist_id.as_deref())?;
     Ok(FfiQueue { playlist_id: q.playlist_id, is_infinite: q.is_infinite, items: q.items.into_iter().map(|i| FfiQueueItem{
@@ -173,6 +200,7 @@ fn to_ffi_watch_ep(e: mediyo_core::model::WatchEndpoint) -> FfiWatchEndpoint { F
     }).collect(), continuation: q.continuation })
 }
 #[uniffi::export] pub fn watch_extend_queue(session: Arc<MediyoSession>, token: String) -> Result<FfiQueue, MediyoError> {
+    ensure_visitor(&session)?;
     let g = session.inner.lock().unwrap();
     let q = mediyo_core::api::watch::extend_queue(&g, &token)?;
     Ok(FfiQueue { playlist_id: q.playlist_id, is_infinite: q.is_infinite, items: q.items.into_iter().map(|i| FfiQueueItem{
@@ -181,6 +209,7 @@ fn to_ffi_watch_ep(e: mediyo_core::model::WatchEndpoint) -> FfiWatchEndpoint { F
     }).collect(), continuation: q.continuation })
 }
 #[uniffi::export] pub fn watch_get_lyrics(session: Arc<MediyoSession>, browse_id: String) -> Result<FfiLyrics, MediyoError> {
+    ensure_visitor(&session)?;
     let g = session.inner.lock().unwrap();
     let l = mediyo_core::api::watch::get_lyrics(&g, &browse_id)?;
     Ok(FfiLyrics { lines: l.lines })
