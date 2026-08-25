@@ -69,8 +69,9 @@ class QueueVm @Inject constructor(
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun QueueScreen(
-    nav: androidx.navigation.NavController? = null,
     player: PlayerViewModel? = null,
+    onClose: () -> Unit = {},
+    onShowComments: (String) -> Unit = {},
     vm: QueueVm = hiltViewModel()
 ) {
     val qs by vm.state.collectAsState()
@@ -109,7 +110,7 @@ fun QueueScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = { nav?.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+                    IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                 },
                 actions = {
                     IconButton(onClick = { scope.launch { vm.setLock(!lockQueue) } }) {
@@ -137,7 +138,7 @@ fun QueueScreen(
                         Spacer(Modifier.width(6.dp))
                         Text("Shuffle", color = if (playerState?.shuffle == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    FilledTonalButton(onClick = { nav?.popBackStack() }, shape = CircleShape) {
+                    FilledTonalButton(onClick = onClose, shape = CircleShape) {
                         Icon(Icons.Filled.ExpandMore, null); Spacer(Modifier.width(6.dp)); Text("Close")
                     }
                     TextButton(onClick = { scope.launch { vm.setLock(!lockQueue) } }) {
@@ -243,7 +244,7 @@ fun QueueScreen(
             onAddToPlaylist = { showAddSheet = track },
             onPlayNext = { player?.addNext(track) },
             onAddToQueue = { player?.addToQueue(track) },
-            onComments = { track.videoId?.let { nav?.navigate("comments/$it") } },
+            onComments = { track.videoId?.let(onShowComments) },
             onRemove = idx?.let { { vm.removeAt(it) } }
         )
     }
@@ -286,129 +287,5 @@ private fun QueueRowContent(
         } else if (lockQueue) {
             Icon(Icons.Filled.Lock, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.4f), modifier = Modifier.size(16.dp).padding(start = 4.dp))
         }
-    }
-}
-
-// ── Legacy Sheet wrapper (kept for overlay fallback) ──
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
-@Composable
-fun QueueSheet(
-    onDismiss: () -> Unit,
-    player: PlayerViewModel,
-    vm: QueueVm = hiltViewModel()
-) {
-    QueueSheetContent(onDismiss = onDismiss, player = player, vm = vm)
-}
-
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
-@Composable
-private fun QueueSheetContent(
-    onDismiss: () -> Unit,
-    player: PlayerViewModel,
-    vm: QueueVm
-) {
-    val qs by vm.state.collectAsState()
-    val currentIdx = qs.index
-    val playerState by player.state.collectAsState()
-    val lockQueue by vm.lockFlow.collectAsState(initial = false)
-    val scope = rememberCoroutineScope()
-    val listState = rememberLazyListState()
-    var menuTrack by remember { mutableStateOf<Track?>(null) }
-    var menuIdx by remember { mutableStateOf<Int?>(null) }
-    var showAddSheet by remember { mutableStateOf<Track?>(null) }
-
-    LaunchedEffect(currentIdx) {
-        if (currentIdx in qs.entries.indices) {
-            try { listState.animateScrollToItem((currentIdx - 2).coerceAtLeast(0)) } catch (_: Throwable) {}
-        }
-    }
-
-    ModalBottomSheet(onDismissRequest = onDismiss, shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp), containerColor = MaterialTheme.colorScheme.surfaceContainerLowest, dragHandle = { BottomSheetDefaults.DragHandle() }) {
-        Column(Modifier.fillMaxWidth().padding(bottom = 0.dp)) {
-            Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.85f)).padding(horizontal = 16.dp, vertical = 10.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.weight(1f)) {
-                        Text(qs.origin.label().ifEmpty { "Queue" }, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(joinByBullet("${qs.entries.size} songs", formatDurationFromTracks(qs.entries), if (qs.isFetchingRadio) "updating radio…" else ""), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                    }
-                    IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, contentDescription = "Close") }
-                }
-            }
-            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceContainerHighest)
-            if (qs.entries.isEmpty()) {
-                Box(Modifier.fillMaxWidth().height(220.dp).padding(32.dp), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Icon(Icons.Filled.QueueMusic, null, Modifier.size(36.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("Queue is empty", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            } else {
-                LazyColumn(state = listState, modifier = Modifier.heightIn(max = 520.dp).fillMaxWidth(), contentPadding = PaddingValues(top = 6.dp, bottom = 80.dp)) {
-                    itemsIndexed(qs.entries, key = { idx, t -> "${t.videoId}_${idx}_${t.title.hashCode()}" }) { idx, t ->
-                        val isActive = idx == currentIdx
-                        val dismissState = rememberSwipeToDismissBoxState(positionalThreshold = { it * 0.4f }, confirmValueChange = { value ->
-                            if (!lockQueue && (value == SwipeToDismissBoxValue.StartToEnd || value == SwipeToDismissBoxValue.EndToStart)) vm.removeAt(idx)
-                            false
-                        })
-                        Box(Modifier.padding(horizontal = 12.dp, vertical = 3.dp)) {
-                            if (!lockQueue) {
-                                SwipeToDismissBox(state = dismissState, backgroundContent = {
-                                    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.errorContainer, RoundedCornerShape(12.dp)), contentAlignment = Alignment.CenterStart) {
-                                        Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Filled.Delete, null, tint = MaterialTheme.colorScheme.onErrorContainer)
-                                            Text("Remove", color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.labelMedium)
-                                        }
-                                    }
-                                }, content = {
-                                    Row(Modifier.fillMaxWidth().background(if (isActive) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp)).combinedClickable(onClick = {
-                                        if (idx == currentIdx) player.toggle() else { vm.playAt(idx); player.playAt(idx) }
-                                    }).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        AsyncImage(model = t.artworkUrl, contentDescription = null, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest))
-                                        Spacer(Modifier.width(12.dp))
-                                        Column(Modifier.weight(1f)) {
-                                            Text(t.title, style = MaterialTheme.typography.bodyMedium, fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Medium, color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                            Text((t.artists.joinToString(", ").ifEmpty { t.album ?: "" }) + (t.duration?.let { " • $it" } ?: ""), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        }
-                                        IconButton(onClick = { menuTrack = t; menuIdx = idx }, modifier = Modifier.size(36.dp)) { Icon(Icons.Filled.MoreVert, null, Modifier.size(18.dp)) }
-                                        Column(verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(28.dp)) {
-                                            IconButton(onClick = { if (idx > 0) vm.move(idx, idx - 1) }, modifier = Modifier.size(16.dp)) { Icon(Icons.Filled.KeyboardArrowUp, null, Modifier.size(12.dp)) }
-                                            Icon(Icons.Filled.DragHandle, null, modifier = Modifier.size(12.dp))
-                                            IconButton(onClick = { if (idx < qs.entries.lastIndex) vm.move(idx, idx + 1) }, modifier = Modifier.size(16.dp)) { Icon(Icons.Filled.KeyboardArrowDown, null, Modifier.size(12.dp)) }
-                                        }
-                                    }
-                                })
-                            } else {
-                                Row(Modifier.fillMaxWidth().background(if (isActive) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp)).combinedClickable(onClick = {
-                                    if (idx == currentIdx) player.toggle() else { vm.playAt(idx); player.playAt(idx) }
-                                }).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    AsyncImage(model = t.artworkUrl, contentDescription = null, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest))
-                                    Spacer(Modifier.width(12.dp))
-                                    Column(Modifier.weight(1f)) {
-                                        Text(t.title, style = MaterialTheme.typography.bodyMedium, color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        Text((t.artists.joinToString(", ").ifEmpty { t.album ?: "" }), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    }
-                                    IconButton(onClick = { menuTrack = t; menuIdx = idx }, modifier = Modifier.size(36.dp)) { Icon(Icons.Filled.MoreVert, null, Modifier.size(18.dp)) }
-                                }
-                            }
-                        }
-                    }
-                    if (qs.isFetchingRadio) item { Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(20.dp)) } }
-                }
-            }
-            Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f)).padding(horizontal = 12.dp, vertical = 10.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                    IconButton(onClick = { scope.launch { try { listState.animateScrollToItem((currentIdx - 1).coerceAtLeast(0)) } catch (_: Throwable) {} }; player.toggleShuffle() }) {
-                        Icon(Icons.Filled.Shuffle, null, tint = if (playerState.shuffle) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(0.6f))
-                    }
-                    FilledTonalIconButton(onClick = onDismiss, shape = CircleShape, colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest)) { Icon(Icons.Filled.ExpandMore, null) }
-                    IconButton(onClick = { scope.launch { vm.setLock(!lockQueue) } }) { Icon(if (lockQueue) Icons.Filled.Lock else Icons.Filled.LockOpen, null, tint = if (lockQueue) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) }
-                }
-            }
-        }
-        menuTrack?.let { track ->
-            val idx = menuIdx
-            com.teamshryne.mediyo.core.design.TrackMenuSheet(track = track, show = true, onDismiss = { menuTrack = null; menuIdx = null }, onLike = { player.toggleLike(track) }, onAddToPlaylist = { showAddSheet = track }, onPlayNext = { player.addNext(track) }, onAddToQueue = { player.addToQueue(track) }, onRemove = idx?.let { { vm.removeAt(it) } })
-        }
-        showAddSheet?.let { t -> com.teamshryne.mediyo.feature.playlist.AddToPlaylistSheet(track = t, onDismiss = { showAddSheet = null }) }
     }
 }
