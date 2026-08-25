@@ -2,6 +2,9 @@ package com.teamshryne.mediyo.di
 
 import android.content.Context
 import android.net.Uri
+import androidx.annotation.OptIn
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.ResolvingDataSource
@@ -67,6 +70,20 @@ object AppModule {
             dataSpec.withUri(Uri.parse(url))
         }
         val mediaSourceFactory = DefaultMediaSourceFactory(resolvingFactory)
-        return ExoPlayer.Builder(ctx).setMediaSourceFactory(mediaSourceFactory).build()
+        // Audio focus + noisy handling exactly like Metrolist/Innertune — music
+        // pauses for calls/other media and resumes afterwards, and stops when
+        // headphones are unplugged.
+        return ExoPlayer.Builder(ctx)
+            .setMediaSourceFactory(mediaSourceFactory)
+            .setHandleAudioBecomingNoisy(true)
+            .setWakeMode(C.WAKE_MODE_NETWORK)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(C.USAGE_MEDIA)
+                    .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                    .build(),
+                true // handleAudioFocus — Metrolist uses false + manual focus, but ExoPlayer's auto handling is enough for the requested behaviour
+            )
+            .build()
     }
 }
