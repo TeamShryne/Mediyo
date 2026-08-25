@@ -1,6 +1,11 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use mediyo_core::Session;
+
+static CACHED_VISITOR: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+fn cached_visitor() -> &'static Mutex<Option<String>> {
+    CACHED_VISITOR.get_or_init(|| Mutex::new(None))
+}
 
 uniffi::setup_scaffolding!("mediyo_ffi");
 
@@ -26,21 +31,56 @@ impl MediyoSession {
     #[uniffi::constructor] pub fn with_all(cookie: String, sapisid: Option<String>, visitor_data: String, page_id: Option<String>) -> Arc<Self> {
         let mut client = mediyo_core::context::Client::new();
         if !visitor_data.is_empty() {
-            client = client.with_visitor_data(visitor_data);
+            client = client.with_visitor_data(visitor_data.clone());
+            // Cache visitorData for anonymous fallback reuse
+            let mut c = cached_visitor().lock().unwrap();
+            *c = Some(visitor_data.clone());
         }
         if let Some(pid) = page_id { client = client.with_page_id(pid); }
         let ctx = mediyo_core::context::Context::new().with_client(client);
         Arc::new(Self { inner: Mutex::new(Session::new().with_context(ctx).with_cookies(cookie, sapisid)) })
     }
-    pub fn fetch_visitor_data(&self) -> Result<String, MediyoError> { Ok(self.inner.lock().unwrap().fetch_visitor_data()?) }
+    pub fn fetch_visitor_data(&self) -> Result<String, MediyoError> {
+        let mut g = self.inner.lock().unwrap();
+        let v = g.fetch_visitor_data()?;
+        let mut c = cached_visitor().lock().unwrap();
+        *c = Some(v.clone());
+        Ok(v)
+    }
 }
 
 fn ensure_visitor(session: &Arc<MediyoSession>) -> Result<(), MediyoError> {
+    // Fast path: session already has visitorData
+    {
+        let g = session.inner.lock().unwrap();
+        if let Some(v) = &g.context().client.visitor_data {
+            if !v.is_empty() {
+                return Ok(());
+            }
+        }
+    }
+    // Try global cache first
+    let cached = {
+        let c = cached_visitor().lock().unwrap();
+        c.clone()
+    };
+    if let Some(v) = cached {
+        if !v.is_empty() {
+            let mut g = session.inner.lock().unwrap();
+            // Double-check after locking
+            if g.context().client.visitor_data.as_ref().map(|s| s.is_empty()).unwrap_or(true) {
+                g.set_visitor_data(v);
+            }
+            return Ok(());
+        }
+    }
+    // Fetch fresh visitorData and cache it
     let mut g = session.inner.lock().unwrap();
-    let needs = g.context().client.visitor_data.as_ref().map(|s| s.is_empty()).unwrap_or(true);
-    if needs {
-        // Best-effort: if fetching fails, propagate error so caller can handle.
-        g.fetch_visitor_data()?;
+    // Re-check if another thread already filled it
+    if g.context().client.visitor_data.as_ref().map(|s| s.is_empty()).unwrap_or(true) {
+        let v = g.fetch_visitor_data()?;
+        let mut c = cached_visitor().lock().unwrap();
+        *c = Some(v);
     }
     Ok(())
 }
