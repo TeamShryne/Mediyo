@@ -199,6 +199,9 @@ class PlayerViewModel @Inject constructor(
     private fun loadCurrent() {
         val cur = queueManager.currentState().current ?: return
         val vid = cur.videoId ?: return
+        // With the placeholder foreground in PlaybackService, starting early is
+        // safe and shows the notification instantly (like YT Music).
+        ensurePlaybackService()
         resolveJob?.cancel()
         resolving = true
         // stop current playback right away so the old stream stops downloading/playing
@@ -239,9 +242,6 @@ class PlayerViewModel @Inject constructor(
                     )
                     player.prepare()
                     player.play()
-                    // start the MediaSession service only once actual playback is ready
-                    // (starting it before resolveStreamUrl can ANR when resolve is slow)
-                    ensurePlaybackService()
                     _state.value = _state.value.copy(isPlaying = true, isBuffering = false)
                     maybeRecordHistory(cur)
                     prefetchNextForPlayback()
