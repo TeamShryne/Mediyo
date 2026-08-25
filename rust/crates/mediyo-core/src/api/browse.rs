@@ -53,9 +53,20 @@ pub fn album(session: &Session, browse_id: &str) -> Result<AlbumPage> {
     parse_album_page(&resp)
 }
 
+fn normalize_playlist_browse_id(id: &str) -> String {
+    if id.starts_with("VL") {
+        id.to_string()
+    } else if id.starts_with("PL") || id.starts_with("RD") || id.starts_with("OL") {
+        format!("VL{}", id)
+    } else {
+        id.to_string()
+    }
+}
+
 /// Fetch and parse a playlist page by browseId (e.g. `VL...`).
 pub fn playlist(session: &Session, browse_id: &str) -> Result<PlaylistPage> {
-    let resp = browse(session, browse_id)?;
+    let normalized = normalize_playlist_browse_id(browse_id);
+    let resp = browse(session, &normalized)?;
     parse_playlist_page(&resp)
 }
 
