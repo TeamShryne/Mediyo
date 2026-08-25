@@ -180,9 +180,11 @@ class PlaybackQueueManager @Inject constructor(
         val s = _state.value
         if (!s.isRadioEnabled) return
         if (s.entries.isEmpty() || s.index < 0) return
-        // trigger when within 3 of end or at end
+        // trigger when within 3 of end OR when queue is small (initial generation for search/home)
+        // also always prefetch immediately after origin set (radioContinuation == null) to ensure home/search get radio
         val nearEnd = s.index >= (s.entries.size - 3).coerceAtLeast(0)
-        if (!nearEnd) return
+        val shouldPrefetch = s.radioContinuation == null || nearEnd || s.entries.size < 12
+        if (!shouldPrefetch) return
         if (s.isFetchingRadio) return
         // if we already have a continuation, extend; else fetch initial radio queue for current track
         scope.launch {
