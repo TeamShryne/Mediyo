@@ -381,23 +381,28 @@ fn build_thread_reply_map(resp: &Value) -> std::collections::HashMap<String, Str
         None => return map,
     };
     for ep in endpoints {
-        // reloadContinuationItemsCommand body slot
-        if let Some(cmd) = ep.get("reloadContinuationItemsCommand") {
-            if let Some(items) = cmd.get("continuationItems").and_then(Value::as_array) {
-                for item in items {
-                    if let Some(ctr) = item.get("commentThreadRenderer") {
-                        let entity_key = ctr
-                            .get("commentViewModel")
-                            .and_then(|vm| vm.get("commentViewModel"))
-                            .and_then(|vm| vm.get("commentKey"))
-                            .and_then(Value::as_str)
-                            .unwrap_or_default()
-                            .to_string();
-                        let replies_token = extract_replies_token(ctr);
-                        if !entity_key.is_empty() {
-                            if let Some(token) = replies_token {
-                                map.insert(entity_key, token);
-                            }
+        // reloadContinuationItemsCommand body slot (initial) + appendContinuationItemsAction (pagination)
+        let items_opt = ep
+            .get("reloadContinuationItemsCommand")
+            .and_then(|cmd| cmd.get("continuationItems"))
+            .or_else(|| {
+                ep.get("appendContinuationItemsAction")
+                    .and_then(|act| act.get("continuationItems"))
+            });
+        if let Some(items) = items_opt.and_then(Value::as_array) {
+            for item in items {
+                if let Some(ctr) = item.get("commentThreadRenderer") {
+                    let entity_key = ctr
+                        .get("commentViewModel")
+                        .and_then(|vm| vm.get("commentViewModel"))
+                        .and_then(|vm| vm.get("commentKey"))
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_string();
+                    let replies_token = extract_replies_token(ctr);
+                    if !entity_key.is_empty() {
+                        if let Some(token) = replies_token {
+                            map.insert(entity_key, token);
                         }
                     }
                 }

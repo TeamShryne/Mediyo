@@ -127,10 +127,18 @@ class RepliesVm @Inject constructor(private val repo: CommentRepository) : ViewM
         loadingMore = true
         viewModelScope.launch {
             try {
-                val page = repo.nextPage(c)
+                // replies pagination uses same endpoint as replies (parse_reply_continuation)
+                val page = repo.replies(c)
                 replies = replies + page.comments
                 continuation = page.continuation
-            } catch (_: Throwable) { continuation = null } finally { loadingMore = false }
+            } catch (_: Throwable) {
+                // fallback to generic next
+                try {
+                    val page = repo.nextPage(c)
+                    replies = replies + page.comments
+                    continuation = page.continuation
+                } catch (_: Throwable) { continuation = null }
+            } finally { loadingMore = false }
         }
     }
     fun reset() { replies = emptyList(); continuation = null; loading = false; loadingMore = false; error = null }
