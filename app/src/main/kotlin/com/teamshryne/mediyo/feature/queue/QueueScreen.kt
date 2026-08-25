@@ -32,8 +32,6 @@ import com.teamshryne.mediyo.feature.player.PlayerViewModel
 import com.teamshryne.mediyo.playback.PlaybackQueueManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
-import sh.calvin.reorderable.ReorderableItem
-import sh.calvin.reorderable.rememberReorderableLazyListState
 import javax.inject.Inject
 
 private fun joinByBullet(vararg parts: String) = parts.filter { it.isNotBlank() }.joinToString(" • ")
@@ -84,14 +82,6 @@ fun QueueScreen(
     var menuIdx by remember { mutableStateOf<Int?>(null) }
     var showAddSheet by remember { mutableStateOf<Track?>(null) }
 
-    // reorderable state
-    val reorderableState = rememberReorderableLazyListState(listState) { from, to ->
-        if (!lockQueue) {
-            vm.move(from.index, to.index)
-        }
-    }
-
-    // auto scroll to current
     LaunchedEffect(currentIdx) {
         if (currentIdx in qs.entries.indices) {
             try { listState.animateScrollToItem((currentIdx - 2).coerceAtLeast(0)) } catch (_: Throwable) {}
@@ -120,9 +110,7 @@ fun QueueScreen(
                     IconButton(onClick = { nav?.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                 },
                 actions = {
-                    IconButton(onClick = {
-                        scope.launch { vm.setLock(!lockQueue) }
-                    }) {
+                    IconButton(onClick = { scope.launch { vm.setLock(!lockQueue) } }) {
                         Icon(
                             if (lockQueue) Icons.Filled.Lock else Icons.Filled.LockOpen,
                             contentDescription = if (lockQueue) "Unlock" else "Lock",
@@ -130,23 +118,15 @@ fun QueueScreen(
                         )
                     }
                     IconButton(onClick = { player?.toggleShuffle() }) {
-                        Icon(
-                            Icons.Filled.Shuffle,
-                            contentDescription = "Shuffle",
-                            tint = if (playerState?.shuffle == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(0.6f)
-                        )
+                        Icon(Icons.Filled.Shuffle, contentDescription = "Shuffle", tint = if (playerState?.shuffle == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(0.6f))
                     }
                 }
             )
         },
         bottomBar = {
-            // bottom bar like reference: shuffle + collapse + lock already in top, but keep extra bottom for collapse
             Surface(tonalElevation = 2.dp, color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f)) {
                 Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -179,67 +159,59 @@ fun QueueScreen(
             LazyColumn(
                 state = listState,
                 contentPadding = PaddingValues(top = 6.dp, bottom = 12.dp),
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(pad)
+                modifier = Modifier.fillMaxSize().padding(pad)
             ) {
                 itemsIndexed(qs.entries, key = { idx, t -> "${t.videoId}_${idx}_${t.title.hashCode()}" }) { idx, t ->
                     val isActive = idx == currentIdx
                     val isPlaying = isActive && (playerState?.isPlaying == true)
-                    ReorderableItem(reorderableState, key = "${t.videoId}_${idx}_${t.title.hashCode()}") { isDragging ->
-                        val dismissState = rememberSwipeToDismissBoxState(
-                            positionalThreshold = { it * 0.4f },
-                            confirmValueChange = { value ->
-                                if (!lockQueue && (value == SwipeToDismissBoxValue.StartToEnd || value == SwipeToDismissBoxValue.EndToStart)) {
-                                    vm.removeAt(idx)
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                }
-                                false
+                    val dismissState = rememberSwipeToDismissBoxState(
+                        positionalThreshold = { it * 0.4f },
+                        confirmValueChange = { value ->
+                            if (!lockQueue && (value == SwipeToDismissBoxValue.StartToEnd || value == SwipeToDismissBoxValue.EndToStart)) {
+                                vm.removeAt(idx)
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             }
-                        )
-                        Box(
-                            Modifier
-                                .padding(horizontal = 12.dp, vertical = 3.dp)
-                                .then(if (isDragging) Modifier.shadow(8.dp, RoundedCornerShape(12.dp)) else Modifier)
-                        ) {
-                            if (!lockQueue) {
-                                SwipeToDismissBox(
-                                    state = dismissState,
-                                    backgroundContent = {
-                                        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.errorContainer, RoundedCornerShape(12.dp)), contentAlignment = Alignment.CenterStart) {
-                                            Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                                Icon(Icons.Filled.Delete, null, tint = MaterialTheme.colorScheme.onErrorContainer)
-                                                Text("Remove", color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.labelMedium)
-                                            }
+                            false
+                        }
+                    )
+                    Box(Modifier.padding(horizontal = 12.dp, vertical = 3.dp)) {
+                        if (!lockQueue) {
+                            SwipeToDismissBox(
+                                state = dismissState,
+                                backgroundContent = {
+                                    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.errorContainer, RoundedCornerShape(12.dp)), contentAlignment = Alignment.CenterStart) {
+                                        Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Filled.Delete, null, tint = MaterialTheme.colorScheme.onErrorContainer)
+                                            Text("Remove", color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.labelMedium)
                                         }
-                                    },
-                                    content = {
-                                        QueueRowContent(
-                                            track = t,
-                                            isActive = isActive,
-                                            isPlaying = isPlaying,
-                                            lockQueue = lockQueue,
-                                            onClick = {
-                                                if (idx == currentIdx) player?.toggle() else { vm.playAt(idx); player?.playAt(idx) }
-                                            },
-                                            onMore = { menuTrack = t; menuIdx = idx },
-                                            reorderableState = reorderableState
-                                        )
                                     }
-                                )
-                            } else {
-                                QueueRowContent(
-                                    track = t,
-                                    isActive = isActive,
-                                    isPlaying = isPlaying,
-                                    lockQueue = true,
-                                    onClick = {
-                                        if (idx == currentIdx) player?.toggle() else { vm.playAt(idx); player?.playAt(idx) }
-                                    },
-                                    onMore = { menuTrack = t; menuIdx = idx },
-                                    reorderableState = null
-                                )
-                            }
+                                },
+                                content = {
+                                    QueueRowContent(
+                                        track = t,
+                                        isActive = isActive,
+                                        isPlaying = isPlaying,
+                                        lockQueue = lockQueue,
+                                        showReorder = true,
+                                        onClick = { if (idx == currentIdx) player?.toggle() else { vm.playAt(idx); player?.playAt(idx) } },
+                                        onMore = { menuTrack = t; menuIdx = idx },
+                                        onMoveUp = { if (idx > 0) vm.move(idx, idx - 1) },
+                                        onMoveDown = { if (idx < qs.entries.lastIndex) vm.move(idx, idx + 1) }
+                                    )
+                                }
+                            )
+                        } else {
+                            QueueRowContent(
+                                track = t,
+                                isActive = isActive,
+                                isPlaying = isPlaying,
+                                lockQueue = true,
+                                showReorder = false,
+                                onClick = { if (idx == currentIdx) player?.toggle() else { vm.playAt(idx); player?.playAt(idx) } },
+                                onMore = { menuTrack = t; menuIdx = idx },
+                                onMoveUp = {},
+                                onMoveDown = {}
+                            )
                         }
                     }
                 }
@@ -258,7 +230,6 @@ fun QueueScreen(
         }
     }
 
-    // 3-dot menu
     menuTrack?.let { track ->
         val idx = menuIdx
         com.teamshryne.mediyo.core.design.TrackMenuSheet(
@@ -285,70 +256,38 @@ private fun QueueRowContent(
     isActive: Boolean,
     isPlaying: Boolean,
     lockQueue: Boolean,
+    showReorder: Boolean,
     onClick: () -> Unit,
     onMore: () -> Unit,
-    reorderableState: sh.calvin.reorderable.ReorderableLazyListState? = null
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit
 ) {
     Row(
-        Modifier
-            .fillMaxWidth()
-            .background(if (isActive) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp))
-            .clip(RoundedCornerShape(12.dp))
-            .combinedClickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+        Modifier.fillMaxWidth().background(if (isActive) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp)).combinedClickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        AsyncImage(
-            model = track.artworkUrl,
-            contentDescription = null,
-            modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest)
-        )
+        AsyncImage(model = track.artworkUrl, contentDescription = null, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest))
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(
-                track.title,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Medium,
-                color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                (track.artists.joinToString(", ").ifEmpty { track.album ?: "" }) + (track.duration?.let { " • $it" } ?: ""),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Text(track.title, style = MaterialTheme.typography.bodyMedium, fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Medium, color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text((track.artists.joinToString(", ").ifEmpty { track.album ?: "" }) + (track.duration?.let { " • $it" } ?: ""), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        if (isActive && isPlaying) {
-            Icon(Icons.Filled.GraphicEq, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp).padding(end = 4.dp))
-        } else if (isActive) {
-            Icon(Icons.Filled.PlayArrow, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-        }
-        IconButton(onClick = onMore, modifier = Modifier.size(36.dp)) {
-            Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
-        }
-        if (!lockQueue && reorderableState != null) {
-            Box(
-                Modifier
-                    .size(28.dp)
-                    .then(
-                        try {
-                            with(reorderableState) { Modifier.draggableHandle() }
-                        } catch (_: Throwable) { Modifier }
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Filled.DragHandle, contentDescription = "Drag", tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), modifier = Modifier.size(20.dp))
+        if (isActive && isPlaying) Icon(Icons.Filled.GraphicEq, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp).padding(end = 4.dp))
+        else if (isActive) Icon(Icons.Filled.PlayArrow, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+        IconButton(onClick = onMore, modifier = Modifier.size(36.dp)) { Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp)) }
+        if (showReorder && !lockQueue) {
+            Column(verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(32.dp)) {
+                IconButton(onClick = onMoveUp, modifier = Modifier.size(20.dp)) { Icon(Icons.Filled.KeyboardArrowUp, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.8f)) }
+                Icon(Icons.Filled.DragHandle, contentDescription = "Drag", tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.6f), modifier = Modifier.size(14.dp))
+                IconButton(onClick = onMoveDown, modifier = Modifier.size(20.dp)) { Icon(Icons.Filled.KeyboardArrowDown, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.8f)) }
             }
         } else if (lockQueue) {
-            Icon(Icons.Filled.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f), modifier = Modifier.size(16.dp).padding(start = 4.dp))
+            Icon(Icons.Filled.Lock, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.4f), modifier = Modifier.size(16.dp).padding(start = 4.dp))
         }
     }
 }
 
-// ── Legacy Sheet wrapper (kept for overlay fallback, now delegates to screen navigation) ──
+// ── Legacy Sheet wrapper (kept for overlay fallback) ──
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun QueueSheet(
@@ -356,8 +295,6 @@ fun QueueSheet(
     player: PlayerViewModel,
     vm: QueueVm = hiltViewModel()
 ) {
-    // For backwards compat, just show the screen as a sheet; but spec wants screen, so we delegate to QueueScreen via sheet height
-    // Keep simple wrap to avoid breaking existing call sites; will be removed once all callers use nav.
     QueueSheetContent(onDismiss = onDismiss, player = player, vm = vm)
 }
 
@@ -371,10 +308,9 @@ private fun QueueSheetContent(
     val qs by vm.state.collectAsState()
     val currentIdx = qs.index
     val playerState by player.state.collectAsState()
-    val haptic = LocalHapticFeedback.current
+    val lockQueue by vm.lockFlow.collectAsState(initial = false)
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
-    val lockQueue by vm.lockFlow.collectAsState(initial = false)
     var menuTrack by remember { mutableStateOf<Track?>(null) }
     var menuIdx by remember { mutableStateOf<Int?>(null) }
     var showAddSheet by remember { mutableStateOf<Track?>(null) }
@@ -385,19 +321,9 @@ private fun QueueSheetContent(
         }
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-        dragHandle = { BottomSheetDefaults.DragHandle() }
-    ) {
+    ModalBottomSheet(onDismissRequest = onDismiss, shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp), containerColor = MaterialTheme.colorScheme.surfaceContainerLowest, dragHandle = { BottomSheetDefaults.DragHandle() }) {
         Column(Modifier.fillMaxWidth().padding(bottom = 0.dp)) {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.85f))
-                    .padding(horizontal = 16.dp, vertical = 10.dp)
-            ) {
+            Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.85f)).padding(horizontal = 16.dp, vertical = 10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.weight(1f)) {
                         Text(qs.origin.label().ifEmpty { "Queue" }, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -432,12 +358,9 @@ private fun QueueSheetContent(
                                         }
                                     }
                                 }, content = {
-                                    Row(
-                                        Modifier.fillMaxWidth().background(if (isActive) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp)).combinedClickable(onClick = {
-                                            if (idx == currentIdx) player.toggle() else { vm.playAt(idx); player.playAt(idx) }
-                                        }).padding(horizontal = 8.dp, vertical = 6.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
+                                    Row(Modifier.fillMaxWidth().background(if (isActive) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp)).combinedClickable(onClick = {
+                                        if (idx == currentIdx) player.toggle() else { vm.playAt(idx); player.playAt(idx) }
+                                    }).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                                         AsyncImage(model = t.artworkUrl, contentDescription = null, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest))
                                         Spacer(Modifier.width(12.dp))
                                         Column(Modifier.weight(1f)) {
@@ -445,15 +368,17 @@ private fun QueueSheetContent(
                                             Text((t.artists.joinToString(", ").ifEmpty { t.album ?: "" }) + (t.duration?.let { " • $it" } ?: ""), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         }
                                         IconButton(onClick = { menuTrack = t; menuIdx = idx }, modifier = Modifier.size(36.dp)) { Icon(Icons.Filled.MoreVert, null, Modifier.size(18.dp)) }
+                                        Column(verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(28.dp)) {
+                                            IconButton(onClick = { if (idx > 0) vm.move(idx, idx - 1) }, modifier = Modifier.size(16.dp)) { Icon(Icons.Filled.KeyboardArrowUp, null, Modifier.size(12.dp)) }
+                                            Icon(Icons.Filled.DragHandle, null, modifier = Modifier.size(12.dp))
+                                            IconButton(onClick = { if (idx < qs.entries.lastIndex) vm.move(idx, idx + 1) }, modifier = Modifier.size(16.dp)) { Icon(Icons.Filled.KeyboardArrowDown, null, Modifier.size(12.dp)) }
+                                        }
                                     }
                                 })
                             } else {
-                                Row(
-                                    Modifier.fillMaxWidth().background(if (isActive) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp)).combinedClickable(onClick = {
-                                        if (idx == currentIdx) player.toggle() else { vm.playAt(idx); player.playAt(idx) }
-                                    }).padding(horizontal = 8.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
+                                Row(Modifier.fillMaxWidth().background(if (isActive) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp)).combinedClickable(onClick = {
+                                    if (idx == currentIdx) player.toggle() else { vm.playAt(idx); player.playAt(idx) }
+                                }).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                                     AsyncImage(model = t.artworkUrl, contentDescription = null, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest))
                                     Spacer(Modifier.width(12.dp))
                                     Column(Modifier.weight(1f)) {

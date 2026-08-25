@@ -16,7 +16,6 @@ coroutines = "1.7.3"
 serialization = "1.6.2"
 newpipe = "v0.26.5"
 jna = "5.14.0"
-reorderable = "1.7.0"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version = "1.12.0" }
@@ -47,7 +46,6 @@ kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 newpipe-extractor = { module = "com.github.TeamNewPipe:NewPipeExtractor", version.ref = "newpipe" }
 jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
-reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
