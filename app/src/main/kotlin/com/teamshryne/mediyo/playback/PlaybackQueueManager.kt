@@ -110,7 +110,7 @@ class PlaybackQueueManager @Inject constructor(
     fun peekNext(shuffle: Boolean): Track? {
         val s = _state.value
         if (s.entries.isEmpty() || s.index < 0) return null
-        val nextIdx = if (shuffle && s.entries.size > 1) {
+        val nextIdx: Int? = if (shuffle && s.entries.size > 1) {
             val order = shuffleOrder
             if (order != null && order.size == s.entries.size) {
                 val posInOrder = order.indexOf(s.index)
@@ -120,7 +120,7 @@ class PlaybackQueueManager @Inject constructor(
         } else {
             if (s.index + 1 <= s.entries.lastIndex) s.index + 1 else 0
         }
-        return s.entries.getOrNull(nextIdx)
+        return nextIdx?.let { s.entries.getOrNull(it) }
     }
 
     fun next(shuffle: Boolean, repeatOne: Boolean): Int? {
