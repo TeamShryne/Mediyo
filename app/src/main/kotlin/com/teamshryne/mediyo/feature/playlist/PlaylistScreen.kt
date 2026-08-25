@@ -41,34 +41,52 @@ import javax.inject.Inject
     var thumb by mutableStateOf<String?>(null)
     var tracks by mutableStateOf<List<uniffi.mediyo_ffi.FfiSearchResult>>(emptyList())
     fun load(id: String) {
+        android.util.Log.d("PlaylistVm","load id=$id")
         loading = true; error = null; continuation = null
         viewModelScope.launch {
             try {
                 val p = bridge.playlist(id)
+                android.util.Log.d("PlaylistVm","load ok id=$id title=${p.title} tracks=${p.tracks.size} header=${p.trackCount} cont=${p.continuation?.take(30)}")
                 title = p.title; subtitle = p.trackCount ?: ""
                 thumb = p.thumbnails.firstOrNull()?.url; tracks = p.tracks
                 continuation = p.continuation.takeIf { p.tracks.isNotEmpty() }
-            } catch (e: Throwable) { error = e.message } finally { loading = false }
+                android.util.Log.d("PlaylistVm","load done cont=${continuation?.take(30)}")
+            } catch (e: Throwable) {
+                android.util.Log.e("PlaylistVm","load error $id", e)
+                error = e.message
+            } finally { loading = false }
         }
     }
     fun loadMore() {
-        val token = continuation ?: return
+        val token = continuation ?: run { android.util.Log.d("PlaylistVm","loadMore no token"); return }
         if (loadingMore || loading) return
+        android.util.Log.d("PlaylistVm","loadMore token=${token.take(30)} before=${tracks.size}")
         loadingMore = true
         viewModelScope.launch {
             try {
                 val p = bridge.nextPage(token)
+                android.util.Log.d("PlaylistVm","loadMore raw items=${p.items.size} cont=${p.continuation?.take(30)} firstVid=${p.items.firstOrNull()?.videoId}")
                 // Defensive: playlist continuations must be tracks (videoId != null).
                 // Similar-playlist carousels must not be appended as tracks.
                 val filtered = p.items.filter { it.videoId != null }
+                android.util.Log.d("PlaylistVm","loadMore filtered=${filtered.size} before=${tracks.size}")
                 val before = tracks.size
                 tracks = tracks.appendUnique(filtered)
+                android.util.Log.d("PlaylistVm","loadMore after=${tracks.size} added=${tracks.size - before}")
                 if (filtered.isEmpty()) {
+                    android.util.Log.d("PlaylistVm","loadMore filtered empty -> cont null")
                     continuation = null
                 } else {
-                    continuation = if (tracks.size == before) null else p.continuation
+                    continuation = if (tracks.size == before) {
+                        android.util.Log.d("PlaylistVm","loadMore no new unique -> cont null")
+                        null
+                    } else p.continuation
+                    android.util.Log.d("PlaylistVm","loadMore nextCont=${continuation?.take(30)}")
                 }
-            } catch (_: Throwable) { continuation = null } finally { loadingMore = false }
+            } catch (e: Throwable) {
+                android.util.Log.e("PlaylistVm","loadMore error", e)
+                continuation = null
+            } finally { loadingMore = false }
         }
     }
 }
