@@ -34,5 +34,8 @@ class AuthRepository @Inject constructor(@ApplicationContext private val ctx: Co
     suspend fun save(cookies: String, sapisid: String, visitor: String, pageId: String) {
         ctx.ds.edit { it[K_COOKIES]=cookies; it[K_SAPISID]=sapisid; it[K_VISITOR]=visitor; it[K_PAGEID]=pageId }
     }
+    suspend fun saveAnonVisitor(visitor: String) {
+        ctx.ds.edit { it[K_VISITOR] = visitor }
+    }
     suspend fun clear() { ctx.ds.edit { it.clear() } }
 }

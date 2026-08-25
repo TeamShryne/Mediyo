@@ -3,6 +3,8 @@ package com.teamshryne.mediyo.data.mediyo
 import com.teamshryne.mediyo.data.auth.AuthRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import uniffi.mediyo_ffi.FfiAlbumPage
 import uniffi.mediyo_ffi.FfiArtistPage
@@ -27,10 +29,41 @@ import javax.inject.Singleton
 
 @Singleton
 class MediyoBridge @Inject constructor(private val auth: AuthRepository) {
+    // Platform-owned visitorData for anonymous — fetched once and persisted
+    private var cachedAnonVisitor: String? = null
+    private val anonLock = Mutex()
+
+    private suspend fun anonVisitor(): String {
+        cachedAnonVisitor?.let { if (it.isNotEmpty()) return it }
+        val a = auth.flow.first()
+        if (a.visitorData.isNotEmpty()) {
+            cachedAnonVisitor = a.visitorData
+            return a.visitorData
+        }
+        // Fetch fresh visitorData once and persist even for anonymous
+        val tmp = MediyoSession()
+        return try {
+            val vd = tmp.fetchVisitorData()
+            cachedAnonVisitor = vd
+            auth.saveAnonVisitor(vd)
+            android.util.Log.d("MediyoBridge", "fetched anon visitor ${vd.take(20)}")
+            vd
+        } catch (e: Throwable) {
+            android.util.Log.e("MediyoBridge", "fetch anon visitor failed", e)
+            ""
+        } finally {
+            tmp.close()
+        }
+    }
+
     private suspend fun session(): MediyoSession {
         val a = auth.flow.first()
-        return if (a.isLoggedIn) MediyoSession.withAll(a.cookies, a.sapisid.ifEmpty { null }, a.visitorData.ifEmpty { "" }, a.pageId.ifEmpty { null })
-        else MediyoSession()
+        return if (a.isLoggedIn) {
+            MediyoSession.withAll(a.cookies, a.sapisid.ifEmpty { null }, a.visitorData.ifEmpty { "" }, a.pageId.ifEmpty { null })
+        } else {
+            val vd = anonLock.withLock { anonVisitor() }
+            if (vd.isNotEmpty()) MediyoSession.withAll("", null, vd, null) else MediyoSession()
+        }
     }
 
     suspend fun search(query: String): FfiSearchResponse = withContext(Dispatchers.IO) {
