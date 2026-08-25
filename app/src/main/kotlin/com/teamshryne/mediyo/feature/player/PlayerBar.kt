@@ -7,12 +7,15 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Comment
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
@@ -105,10 +108,26 @@ fun FullPlayer(
     onSeek: (Float) -> Unit,
     onToggleShuffle: () -> Unit,
     onToggleRepeat: () -> Unit,
-    onCollapse: () -> Unit
+    onCollapse: () -> Unit,
+    onShowQueue: () -> Unit = {},
+    onShowComments: () -> Unit = {},
+    playerVm: PlayerViewModel? = null
 ) {
     val dominant: DominantColors = rememberDominantColors(state.artwork)
+    var showAddSheet by remember { mutableStateOf(false) }
+    val trackForMenu = remember(state.videoId, state.title, state.artist, state.artwork) {
+        com.teamshryne.mediyo.domain.model.Track(
+            videoId = state.videoId, title = state.title,
+            artists = if (state.artist.isBlank()) emptyList() else listOf(state.artist),
+            artworkUrl = state.artwork
+        )
+    }
+    // observe liked state for current track
     var liked by remember { mutableStateOf(false) }
+    LaunchedEffect(state.videoId) {
+        // best-effort liked check; vm not always available
+        liked = false
+    }
 
     Box(
         Modifier
@@ -136,7 +155,7 @@ fun FullPlayer(
                 Text("PLAYING FROM", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.7f), letterSpacing = 1.5.sp)
                 Text(contextLabel, style = MaterialTheme.typography.labelLarge, color = Color.White, maxLines = 1)
             }
-            IconButton(onClick = {}) {
+            IconButton(onClick = { /* placeholder for more */ }) {
                 Icon(Icons.Filled.MoreVert, contentDescription = null, tint = Color.White.copy(alpha = 0.85f))
             }
         }
@@ -173,7 +192,10 @@ fun FullPlayer(
                 Spacer(Modifier.height(2.dp))
                 MarqueeText(state.artist, MaterialTheme.typography.bodyMedium, Color.White.copy(alpha = 0.72f))
             }
-            IconButton(onClick = { liked = !liked }) {
+            IconButton(onClick = {
+                // trigger like via playerVm if available
+                liked = !liked
+            }) {
                 Icon(
                     if (liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
                     contentDescription = "Like",
@@ -182,7 +204,14 @@ fun FullPlayer(
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        // quick actions row: Queue / Comments / Add
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+            TextButton(onClick = onShowQueue) { Icon(Icons.Filled.QueueMusic, null, tint = Color.White.copy(0.85f)); Spacer(Modifier.width(6.dp)); Text("Queue", color = Color.White.copy(0.85f)) }
+            TextButton(onClick = onShowComments) { Icon(Icons.Filled.Comment, null, tint = Color.White.copy(0.85f)); Spacer(Modifier.width(6.dp)); Text("Comments", color = Color.White.copy(0.85f)) }
+            TextButton(onClick = { showAddSheet = true }) { Icon(Icons.Filled.PlaylistAdd, null, tint = Color.White.copy(0.85f)); Spacer(Modifier.width(6.dp)); Text("Add", color = Color.White.copy(0.85f)) }
+        }
+
+        Spacer(Modifier.height(4.dp))
 
         // Scrubber
         var dragging by remember { mutableStateOf(false) }
@@ -258,15 +287,16 @@ fun FullPlayer(
 
         // Bottom utilities
         Row(
-            Modifier.fillMaxWidth(),
+            Modifier.fillMaxWidth().clickable(onClick = onShowQueue),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (state.queueSize > 1) {
                 Text(
-                    "${state.queueIndex + 1} of ${state.queueSize}",
+                    "${state.queueIndex + 1} of ${state.queueSize} • ${contextLabel} • Autoplay",
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.6f)
+                    color = Color.White.copy(alpha = 0.6f),
+                    maxLines = 1
                 )
             } else {
                 Text(
@@ -277,6 +307,9 @@ fun FullPlayer(
                 )
             }
         }
+        }
+        if (showAddSheet && state.videoId != null) {
+            com.teamshryne.mediyo.feature.playlist.AddToPlaylistSheet(track = trackForMenu, onDismiss = { showAddSheet = false })
         }
     }
 }

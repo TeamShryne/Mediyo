@@ -8,10 +8,13 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import uniffi.mediyo_ffi.FfiAlbumPage
 import uniffi.mediyo_ffi.FfiArtistPage
+import uniffi.mediyo_ffi.FfiCommentsPage
 import uniffi.mediyo_ffi.FfiHomePage
 import uniffi.mediyo_ffi.FfiListPage
 import uniffi.mediyo_ffi.FfiPlaylistPage
+import uniffi.mediyo_ffi.FfiQueue
 import uniffi.mediyo_ffi.FfiSearchResponse
+import uniffi.mediyo_ffi.FfiSong
 import uniffi.mediyo_ffi.MediyoSession
 import uniffi.mediyo_ffi.browseAlbum
 import uniffi.mediyo_ffi.browseArtist
@@ -143,5 +146,33 @@ class MediyoBridge @Inject constructor(private val auth: AuthRepository) {
 
     suspend fun account(): uniffi.mediyo_ffi.FfiAccountInfo = withContext(Dispatchers.IO) {
         val s = session(); try { uniffi.mediyo_ffi.accountInfo(s) } finally { s.close() }
+    }
+
+    // ── watch / queue (always-radio) ──────────────────────────────────────
+    suspend fun getQueue(videoId: String, playlistId: String?): FfiQueue = withContext(Dispatchers.IO) {
+        val s = session(); try { uniffi.mediyo_ffi.watchGetQueue(s, videoId, playlistId) } finally { s.close() }
+    }
+    suspend fun extendQueue(token: String): FfiQueue = withContext(Dispatchers.IO) {
+        val s = session(); try { uniffi.mediyo_ffi.watchExtendQueue(s, token) } finally { s.close() }
+    }
+    suspend fun getSong(videoId: String, playlistId: String?): FfiSong = withContext(Dispatchers.IO) {
+        val s = session(); try { uniffi.mediyo_ffi.watchGetSong(s, videoId, playlistId) } finally { s.close() }
+    }
+    suspend fun getLyrics(browseId: String): uniffi.mediyo_ffi.FfiLyrics = withContext(Dispatchers.IO) {
+        val s = session(); try { uniffi.mediyo_ffi.watchGetLyrics(s, browseId) } finally { s.close() }
+    }
+
+    // ── comments ───────────────────────────────────────────────────────────
+    suspend fun commentsToken(videoId: String): String? = withContext(Dispatchers.IO) {
+        val s = session(); try { uniffi.mediyo_ffi.commentsToken(s, videoId) } finally { s.close() }
+    }
+    suspend fun commentsPage(token: String): FfiCommentsPage = withContext(Dispatchers.IO) {
+        val s = session(); try { uniffi.mediyo_ffi.commentsPage(s, token) } finally { s.close() }
+    }
+    suspend fun commentsNextPage(token: String): FfiCommentsPage = withContext(Dispatchers.IO) {
+        val s = session(); try { uniffi.mediyo_ffi.commentsNextPage(s, token) } finally { s.close() }
+    }
+    suspend fun commentsReplies(token: String): FfiCommentsPage = withContext(Dispatchers.IO) {
+        val s = session(); try { uniffi.mediyo_ffi.commentsReplies(s, token) } finally { s.close() }
     }
 }

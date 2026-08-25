@@ -44,9 +44,13 @@ import androidx.navigation.compose.rememberNavController
 import com.teamshryne.mediyo.core.design.MediyoTheme
 import com.teamshryne.mediyo.feature.album.AlbumScreen
 import com.teamshryne.mediyo.feature.artist.ArtistScreen
+import com.teamshryne.mediyo.feature.comments.CommentsBottomSheet
 import com.teamshryne.mediyo.feature.episodes.EpisodesScreen
+import com.teamshryne.mediyo.feature.history.HistoryScreen
 import com.teamshryne.mediyo.feature.home.HomeScreen
 import com.teamshryne.mediyo.feature.library.LibraryScreen
+import com.teamshryne.mediyo.feature.library.LikedScreen
+import com.teamshryne.mediyo.feature.library.LocalPlaylistDetailScreen
 import com.teamshryne.mediyo.feature.list.GenericListScreen
 import com.teamshryne.mediyo.feature.player.FullPlayer
 import com.teamshryne.mediyo.feature.player.MiniPlayer
@@ -54,6 +58,7 @@ import com.teamshryne.mediyo.feature.player.PlayerViewModel
 import com.teamshryne.mediyo.feature.playlist.PlaylistScreen
 import com.teamshryne.mediyo.feature.podcast.PodcastScreen
 import com.teamshryne.mediyo.feature.profile.ProfileScreen
+import com.teamshryne.mediyo.feature.queue.QueueSheet
 import com.teamshryne.mediyo.feature.search.SearchScreen
 import com.teamshryne.mediyo.feature.settings.SettingsScreen
 import dagger.hilt.android.AndroidEntryPoint
@@ -87,6 +92,8 @@ private fun AppShell() {
     val playerVm: PlayerViewModel = hiltViewModel()
     val playerState by playerVm.state.collectAsState()
     var showFullPlayer by remember { mutableStateOf(false) }
+    var showQueue by remember { mutableStateOf(false) }
+    var showCommentsId by remember { mutableStateOf<String?>(null) }
     BackHandler(enabled = showFullPlayer) { showFullPlayer = false }
 
     val contextLabel = when {
@@ -94,8 +101,11 @@ private fun AppShell() {
         currentRoute.startsWith("album/") -> "Album"
         currentRoute.startsWith("artist/") -> "Artist"
         currentRoute.startsWith("playlist/") -> "Playlist"
+        currentRoute.startsWith("localPlaylist/") -> "Playlist"
+        currentRoute.startsWith("liked") -> "Liked"
+        currentRoute.startsWith("history") -> "History"
         currentRoute.startsWith("list/") -> "Playlist"
-        else -> tabs.firstOrNull { it.route == currentRoute }?.label ?: "Mediyo"
+        else -> tabs.firstOrNull { it.route == currentRoute }?.label ?: playerVm.queueOrigin().label().ifEmpty { "Mediyo" }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -145,7 +155,7 @@ private fun AppShell() {
             ) {
                 composable(Tab.Home.route) { HomeScreen(nav, playerVm) }
                 composable(Tab.Search.route) { SearchScreen(nav, playerVm) }
-                composable(Tab.Library.route) { LibraryScreen() }
+                composable(Tab.Library.route) { LibraryScreen(nav, playerVm) }
                 composable(Tab.Settings.route) { SettingsScreen() }
                 composable("playlist/{id}") { PlaylistScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
                 composable("album/{id}") { AlbumScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
@@ -153,7 +163,14 @@ private fun AppShell() {
                 composable("podcast/{id}") { PodcastScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
                 composable("episodes/{id}") { EpisodesScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
                 composable("list/{id}") { GenericListScreen(it.arguments?.getString("id") ?: "", null, nav, playerVm) }
+                composable("localPlaylist/{id}") { LocalPlaylistDetailScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
+                composable("liked") { LikedScreen(nav, playerVm) }
+                composable("history") { HistoryScreen(nav, playerVm) }
                 composable("profile") { ProfileScreen(nav) }
+                composable("comments/{videoId}") { back ->
+                    val vid = back.arguments?.getString("videoId") ?: ""
+                    CommentsBottomSheet(videoId = vid, onDismiss = { nav.popBackStack() })
+                }
             }
         }
 
@@ -173,8 +190,18 @@ private fun AppShell() {
                 onSeek = playerVm::seekTo,
                 onToggleShuffle = playerVm::toggleShuffle,
                 onToggleRepeat = playerVm::toggleRepeat,
-                onCollapse = { showFullPlayer = false }
+                onCollapse = { showFullPlayer = false },
+                onShowQueue = { showQueue = true },
+                onShowComments = { playerState.videoId?.let { showCommentsId = it } },
+                playerVm = playerVm
             )
+        }
+
+        if (showQueue) {
+            QueueSheet(onDismiss = { showQueue = false }, player = playerVm)
+        }
+        showCommentsId?.let { vid ->
+            CommentsBottomSheet(videoId = vid, onDismiss = { showCommentsId = null })
         }
     }
 }
