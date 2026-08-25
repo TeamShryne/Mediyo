@@ -1,9 +1,13 @@
 package com.teamshryne.mediyo.feature.player
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.exoplayer.ExoPlayer
 import com.teamshryne.mediyo.data.playback.NewPipeResolver
 import com.teamshryne.mediyo.domain.model.PlayOrigin
@@ -12,13 +16,18 @@ import com.teamshryne.mediyo.domain.model.bestThumbUrl
 import com.teamshryne.mediyo.domain.model.toDomainTrack
 import com.teamshryne.mediyo.domain.repository.HistoryRepository
 import com.teamshryne.mediyo.domain.repository.LikeRepository
+import com.teamshryne.mediyo.playback.PlaybackService
 import com.teamshryne.mediyo.playback.PlaybackQueueManager
+import com.teamshryne.mediyo.playback.PlaybackSessionHub
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import uniffi.mediyo_ffi.FfiSearchResult
@@ -36,6 +45,7 @@ data class PlayerState(
     val durationMs: Long = 0L,
     val shuffle: Boolean = false,
     val repeatOne: Boolean = false,
+    val liked: Boolean = false,
     val queueSize: Int = 0,
     val queueIndex: Int = -1,
     val originLabel: String = "Mediyo"
@@ -49,6 +59,7 @@ class PlayerViewModel @Inject constructor(
     private val queueManager: PlaybackQueueManager,
     private val historyRepo: HistoryRepository,
     private val likeRepo: LikeRepository,
+    private val hub: PlaybackSessionHub,
     private val player: ExoPlayer,
     @ApplicationContext private val ctx: Context
 ) : ViewModel() {
@@ -67,6 +78,7 @@ class PlayerViewModel @Inject constructor(
     init {
         startTicker()
         setupAutoNext()
+        setupSessionBridge()
         viewModelScope.launch {
             queueManager.state.collect { qs ->
                 val cur = qs.current
@@ -84,8 +96,56 @@ class PlayerViewModel @Inject constructor(
                     _state.value = _state.value.copy(
                         queueSize = 0, queueIndex = -1, originLabel = qs.origin.label()
                     )
+                    // nothing left to play → take the media notification with us
+                    runCatching { ctx.stopService(Intent(ctx, PlaybackService::class.java)) }
+                }
+                pushSessionSnapshot()
+            }
+        }
+    }
+
+    /**
+     * Notification / headset / Bluetooth controls route through the MediaSession
+     * in [PlaybackService]; this wires its actions back into the app's own
+     * queue + like logic, and keeps the session's like state up to date.
+     */
+    private fun setupSessionBridge() {
+        hub.onSkipNext = { next(immediate = true) }
+        hub.onSkipPrevious = { previous() }
+        hub.onToggleLike = { toggleLikeCurrent() }
+        // mirror the like state of the current track for the notification button
+        viewModelScope.launch {
+            state.map { it.videoId }.distinctUntilChanged().collectLatest { vid ->
+                if (vid == null) {
+                    _state.value = _state.value.copy(liked = false)
+                } else {
+                    likeRepo.isLikedFlow(vid).collect { liked ->
+                        _state.value = _state.value.copy(liked = liked)
+                        pushSessionSnapshot()
+                    }
                 }
             }
+        }
+    }
+
+    private fun pushSessionSnapshot() {
+        val s = _state.value
+        val hasTrack = s.videoId != null
+        hub.publish {
+            it.copy(
+                hasTrack = hasTrack,
+                isPlaying = s.isPlaying,
+                liked = s.liked,
+                canSkipNext = hasTrack,
+                canSkipPrevious = hasTrack
+            )
+        }
+    }
+
+    /** The MediaSession lives in [PlaybackService] — make sure it's running before audio starts. */
+    private fun ensurePlaybackService() {
+        runCatching {
+            ContextCompat.startForegroundService(ctx, Intent(ctx, PlaybackService::class.java))
         }
     }
 
@@ -107,6 +167,7 @@ class PlayerViewModel @Inject constructor(
                     isBuffering = buffering,
                     isPlaying = playing
                 )
+                pushSessionSnapshot()
             }
         }
     }
@@ -138,6 +199,7 @@ class PlayerViewModel @Inject constructor(
     private fun loadCurrent() {
         val cur = queueManager.currentState().current ?: return
         val vid = cur.videoId ?: return
+        ensurePlaybackService()
         resolveJob?.cancel()
         resolving = true
         // stop current playback right away so the old stream stops downloading/playing
@@ -167,7 +229,15 @@ class PlayerViewModel @Inject constructor(
                     return@launch
                 }
                 try {
-                    player.setMediaItem(MediaItem.Builder().setUri(url).setMediaId(vid).build())
+                    // rich metadata → the media notification shows title/artist/artwork
+                    val metadata = MediaMetadata.Builder()
+                        .setTitle(cur.title)
+                        .setArtist(cur.artists.joinToString(", "))
+                        .setArtworkUri(cur.artworkUrl?.let(Uri::parse))
+                        .build()
+                    player.setMediaItem(
+                        MediaItem.Builder().setUri(url).setMediaId(vid).setMediaMetadata(metadata).build()
+                    )
                     player.prepare()
                     player.play()
                     _state.value = _state.value.copy(isPlaying = true, isBuffering = false)
@@ -320,6 +390,7 @@ class PlayerViewModel @Inject constructor(
     fun toggle() {
         if (player.isPlaying) { player.pause(); _state.value = _state.value.copy(isPlaying = false) }
         else { player.play(); _state.value = _state.value.copy(isPlaying = true) }
+        pushSessionSnapshot()
     }
 
     fun seekTo(fraction: Float) {
@@ -330,6 +401,8 @@ class PlayerViewModel @Inject constructor(
     override fun onCleared() {
         resolveJob?.cancel(); tickerJob?.cancel()
         pendingLoadJob?.cancel(); prefetchJob?.cancel()
+        // detach session actions so a stale VM never handles notification presses
+        hub.onSkipNext = null; hub.onSkipPrevious = null; hub.onToggleLike = null
         // don't release singleton player here — AppModule singleton lives beyond VM
         super.onCleared()
     }

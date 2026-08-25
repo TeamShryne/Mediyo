@@ -42,6 +42,7 @@ import coil.compose.rememberAsyncImagePainter
 import com.teamshryne.mediyo.core.design.DominantColors
 import com.teamshryne.mediyo.core.design.GlowingLoadingTitle
 import com.teamshryne.mediyo.core.design.MarqueeText
+import com.teamshryne.mediyo.core.design.TrackMenuSheet
 import com.teamshryne.mediyo.core.design.formatTime
 import com.teamshryne.mediyo.core.design.immersiveBrush
 import com.teamshryne.mediyo.core.design.rememberDominantColors
@@ -126,6 +127,7 @@ fun FullPlayer(
 ) {
     val dominant: DominantColors = rememberDominantColors(state.artwork)
     var showAddSheet by remember { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
     val trackForMenu = remember(state.videoId, state.title, state.artist, state.artwork) {
         com.teamshryne.mediyo.domain.model.Track(
             videoId = state.videoId, title = state.title,
@@ -179,8 +181,8 @@ fun FullPlayer(
                 Text("PLAYING FROM", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.7f), letterSpacing = 1.5.sp)
                 Text(contextLabel, style = MaterialTheme.typography.labelLarge, color = Color.White, maxLines = 1)
             }
-            IconButton(onClick = { /* placeholder for more */ }) {
-                Icon(Icons.Filled.MoreVert, contentDescription = null, tint = Color.White.copy(alpha = 0.85f))
+            IconButton(onClick = { showMenu = true }) {
+                Icon(Icons.Filled.MoreVert, contentDescription = "More options", tint = Color.White.copy(alpha = 0.85f))
             }
         }
 
@@ -356,6 +358,20 @@ fun FullPlayer(
         }
         if (showAddSheet && state.videoId != null) {
             com.teamshryne.mediyo.feature.playlist.AddToPlaylistSheet(track = trackForMenu, onDismiss = { showAddSheet = false })
+        }
+        if (showMenu && state.videoId != null) {
+            // same overflow menu every other screen uses for tracks
+            TrackMenuSheet(
+                track = trackForMenu,
+                show = true,
+                onDismiss = { showMenu = false },
+                isLiked = liked,
+                onLike = { if (playerVm != null) playerVm.toggleLikeCurrent() else liked = !liked },
+                onAddToPlaylist = { showAddSheet = true },
+                onPlayNext = { playerVm?.addNext(trackForMenu) },
+                onAddToQueue = { playerVm?.addToQueue(trackForMenu) },
+                onComments = { onShowComments() }
+            )
         }
     }
 }
