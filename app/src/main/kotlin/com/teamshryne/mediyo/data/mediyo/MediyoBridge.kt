@@ -56,6 +56,31 @@ class MediyoBridge @Inject constructor(private val auth: AuthRepository) {
         }
     }
 
+    suspend fun currentVisitorData(): String {
+        val a = auth.flow.first()
+        return if (a.isLoggedIn) a.visitorData else anonLock.withLock { anonVisitor() }
+    }
+
+    suspend fun rotateVisitorData(): String {
+        return anonLock.withLock {
+            cachedAnonVisitor = null
+            val tmp = MediyoSession()
+            try {
+                val vd = tmp.fetchVisitorData()
+                cachedAnonVisitor = vd
+                auth.saveAnonVisitor(vd)
+                android.util.Log.d("MediyoBridge", "rotated visitor ${vd.take(20)}")
+                vd
+            } finally {
+                tmp.close()
+            }
+        }
+    }
+
+    fun clearAnonCache() {
+        cachedAnonVisitor = null
+    }
+
     private suspend fun session(): MediyoSession {
         val a = auth.flow.first()
         return if (a.isLoggedIn) {
