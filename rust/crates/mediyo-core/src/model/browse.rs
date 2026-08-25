@@ -108,6 +108,7 @@ pub struct PlaylistPage {
     pub thumbnails: Vec<thumbnails::Thumbnail>,
     pub playlist_id: Option<String>,
     pub tracks: Vec<SearchResult>,
+    pub carousels: Vec<Carousel>,
     /// Continuation token for more tracks (if the playlist exceeds one page).
     pub continuation: Option<String>,
 }
@@ -165,9 +166,10 @@ pub fn parse_album_page(resp: &Value) -> Result<AlbumPage> {
             _ => {}
         }
     }
-    if continuation.is_none() {
-        continuation = section_list_token(resp);
-    }
+    // Do NOT fall back to section_list_token: that token paginates the
+    // outer sectionListRenderer (carousel sections), not the track shelf.
+    // Using it as a track continuation makes small playlists (<100 tracks)
+    // incorrectly appear paginated and loads carousel items as tracks.
 
     Ok(AlbumPage {
         title: info.title,
@@ -190,23 +192,31 @@ pub fn parse_playlist_page(resp: &Value) -> Result<PlaylistPage> {
     let info = parse_responsive_header(header)?;
 
     let mut tracks = Vec::new();
+    let mut carousels = Vec::new();
     let mut continuation = None;
     for section in secondary_sections(resp) {
         let Some((name, payload)) = parser::renderer(section) else {
             continue;
         };
-        if name == "musicPlaylistShelfRenderer" || name == "musicShelfRenderer" {
-            continuation = append_list_items(payload, &mut tracks)?;
-            // Some shelves (radio mixes) carry the token at shelf level
-            // instead of a sentinel item inside contents.
-            if continuation.is_none() {
-                continuation = shelf_level_token(payload);
+        match name {
+            "musicPlaylistShelfRenderer" | "musicShelfRenderer" => {
+                continuation = append_list_items(payload, &mut tracks)?;
+                // Some shelves (radio mixes) carry the token at shelf level
+                // instead of a sentinel item inside contents.
+                if continuation.is_none() {
+                    continuation = shelf_level_token(payload);
+                }
             }
+            "musicCarouselShelfRenderer" => {
+                carousels.push(parse_carousel(payload)?);
+            }
+            _ => {}
         }
     }
-    if continuation.is_none() {
-        continuation = section_list_token(resp);
-    }
+    // Do NOT fall back to section_list_token: that token paginates the
+    // outer sectionListRenderer (carousel sections), not the track shelf.
+    // Using it as a track continuation makes small playlists (<100 tracks)
+    // incorrectly appear paginated and loads carousel items as tracks.
 
     Ok(PlaylistPage {
         title: info.title,
@@ -218,6 +228,7 @@ pub fn parse_playlist_page(resp: &Value) -> Result<PlaylistPage> {
         thumbnails: info.thumbnails,
         playlist_id: info.playlist_id,
         tracks,
+        carousels,
         continuation,
     })
 }
@@ -565,6 +576,7 @@ fn shelf_level_token(payload: &Value) -> Option<String> {
 
 /// Continuation token on the wrapping sectionListRenderer (radio mixes put
 /// their token there instead of inside the shelf).
+#[allow(dead_code)]
 fn section_list_token(resp: &Value) -> Option<String> {
     resp.pointer(
         "/contents/twoColumnBrowseResultsRenderer/secondaryContents/sectionListRenderer/continuations/0/nextContinuationData/continuation",
