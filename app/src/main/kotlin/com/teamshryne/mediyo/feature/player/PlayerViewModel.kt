@@ -57,6 +57,9 @@ class PlayerViewModel @Inject constructor(
     val state: StateFlow<PlayerState> = _state
 
     private var resolveJob: Job? = null
+    private var pendingLoadJob: Job? = null
+    private var prefetchJob: Job? = null
+    @Volatile private var resolving = false
     private var tickerJob: Job? = null
     private var lastHistoryVideoId: String? = null
     private var lastHistoryAt: Long = 0
@@ -77,11 +80,6 @@ class PlayerViewModel @Inject constructor(
                         queueIndex = qs.index,
                         originLabel = qs.origin.label()
                     )
-                    // only load if videoId changed vs current state? queueManager already updated index
-                    // check if we need to start playback for new index
-                    val shouldLoad = _state.value.videoId != cur.videoId || _state.value.title != cur.title
-                    // we need to detect index change via queueManager; simpler: always load when queue index changes and not same video?
-                    // Use a separate tracker
                 } else {
                     _state.value = _state.value.copy(
                         queueSize = 0, queueIndex = -1, originLabel = qs.origin.label()
@@ -98,7 +96,9 @@ class PlayerViewModel @Inject constructor(
                 delay(500)
                 val dur = if (player.duration > 0) player.duration else 0L
                 val pos = player.currentPosition.coerceIn(0L, if (dur > 0) dur else Long.MAX_VALUE)
-                val buffering = player.playbackState == ExoPlayer.STATE_BUFFERING
+                // keep the buffering indicator alive while a stream URL is being resolved —
+                // ExoPlayer itself reports IDLE during that window, not BUFFERING.
+                val buffering = resolving || player.playbackState == ExoPlayer.STATE_BUFFERING
                 val playing = player.isPlaying
                 _state.value = _state.value.copy(
                     positionMs = pos,
@@ -115,18 +115,22 @@ class PlayerViewModel @Inject constructor(
         player.addListener(object : androidx.media3.common.Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == androidx.media3.common.Player.STATE_ENDED) {
-                    // respect repeatOne: next() already handles it
-                    // ensure we auto-advance even when radio extends
+                    val endedVid = _state.value.videoId
                     viewModelScope.launch {
-                        // small delay to let UI settle
                         delay(200)
-                        next()
+                        // user already skipped away from the track that just ended → don't double-advance
+                        if (endedVid != null && _state.value.videoId != endedVid) return@launch
+                        next(immediate = true)
                     }
                 }
             }
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                // skip to next on error to keep flow uninterrupted
-                viewModelScope.launch { delay(300); next() }
+                val erroredVid = _state.value.videoId
+                viewModelScope.launch {
+                    delay(300)
+                    if (erroredVid != null && _state.value.videoId != erroredVid) return@launch
+                    next(immediate = true)
+                }
             }
         })
     }
@@ -135,6 +139,10 @@ class PlayerViewModel @Inject constructor(
         val cur = queueManager.currentState().current ?: return
         val vid = cur.videoId ?: return
         resolveJob?.cancel()
+        resolving = true
+        // stop current playback right away so the old stream stops downloading/playing
+        // while we resolve (also resets position, keeping previous() navigation correct)
+        try { player.stop(); player.clearMediaItems() } catch (_: Throwable) {}
         _state.value = _state.value.copy(
             videoId = vid,
             title = cur.title,
@@ -150,19 +158,56 @@ class PlayerViewModel @Inject constructor(
             originLabel = queueManager.currentState().origin.label()
         )
         resolveJob = viewModelScope.launch {
-            val url = resolver.resolveStreamUrl(vid)
-            if (url == null) {
-                _state.value = _state.value.copy(isBuffering = false)
-                return@launch
-            }
             try {
-                player.setMediaItem(MediaItem.fromUri(url))
-                player.prepare()
-                player.play()
-                _state.value = _state.value.copy(isPlaying = true, isBuffering = false)
-                maybeRecordHistory(cur)
-            } catch (_: Throwable) {
-                _state.value = _state.value.copy(isBuffering = false)
+                val url = resolver.resolveStreamUrl(vid)
+                // superseded by a newer skip while resolving → drop this stale result
+                if (queueManager.currentState().current?.videoId != vid) return@launch
+                if (url == null) {
+                    _state.value = _state.value.copy(isBuffering = false)
+                    return@launch
+                }
+                try {
+                    player.setMediaItem(MediaItem.Builder().setUri(url).setMediaId(vid).build())
+                    player.prepare()
+                    player.play()
+                    _state.value = _state.value.copy(isPlaying = true, isBuffering = false)
+                    maybeRecordHistory(cur)
+                    prefetchNextForPlayback()
+                } catch (_: Throwable) {
+                    _state.value = _state.value.copy(isBuffering = false)
+                }
+            } finally {
+                resolving = false
+            }
+        }
+    }
+
+    /** Resolve + cache the URL of whatever track would play on skip-next. */
+    private fun prefetchNextForPlayback() {
+        if (_state.value.repeatOne) return
+        prefetchJob?.cancel()
+        val nxt = queueManager.peekNext(_state.value.shuffle) ?: return
+        val vid = nxt.videoId ?: return
+        if (vid == _state.value.videoId) return
+        prefetchJob = viewModelScope.launch {
+            try { resolver.prefetchStreamUrl(vid) } catch (_: Throwable) {}
+        }
+    }
+
+    /**
+     * All loads funnel through here. Rapid skips coalesce into one load:
+     * every tap advances the queue instantly (UI updates immediately), but the
+     * network resolve only fires once taps pause for [SKIP_DEBOUNCE_MS].
+     */
+    private fun requestLoad(immediate: Boolean) {
+        pendingLoadJob?.cancel()
+        pendingLoadJob = null
+        if (immediate) {
+            loadCurrent()
+        } else {
+            pendingLoadJob = viewModelScope.launch {
+                delay(SKIP_DEBOUNCE_MS)
+                loadCurrent()
             }
         }
     }
@@ -186,19 +231,19 @@ class PlayerViewModel @Inject constructor(
 
     fun playTrack(track: Track, origin: PlayOrigin = PlayOrigin.Single(track.videoId ?: "")) {
         queueManager.setQueue(origin, listOf(track), 0)
-        loadCurrent()
+        requestLoad(immediate = true)
     }
 
     fun playQueue(entries: List<QueueEntry>, startIndex: Int) {
         val tracks = entries.map { Track(videoId = it.videoId, title = it.title, artists = if (it.artist.isBlank()) emptyList() else listOf(it.artist), artworkUrl = it.artwork) }
         queueManager.setQueue(PlayOrigin.Unknown, tracks, startIndex)
-        loadCurrent()
+        requestLoad(immediate = true)
     }
 
     fun playTracks(tracks: List<Track>, startIndex: Int, origin: PlayOrigin) {
         if (tracks.isEmpty()) return
         queueManager.setQueue(origin, tracks, startIndex)
-        loadCurrent()
+        requestLoad(immediate = true)
     }
 
     fun playFrom(items: List<FfiSearchResult>, item: FfiSearchResult) {
@@ -220,7 +265,7 @@ class PlayerViewModel @Inject constructor(
             } else origin
             queueManager.setQueue(effOrigin, tracks, idx)
         }
-        loadCurrent()
+        requestLoad(immediate = true)
     }
 
     // convenience for Track lists
@@ -234,7 +279,7 @@ class PlayerViewModel @Inject constructor(
     fun addNextList(tracks: List<Track>) { queueManager.addNextList(tracks) }
     fun removeFromQueue(at: Int) { queueManager.removeAt(at) }
     fun moveQueue(from: Int, to: Int) { queueManager.move(from, to) }
-    fun playAt(index: Int) { queueManager.setIndex(index); loadCurrent() }
+    fun playAt(index: Int) { queueManager.setIndex(index); requestLoad(immediate = true) }
 
     fun currentTrack(): Track? = queueManager.currentState().current
     suspend fun isCurrentLiked(): Boolean = currentTrack()?.videoId?.let { likeRepo.isLiked(it) } ?: false
@@ -245,29 +290,24 @@ class PlayerViewModel @Inject constructor(
     fun queueEntries(): List<Track> = queueManager.currentState().entries
     fun queueOrigin(): PlayOrigin = queueManager.currentState().origin
 
-    fun next() {
+    fun next() = next(immediate = false)
+
+    fun next(immediate: Boolean) {
         val s = queueManager.currentState()
         if (s.entries.isEmpty()) return
         if (s.current != null && _state.value.repeatOne) {
             // repeat same
             player.seekTo(0); player.play(); return
         }
-        val idx = queueManager.next(_state.value.shuffle, _state.value.repeatOne) ?: return
-        loadCurrent()
+        queueManager.next(_state.value.shuffle, _state.value.repeatOne) ?: return
+        requestLoad(immediate)
     }
 
     fun previous() {
-        if (player.currentPosition > 3000) { player.seekTo(0); return }
-        val idx = queueManager.previous(player.currentPosition) ?: return
-        // if previous returned same index, just seek
-        if (idx == queueManager.currentState().index && player.currentPosition <= 3000) {
-            // queue already moved to previous
-            loadCurrent()
-        } else if (idx == _state.value.queueIndex) {
-            player.seekTo(0)
-        } else {
-            loadCurrent()
-        }
+        // standard restart rule when we're actually mid-track
+        if (!resolving && player.currentPosition > 3000) { player.seekTo(0); return }
+        queueManager.previous(player.currentPosition) ?: return
+        requestLoad(immediate = false)
     }
 
     fun toggleRepeat() { _state.value = _state.value.copy(repeatOne = !_state.value.repeatOne) }
@@ -289,8 +329,13 @@ class PlayerViewModel @Inject constructor(
 
     override fun onCleared() {
         resolveJob?.cancel(); tickerJob?.cancel()
+        pendingLoadJob?.cancel(); prefetchJob?.cancel()
         // don't release singleton player here — AppModule singleton lives beyond VM
         super.onCleared()
+    }
+
+    companion object {
+        private const val SKIP_DEBOUNCE_MS = 280L
     }
 
     private fun FfiSearchResult.toEntry() = QueueEntry(

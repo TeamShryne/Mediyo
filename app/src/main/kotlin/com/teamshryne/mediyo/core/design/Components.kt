@@ -17,17 +17,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.palette.graphics.Palette
 import coil.compose.AsyncImage
 import coil.imageLoader
@@ -127,6 +133,74 @@ fun rememberDominantColors(url: String?): DominantColors {
 fun immersiveBrush(colors: DominantColors): Brush = Brush.verticalGradient(
     listOf(colors.container, colors.deep, MediyoColors.Bg0)
 )
+
+/**
+ * Catchy placeholder shown while artwork loads: the song name in a display
+ * script font with a light sweep that glows left→right then right→left.
+ */
+@Composable
+fun GlowingLoadingTitle(
+    title: String,
+    artist: String,
+    modifier: Modifier = Modifier
+) {
+    if (title.isBlank()) return
+    val transition = rememberInfiniteTransition(label = "glowTitle")
+    val phase by transition.animateFloat(
+        initialValue = -1f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1900, easing = LinearEasing), RepeatMode.Reverse),
+        label = "phase"
+    )
+    var widthPx by remember { mutableStateOf(0f) }
+    val base = Color.White.copy(alpha = 0.25f)
+    val hot = Color.White
+    val band = (widthPx * 0.5f).coerceAtLeast(1f)
+    // phase -1..1 maps the highlight across [−band, width+band]; RepeatMode.Reverse
+    // sends it back right→left on every other cycle.
+    val center = ((phase + 1f) / 2f) * (widthPx + 2 * band) - band
+    val brush = Brush.linearGradient(
+        colorStops = listOf(
+            0.30f to base,
+            0.46f to hot,
+            0.54f to hot,
+            0.70f to base
+        ),
+        start = Offset(center - band, 0f),
+        end = Offset(center + band, 0f)
+    )
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = title,
+            style = TextStyle(
+                fontFamily = FontFamily.Cursive,
+                fontWeight = FontWeight.Bold,
+                fontStyle = FontStyle.Italic,
+                fontSize = 40.sp,
+                lineHeight = 50.sp,
+                textAlign = TextAlign.Center,
+                shadow = Shadow(
+                    color = Color.White.copy(alpha = 0.6f),
+                    offset = Offset.Zero,
+                    blurRadius = 24f
+                )
+            ).copy(brush = brush),
+            modifier = Modifier
+                .fillMaxWidth()
+                .onSizeChanged { widthPx = it.width.toFloat() }
+        )
+        if (artist.isNotBlank()) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = artist,
+                style = MaterialTheme.typography.titleMedium,
+                color = Color.White.copy(alpha = 0.55f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
 
 // ── Text ─────────────────────────────────────────────────────────────────────
 @OptIn(ExperimentalFoundationApi::class)
