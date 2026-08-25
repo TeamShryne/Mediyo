@@ -117,7 +117,10 @@ fun SearchScreen(
 
     fun open(r: FfiSearchResult) {
         when {
-            r.videoId != null -> player.playFromWithOrigin(vm.results, r, PlayOrigin.Search(vm.lastQuery.ifEmpty { vm.query }, vm.selectedLabel))
+            r.videoId != null -> {
+                val track = r.toDomainTrack()
+                player.playTrack(track, PlayOrigin.Search(vm.lastQuery.ifEmpty { vm.query }, vm.selectedLabel))
+            }
             r.browseId != null && r.category.contains("Album", true) -> nav.navigate("album/${r.browseId}")
             r.browseId != null && r.category.contains("Artist", true) -> nav.navigate("artist/${r.browseId}")
             r.browseId != null && r.category.contains("Playlist", true) -> nav.navigate("playlist/${r.browseId}")

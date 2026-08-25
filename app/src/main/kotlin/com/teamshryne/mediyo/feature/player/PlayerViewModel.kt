@@ -62,6 +62,7 @@ class PlayerViewModel @Inject constructor(
 
     init {
         startTicker()
+        setupAutoNext()
         viewModelScope.launch {
             queueManager.state.collect { qs ->
                 val cur = qs.current
@@ -107,6 +108,26 @@ class PlayerViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    private fun setupAutoNext() {
+        player.addListener(object : androidx.media3.common.Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == androidx.media3.common.Player.STATE_ENDED) {
+                    // respect repeatOne: next() already handles it
+                    // ensure we auto-advance even when radio extends
+                    viewModelScope.launch {
+                        // small delay to let UI settle
+                        delay(200)
+                        next()
+                    }
+                }
+            }
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                // skip to next on error to keep flow uninterrupted
+                viewModelScope.launch { delay(300); next() }
+            }
+        })
     }
 
     private fun loadCurrent() {

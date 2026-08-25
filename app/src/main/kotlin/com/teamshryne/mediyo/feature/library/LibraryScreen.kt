@@ -119,16 +119,6 @@ fun LibraryScreen(
             items(playlists, key = { it.id }) { pl ->
                 PlaylistRow(pl, onClick = { nav?.navigate("localPlaylist/${pl.id}") })
             }
-        } else {
-            item {
-                Card(Modifier.padding(horizontal = 20.dp).fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
-                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("No playlists yet", style = MaterialTheme.typography.titleMedium)
-                        Text("Create a playlist to collect songs. You can add any track from its ••• menu.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        FilledTonalButton(onClick = { vm.showCreateDialog = true }, shape = CircleShape) { Icon(Icons.Filled.Add, null); Spacer(Modifier.width(8.dp)); Text("Create playlist") }
-                    }
-                }
-            }
         }
     }
 
