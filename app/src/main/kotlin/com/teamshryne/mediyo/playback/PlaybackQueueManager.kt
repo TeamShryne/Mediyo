@@ -192,7 +192,12 @@ class PlaybackQueueManager @Inject constructor(
             try {
                 val current = s.entries.getOrNull(s.index) ?: run { setFetching(false); return@launch }
                 val vid = current.videoId ?: run { setFetching(false); return@launch }
-                val originPid = s.origin.playlistIdForRadio()
+                var originPid = s.origin.playlistIdForRadio()
+                // For single/search/home without explicit playlist, generate RDAMVM radio mix
+                if (originPid == null) {
+                    // YouTube Music radio playlist is RDAMVM<videoId>
+                    originPid = "RDAMVM$vid"
+                }
                 val fetched = if (s.radioContinuation != null) {
                     Log.d("QueueManager", "extend radio cont=${s.radioContinuation.take(20)}")
                     bridge.extendQueue(s.radioContinuation)
