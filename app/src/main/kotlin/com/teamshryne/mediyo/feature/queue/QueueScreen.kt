@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalFoundationApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.teamshryne.mediyo.feature.queue
 
 import androidx.compose.foundation.ExperimentalFoundationApi
