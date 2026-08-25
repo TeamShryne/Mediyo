@@ -20,8 +20,10 @@ data class CachePrefs(
 )
 
 @Singleton
-class CacheRepository @Inject constructor(@ApplicationContext private val ctx: Context) {
-    private val db = Room.databaseBuilder(ctx, MediyoDb::class.java, "mediyo.db").fallbackToDestructiveMigration().build()
+class CacheRepository @Inject constructor(
+    @ApplicationContext private val ctx: Context,
+    private val db: MediyoDb
+) {
     private val dao get() = db.kv()
 
     private val K_MAX = longPreferencesKey("maxBytes")
