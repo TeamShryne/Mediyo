@@ -24,6 +24,7 @@ import androidx.lifecycle.viewModelScope
 import com.teamshryne.mediyo.core.design.*
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import com.teamshryne.mediyo.domain.model.PlayOrigin
+import com.teamshryne.mediyo.domain.model.toDomainTrack
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -81,7 +82,11 @@ fun HomeScreen(
 
     fun open(r: FfiSearchResult, shelf: List<FfiSearchResult>, title: String) {
         when {
-            r.videoId != null -> player.playFromWithOrigin(shelf, r, PlayOrigin.HomeShelf(title))
+            r.videoId != null -> {
+                // Generate fresh radio queue from single track (RDAMVM) — not shelf list, per always-radio spec
+                val track = r.toDomainTrack()
+                player.playTrack(track, PlayOrigin.HomeShelf(title))
+            }
             r.browseId != null && r.category.contains("Album", true) -> nav.navigate("album/${r.browseId}")
             r.browseId != null && r.category.contains("Artist", true) -> nav.navigate("artist/${r.browseId}")
             r.browseId != null && r.category.contains("Playlist", true) -> nav.navigate("playlist/${r.browseId}")
