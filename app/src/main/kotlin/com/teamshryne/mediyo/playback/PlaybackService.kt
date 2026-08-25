@@ -3,8 +3,10 @@ package com.teamshryne.mediyo.playback
 import android.app.PendingIntent
 import android.content.Intent
 import android.os.Bundle
+import androidx.annotation.OptIn
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.CommandButton
 import androidx.media3.session.MediaSession
@@ -42,6 +44,7 @@ import javax.inject.Inject
  * a time), so a [ForwardingPlayer] advertises next/previous availability and
  * routes those calls into the app's queue logic via [PlaybackSessionHub].
  */
+@OptIn(UnstableApi::class) // custom layout / CommandButton / ForwardingPlayer session APIs
 @AndroidEntryPoint
 class PlaybackService : MediaSessionService() {
 
