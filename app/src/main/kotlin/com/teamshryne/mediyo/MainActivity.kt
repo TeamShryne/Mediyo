@@ -58,6 +58,7 @@ import com.teamshryne.mediyo.feature.player.PlayerViewModel
 import com.teamshryne.mediyo.feature.playlist.PlaylistScreen
 import com.teamshryne.mediyo.feature.podcast.PodcastScreen
 import com.teamshryne.mediyo.feature.profile.ProfileScreen
+import com.teamshryne.mediyo.feature.queue.QueueScreen
 import com.teamshryne.mediyo.feature.queue.QueueSheet
 import com.teamshryne.mediyo.feature.search.SearchScreen
 import com.teamshryne.mediyo.feature.settings.SettingsScreen
@@ -94,9 +95,12 @@ private fun AppShell() {
     var showFullPlayer by remember { mutableStateOf(false) }
     var showQueue by remember { mutableStateOf(false) }
     var showCommentsId by remember { mutableStateOf<String?>(null) }
+    // Player collapse has priority over nav pop — both handlers, inner one wins
     BackHandler(enabled = showFullPlayer) { showFullPlayer = false }
 
-    val contextLabel = when {
+    val contextLabel = if (playerState.originLabel.isNotBlank() && playerState.title.isNotEmpty()) {
+        playerState.originLabel
+    } else when {
         currentRoute == null -> "Mediyo"
         currentRoute.startsWith("album/") -> "Album"
         currentRoute.startsWith("artist/") -> "Artist"
@@ -104,8 +108,9 @@ private fun AppShell() {
         currentRoute.startsWith("localPlaylist/") -> "Playlist"
         currentRoute.startsWith("liked") -> "Liked"
         currentRoute.startsWith("history") -> "History"
+        currentRoute.startsWith("queue") -> "Queue"
         currentRoute.startsWith("list/") -> "Playlist"
-        else -> tabs.firstOrNull { it.route == currentRoute }?.label ?: playerVm.queueOrigin().label().ifEmpty { "Mediyo" }
+        else -> tabs.firstOrNull { it.route == currentRoute }?.label ?: "Mediyo"
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -166,6 +171,7 @@ private fun AppShell() {
                 composable("localPlaylist/{id}") { LocalPlaylistDetailScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
                 composable("liked") { LikedScreen(nav, playerVm) }
                 composable("history") { HistoryScreen(nav, playerVm) }
+                composable("queue") { QueueScreen(nav, playerVm) }
                 composable("profile") { ProfileScreen(nav) }
                 composable("comments/{videoId}") { back ->
                     val vid = back.arguments?.getString("videoId") ?: ""
@@ -174,13 +180,15 @@ private fun AppShell() {
             }
         }
 
-        // Immersive full-screen player overlay
+        // Immersive full-screen player overlay — consumes clicks & back
         AnimatedVisibility(
             visible = showFullPlayer && playerState.title.isNotEmpty(),
             enter = slideInVertically(tween(320)) { it } + fadeIn(tween(220)),
             exit = slideOutVertically(tween(300)) { it } + fadeOut(tween(240)),
             modifier = Modifier.fillMaxSize()
         ) {
+            // Inner BackHandler ensures player collapses before nav pop
+            BackHandler(enabled = true) { showFullPlayer = false }
             FullPlayer(
                 state = playerState,
                 contextLabel = contextLabel,
@@ -191,12 +199,16 @@ private fun AppShell() {
                 onToggleShuffle = playerVm::toggleShuffle,
                 onToggleRepeat = playerVm::toggleRepeat,
                 onCollapse = { showFullPlayer = false },
-                onShowQueue = { showQueue = true },
+                onShowQueue = {
+                    showFullPlayer = false
+                    nav.navigate("queue")
+                },
                 onShowComments = { playerState.videoId?.let { showCommentsId = it } },
                 playerVm = playerVm
             )
         }
 
+        // Legacy sheet fallback still supported if any caller uses showQueue
         if (showQueue) {
             QueueSheet(onDismiss = { showQueue = false }, player = playerVm)
         }

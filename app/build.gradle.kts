@@ -77,6 +77,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.newpipe.extractor)
     implementation("net.java.dev.jna:jna:5.14.0@aar")
+    implementation(libs.reorderable)
 
     val bom = libs.compose.bom
     implementation(platform(bom))
