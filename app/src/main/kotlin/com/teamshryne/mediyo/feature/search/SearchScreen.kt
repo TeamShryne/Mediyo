@@ -32,9 +32,13 @@ import com.teamshryne.mediyo.core.design.ErrorState
 import com.teamshryne.mediyo.core.design.InfiniteScrollHandler
 import com.teamshryne.mediyo.core.design.LoadingFooter
 import com.teamshryne.mediyo.core.design.SectionHeader
+import com.teamshryne.mediyo.core.design.TrackOverflowIcon
 import com.teamshryne.mediyo.core.design.appendUnique
 import com.teamshryne.mediyo.core.design.shimmer
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
+import com.teamshryne.mediyo.domain.model.PlayOrigin
+import com.teamshryne.mediyo.domain.model.Track
+import com.teamshryne.mediyo.domain.model.toDomainTrack
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import uniffi.mediyo_ffi.FfiSearchFilter
@@ -108,10 +112,12 @@ fun SearchScreen(
 ) {
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
+    var menuItem by remember { mutableStateOf<FfiSearchResult?>(null) }
+    var showAddTrack by remember { mutableStateOf<Track?>(null) }
 
     fun open(r: FfiSearchResult) {
         when {
-            r.videoId != null -> player.playFrom(vm.results, r)
+            r.videoId != null -> player.playFromWithOrigin(vm.results, r, PlayOrigin.Search(vm.lastQuery.ifEmpty { vm.query }, vm.selectedLabel))
             r.browseId != null && r.category.contains("Album", true) -> nav.navigate("album/${r.browseId}")
             r.browseId != null && r.category.contains("Artist", true) -> nav.navigate("artist/${r.browseId}")
             r.browseId != null && r.category.contains("Playlist", true) -> nav.navigate("playlist/${r.browseId}")
@@ -209,7 +215,7 @@ fun SearchScreen(
                 vm.results[i].let { it.videoId ?: it.browseId ?: it.playlistId }?.let { "${it}_$i" } ?: "r_$i"
             }) { i ->
                 val r = vm.results[i]
-                ResultRow(item = r, onClick = { open(r) })
+                ResultRow(item = r, onClick = { open(r) }, onMenu = { menuItem = r })
             }
         }
 
@@ -221,10 +227,24 @@ fun SearchScreen(
         itemCount = vm.results.size + 2,
         enabled = vm.continuation != null && !vm.loading && !vm.loadingMore && vm.error == null
     ) { vm.loadMore() }
+
+    menuItem?.let { m ->
+        val track = m.toDomainTrack()
+        com.teamshryne.mediyo.core.design.TrackMenuSheet(
+            track = track, show = true, onDismiss = { menuItem = null },
+            onLike = { player.toggleLike(track) },
+            onAddToPlaylist = { showAddTrack = track },
+            onPlayNext = { player.addNext(track) },
+            onAddToQueue = { player.addToQueue(track) },
+            onComments = { m.videoId?.let { nav.navigate("comments/$it") } },
+            onGoToAlbum = if (m.category.contains("Song", true) && m.browseId != null) {{ m.browseId?.let { nav.navigate("album/$it") } }} else null,
+        )
+    }
+    showAddTrack?.let { t -> com.teamshryne.mediyo.feature.playlist.AddToPlaylistSheet(track = t, onDismiss = { showAddTrack = null }) }
 }
 
 @Composable
-private fun ResultRow(item: FfiSearchResult, onClick: () -> Unit) {
+private fun ResultRow(item: FfiSearchResult, onClick: () -> Unit, onMenu: () -> Unit = {}) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -268,6 +288,7 @@ private fun ResultRow(item: FfiSearchResult, onClick: () -> Unit) {
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        TrackOverflowIcon(onClick = onMenu)
     }
 }
 

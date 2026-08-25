@@ -23,6 +23,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.teamshryne.mediyo.core.design.*
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
+import com.teamshryne.mediyo.domain.model.PlayOrigin
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -78,9 +79,9 @@ fun HomeScreen(
     val greeting = rememberGreeting()
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
 
-    fun open(r: FfiSearchResult, shelf: List<FfiSearchResult>) {
+    fun open(r: FfiSearchResult, shelf: List<FfiSearchResult>, title: String) {
         when {
-            r.videoId != null -> player.playFrom(shelf, r)
+            r.videoId != null -> player.playFromWithOrigin(shelf, r, PlayOrigin.HomeShelf(title))
             r.browseId != null && r.category.contains("Album", true) -> nav.navigate("album/${r.browseId}")
             r.browseId != null && r.category.contains("Artist", true) -> nav.navigate("artist/${r.browseId}")
             r.browseId != null && r.category.contains("Playlist", true) -> nav.navigate("playlist/${r.browseId}")
@@ -148,7 +149,7 @@ fun HomeScreen(
                                     MediaTile(
                                         title = r.title,
                                         artworkUrl = r.thumbnails.firstOrNull()?.url
-                                    ) { open(r, firstItems) }
+                                    ) { open(r, firstItems, "Quick picks") }
                                 }
                             }
                         }
@@ -169,7 +170,7 @@ fun HomeScreen(
                                         subtitle = r.artists.joinToString(),
                                         artworkUrl = r.thumbnails.firstOrNull()?.url,
                                         round = r.category.contains("Artist", true),
-                                        onClick = { open(r, c.items) }
+                                        onClick = { open(r, c.items, c.title) }
                                     )
                                 }
                             }

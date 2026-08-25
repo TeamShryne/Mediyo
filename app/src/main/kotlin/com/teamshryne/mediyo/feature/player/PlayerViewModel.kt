@@ -10,6 +10,7 @@ import com.teamshryne.mediyo.domain.model.PlayOrigin
 import com.teamshryne.mediyo.domain.model.Track
 import com.teamshryne.mediyo.domain.model.toDomainTrack
 import com.teamshryne.mediyo.domain.repository.HistoryRepository
+import com.teamshryne.mediyo.domain.repository.LikeRepository
 import com.teamshryne.mediyo.playback.PlaybackQueueManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -46,6 +47,7 @@ class PlayerViewModel @Inject constructor(
     private val resolver: NewPipeResolver,
     private val queueManager: PlaybackQueueManager,
     private val historyRepo: HistoryRepository,
+    private val likeRepo: LikeRepository,
     private val player: ExoPlayer,
     @ApplicationContext private val ctx: Context
 ) : ViewModel() {
@@ -211,6 +213,12 @@ class PlayerViewModel @Inject constructor(
     fun removeFromQueue(at: Int) { queueManager.removeAt(at) }
     fun moveQueue(from: Int, to: Int) { queueManager.move(from, to) }
     fun playAt(index: Int) { queueManager.setIndex(index); loadCurrent() }
+
+    fun currentTrack(): Track? = queueManager.currentState().current
+    suspend fun isCurrentLiked(): Boolean = currentTrack()?.videoId?.let { likeRepo.isLiked(it) } ?: false
+    fun toggleLike(track: Track) { viewModelScope.launch { try { likeRepo.toggle(track) } catch (_: Throwable) {} } }
+    fun toggleLikeCurrent() { currentTrack()?.let { toggleLike(it) } }
+    fun isLikedFlow(videoId: String) = likeRepo.isLikedFlow(videoId)
 
     fun queueEntries(): List<Track> = queueManager.currentState().entries
     fun queueOrigin(): PlayOrigin = queueManager.currentState().origin
