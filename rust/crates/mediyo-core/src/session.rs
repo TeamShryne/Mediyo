@@ -66,6 +66,10 @@ impl Session {
         &self.context
     }
 
+    pub fn set_visitor_data(&mut self, visitor_data: String) {
+        self.context.client.visitor_data = Some(visitor_data);
+    }
+
     /// Plain HTTP GET returning the response body as text
     /// (used for pages and player JS assets).
     pub fn get(&self, url: &str) -> Result<String> {
