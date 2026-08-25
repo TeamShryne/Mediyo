@@ -28,3 +28,4 @@ Mediyo/
   app/   (Compose app, jniLibs generated in CI)
   .github/workflows/android.yml
 ```
+
