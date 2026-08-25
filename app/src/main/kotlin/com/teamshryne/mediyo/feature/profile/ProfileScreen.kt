@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -11,20 +12,17 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -66,11 +64,9 @@ class ProfileVm @Inject constructor(
         viewModelScope.launch {
             try {
                 val a = auth.flow.first()
-                // Load visitorData via bridge (ensures platform-owned caching)
                 val vd = try { bridge.currentVisitorData() } catch (_: Throwable) { a.visitorData }
                 visitorData = vd
                 pageId = a.pageId.ifEmpty { null }
-
                 if (a.isLoggedIn) {
                     try {
                         val acc = bridge.account()
@@ -78,7 +74,6 @@ class ProfileVm @Inject constructor(
                         handle = acc.handle
                         photo = acc.photoUrl
                     } catch (e: Throwable) {
-                        // If account fetch fails, fallback to anonymous display but keep auth state
                         name = ""
                         error = e.message
                     }
@@ -130,60 +125,60 @@ fun ProfileScreen(nav: androidx.navigation.NavController? = null, vm: ProfileVm 
     val scope = rememberCoroutineScope()
     var showVisitorDialog by remember { mutableStateOf(false) }
 
+    BackHandler { nav?.popBackStack() }
     LaunchedEffect(Unit) { vm.load() }
 
     val dominant = rememberDominantColors(vm.photo)
-    val displayName = when {
-        isLoggedIn && vm.name.isNotBlank() -> vm.name
-        isLoggedIn -> "Account"
-        else -> "Anonymous user"
-    }
-    val displayHandle = when {
-        isLoggedIn -> vm.handle?.takeIf { it.isNotBlank() } ?: "Signed in"
-        else -> "Local visitor • Not signed in"
-    }
+    val displayName = if (isLoggedIn && vm.name.isNotBlank()) vm.name else "Anonymous user"
+    val displaySubtitle = if (isLoggedIn) vm.handle?.takeIf { it.isNotBlank() } ?: "Signed in" else "Local visitor"
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Account", style = MaterialTheme.typography.titleLarge) },
-                navigationIcon = {
-                    IconButton(onClick = { nav?.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-            )
-        },
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { padding ->
         when {
             vm.loading -> Box(Modifier.fillMaxSize().padding(padding), Alignment.Center) { CircularProgressIndicator() }
             vm.error != null && !isLoggedIn && vm.visitorData.isEmpty() -> ErrorState(vm.error ?: "Failed to load") { vm.load() }
             else -> LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(bottom = 32.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp)
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // ── Hero header ──
+                // ── Header with status bar handling ──
                 item {
-                    Box(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(immersiveBrush(dominant))
-                            .padding(bottom = 24.dp)
+                            .statusBarsPadding()
+                            .padding(bottom = 20.dp)
                     ) {
+                        // Top bar inside header
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(onClick = { nav?.popBackStack() }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
+                            }
+                            Spacer(Modifier.weight(1f))
+                            Text(
+                                "Account",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(Modifier.weight(1f))
+                            Spacer(Modifier.size(48.dp))
+                        }
+                        // Avatar + name
                         Column(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            // Avatar
                             Box(
-                                modifier = Modifier
-                                    .size(96.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                                modifier = Modifier.size(84.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHighest),
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (vm.photo != null && isLoggedIn) {
@@ -194,58 +189,33 @@ fun ProfileScreen(nav: androidx.navigation.NavController? = null, vm: ProfileVm 
                                         modifier = Modifier.fillMaxSize().clip(CircleShape)
                                     )
                                 } else {
-                                    Icon(
-                                        Icons.Filled.Person,
-                                        contentDescription = "Avatar",
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(48.dp)
-                                    )
+                                    Icon(Icons.Filled.Person, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(42.dp))
                                 }
                             }
-                            Spacer(Modifier.height(14.dp))
-                            Text(
-                                displayName,
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                textAlign = TextAlign.Center,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                displayHandle ?: "",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
+                            Spacer(Modifier.height(12.dp))
+                            Text(displayName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                            Spacer(Modifier.height(2.dp))
+                            Text(displaySubtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Spacer(Modifier.height(10.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                AssistChip(
-                                    onClick = {},
-                                    label = { Text(if (isLoggedIn) "Signed in" else "Anonymous") },
-                                    leadingIcon = {
-                                        Icon(
-                                            if (isLoggedIn) Icons.Filled.VerifiedUser else Icons.Filled.PersonOff,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    },
-                                    colors = AssistChipDefaults.assistChipColors(
-                                        containerColor = if (isLoggedIn) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh
+                            Surface(
+                                shape = CircleShape,
+                                color = if (isLoggedIn) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        if (isLoggedIn) Icons.Filled.VerifiedUser else Icons.Filled.PersonOff,
+                                        null,
+                                        modifier = Modifier.size(14.dp),
+                                        tint = if (isLoggedIn) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
-                                )
-                                if (isLoggedIn) {
-                                    AssistChip(
-                                        onClick = {},
-                                        label = { Text("YouTube Music") },
-                                        leadingIcon = { Icon(Icons.Filled.MusicNote, null, Modifier.size(16.dp)) }
-                                    )
-                                } else {
-                                    AssistChip(
-                                        onClick = { showVisitorDialog = true },
-                                        label = { Text("Local") },
-                                        leadingIcon = { Icon(Icons.Filled.PhoneAndroid, null, Modifier.size(16.dp)) }
+                                    Text(
+                                        if (isLoggedIn) "YouTube Music" else "Anonymous",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = if (isLoggedIn) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
@@ -253,186 +223,124 @@ fun ProfileScreen(nav: androidx.navigation.NavController? = null, vm: ProfileVm 
                     }
                 }
 
-                // ── Visitor Data (always visible) ──
+                // ── Visitor ──
                 item {
-                    SectionCard(
-                        icon = Icons.Filled.Fingerprint,
-                        title = "Visitor identity",
-                        subtitle = if (isLoggedIn) "Your signed-in visitor is derived from your Google account" else "Used for recommendations and pagination. Stored locally."
+                    Card(
+                        modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
                     ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            // VisitorData field
+                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Box(
+                                    modifier = Modifier.size(32.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+                                    contentAlignment = Alignment.Center
+                                ) { Icon(Icons.Filled.Fingerprint, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer) }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Visitor", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                                    Text("Powers recommendations & pagination", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceContainerHighest)
                             Surface(
-                                shape = RoundedCornerShape(14.dp),
+                                shape = RoundedCornerShape(12.dp),
                                 color = MaterialTheme.colorScheme.surfaceContainerHighest,
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(14.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            "Visitor data",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        Spacer(Modifier.height(4.dp))
-                                        Text(
-                                            vm.visitorData.ifEmpty { "— not generated yet —" },
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            maxLines = if (showVisitorDialog) 10 else 2,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                        if (vm.pageId != null) {
-                                            Spacer(Modifier.height(6.dp))
-                                            Text(
-                                                "Page ID: ${vm.pageId}",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
+                                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        vm.visitorData.ifEmpty { "Not generated" },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
+                                    )
                                     IconButton(onClick = {
                                         copyToClipboard(context, vm.visitorData)
-                                        scope.launch { snackbarHostState.showSnackbar("Visitor data copied") }
-                                    }) {
-                                        Icon(Icons.Filled.ContentCopy, contentDescription = "Copy", tint = MaterialTheme.colorScheme.primary)
-                                    }
+                                        scope.launch { snackbarHostState.showSnackbar("Copied") }
+                                    }) { Icon(Icons.Filled.ContentCopy, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary) }
                                 }
                             }
-
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                                 OutlinedButton(
                                     onClick = { showVisitorDialog = true },
                                     modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Icon(Icons.Filled.Visibility, null, Modifier.size(16.dp))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("View")
-                                }
+                                ) { Icon(Icons.Filled.Visibility, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text("View") }
                                 FilledTonalButton(
                                     onClick = { vm.rotateVisitor { scope.launch { snackbarHostState.showSnackbar("Visitor rotated") } } },
                                     enabled = !vm.rotating,
                                     modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
-                                    if (vm.rotating) {
-                                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                                    } else {
-                                        Icon(Icons.Filled.Refresh, null, Modifier.size(16.dp))
-                                    }
+                                    if (vm.rotating) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                                    else Icon(Icons.Filled.Refresh, null, Modifier.size(16.dp))
                                     Spacer(Modifier.width(6.dp))
                                     Text("Rotate")
                                 }
                             }
-                            Text(
-                                "Rotating creates a fresh visitor identity and saves it locally. Your recommendations and continuations will use the new identity. No server data is deleted.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            if (vm.pageId != null) Text("Page ID: ${vm.pageId}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
 
-                // ── Account actions ──
+                // ── Account ──
                 item {
-                    SectionCard(
-                        icon = Icons.Filled.AccountCircle,
-                        title = if (isLoggedIn) "Account" else "Sign in",
-                        subtitle = if (isLoggedIn) "Manage your YouTube Music account" else "Sign in to sync library, history and personal mixes"
+                    Card(
+                        modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
                     ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Box(
+                                    modifier = Modifier.size(32.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondaryContainer),
+                                    contentAlignment = Alignment.Center
+                                ) { Icon(Icons.Filled.AccountCircle, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer) }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(if (isLoggedIn) "Account" else "Sign in", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                                    Text(if (isLoggedIn) "YouTube Music account" else "Sync library & history", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceContainerHighest)
                             if (isLoggedIn) {
-                                ListItemCard(
-                                    icon = Icons.Filled.Person,
-                                    title = vm.name.ifEmpty { "Account" },
-                                    subtitle = vm.handle ?: "—",
-                                    onClick = {}
-                                )
-                                ListItemCard(
-                                    icon = Icons.Filled.Cookie,
-                                    title = "Cookies",
-                                    subtitle = if (authState.cookies.isNotEmpty()) "${authState.cookies.length} chars • SAPISID present" else "No cookies",
-                                    onClick = {}
-                                )
-                                FilledButtonWithIcon(
-                                    icon = Icons.AutoMirrored.Filled.Logout,
-                                    text = "Sign out",
-                                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                                    onClick = {
-                                        vm.clearAuth()
-                                        scope.launch { snackbarHostState.showSnackbar("Signed out") }
-                                    }
-                                )
-                            } else {
-                                Surface(
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(14.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                    ) {
-                                        Icon(Icons.Filled.Info, null, tint = MaterialTheme.colorScheme.primary)
-                                        Column {
-                                            Text("Anonymous mode", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                                            Text("You’re browsing as a local visitor. Sign in to sync your library.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainerHighest, modifier = Modifier.fillMaxWidth()) {
+                                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        Icon(Icons.Filled.Person, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(vm.name.ifEmpty { "Account" }, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                                            Text(vm.handle ?: "—", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
                                     }
                                 }
-                                FilledButtonWithIcon(
-                                    icon = Icons.Filled.Login,
-                                    text = "Sign in with YouTube Music",
+                                Button(
                                     onClick = {
-                                        scope.launch { snackbarHostState.showSnackbar("Sign-in coming soon — WebView auth in next update") }
-                                    }
-                                )
-                                OutlinedButton(
-                                    onClick = {
-                                        copyToClipboard(context, vm.visitorData)
-                                        scope.launch { snackbarHostState.showSnackbar("Visitor data copied — keep it to restore session") }
+                                        vm.clearAuth()
+                                        scope.launch { snackbarHostState.showSnackbar("Signed out") }
                                     },
                                     modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer)
+                                ) { Icon(Icons.AutoMirrored.Filled.Logout, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Sign out") }
+                            } else {
+                                Text("Browse as local visitor. Sign in to sync your library, history and mixes.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Button(
+                                    onClick = { scope.launch { snackbarHostState.showSnackbar("Sign-in coming soon") } },
+                                    modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Icon(Icons.Filled.ContentCopy, null, Modifier.size(16.dp))
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("Copy visitor data")
-                                }
+                                ) { Icon(Icons.Filled.Login, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Sign in") }
                             }
-                        }
-                    }
-                }
-
-                // ── App info ──
-                item {
-                    SectionCard(
-                        icon = Icons.Filled.Info,
-                        title = "About",
-                        subtitle = "How visitor identity works"
-                    ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            BulletText("Visitor data is a YouTube-generated ID that personalizes home, search and continuations.")
-                            BulletText("For anonymous users it’s created once via POST /visitor_id and saved in DataStore — tap Rotate to replace it.")
-                            BulletText("For signed-in users it comes from your Google cookies (SAPISID) and is managed by the platform, not the Rust library.")
-                            BulletText("Library is stateless: it never saves visitor data itself, platform (MediyoBridge) owns it.")
                         }
                     }
                 }
 
                 item {
                     Text(
-                        "Mediyo • Native Kotlin • mediyo-core (Rust) • NewPipe streams",
+                        "Visitor is created once via POST /visitor_id and saved locally. Rotate replaces it. Library is stateless — platform owns it.",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)
+                        modifier = Modifier.padding(horizontal = 16.dp)
                     )
                 }
             }
@@ -444,7 +352,7 @@ fun ProfileScreen(nav: androidx.navigation.NavController? = null, vm: ProfileVm 
                 title = { Text("Visitor data") },
                 text = {
                     Column {
-                        Text(vm.visitorData.ifEmpty { "No visitor data yet" }, style = MaterialTheme.typography.bodySmall)
+                        Text(vm.visitorData.ifEmpty { "No visitor data" }, style = MaterialTheme.typography.bodySmall)
                         if (vm.pageId != null) {
                             Spacer(Modifier.height(8.dp))
                             Text("Page ID: ${vm.pageId}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -460,87 +368,6 @@ fun ProfileScreen(nav: androidx.navigation.NavController? = null, vm: ProfileVm 
                 dismissButton = { TextButton(onClick = { showVisitorDialog = false }) { Text("Close") } }
             )
         }
-    }
-}
-
-@Composable
-private fun SectionCard(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Card(
-        modifier = Modifier.padding(horizontal = 20.dp).fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(
-                    modifier = Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(icon, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(18.dp))
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                }
-            }
-            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceContainerHighest)
-            content()
-        }
-    }
-}
-
-@Composable
-private fun ListItemCard(icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit = {}) {
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHighest,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Icon(icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            Column(modifier = Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        }
-    }
-}
-
-@Composable
-private fun FilledButtonWithIcon(
-    icon: ImageVector,
-    text: String,
-    onClick: () -> Unit,
-    containerColor: Color = MaterialTheme.colorScheme.primary,
-    contentColor: Color = MaterialTheme.colorScheme.onPrimary
-) {
-    Button(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = containerColor, contentColor = contentColor)
-    ) {
-        Icon(icon, null, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(8.dp))
-        Text(text)
-    }
-}
-
-@Composable
-private fun BulletText(text: String) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("•", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
-        Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

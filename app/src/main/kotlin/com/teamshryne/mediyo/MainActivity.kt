@@ -153,7 +153,7 @@ private fun AppShell() {
                 composable("podcast/{id}") { PodcastScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
                 composable("episodes/{id}") { EpisodesScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
                 composable("list/{id}") { GenericListScreen(it.arguments?.getString("id") ?: "", null, nav, playerVm) }
-                composable("profile") { ProfileScreen() }
+                composable("profile") { ProfileScreen(nav) }
             }
         }
 
