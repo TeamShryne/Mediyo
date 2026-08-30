@@ -1,9 +1,10 @@
 package com.teamshryne.mediyo.feature.sleeptimer
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Check
@@ -16,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.teamshryne.mediyo.data.sleeptimer.SleepMode
@@ -43,14 +45,32 @@ fun SleepTimerSheet(
 ) {
     var showCustom by remember { mutableStateOf(false) }
     var customMinutes by remember { mutableStateOf("30") }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scroll = rememberScrollState()
+    val focusManager = LocalFocusManager.current
+
+    // Keep expanded when custom opens
+    LaunchedEffect(showCustom) {
+        if (showCustom) {
+            try { sheetState.expand() } catch (_: Throwable) {}
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        windowInsets = WindowInsets.ime
     ) {
         Column(
-            Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp),
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(scroll)
+                .imePadding()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // header
@@ -144,7 +164,6 @@ fun SleepTimerSheet(
             // Presets
             Text("Timer", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             val presets = listOf(5, 10, 15, 30, 45, 60)
-            // 3 columns
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 for (row in presets.chunked(3)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -161,7 +180,6 @@ fun SleepTimerSheet(
                                 }
                             }
                         }
-                        // fill if incomplete row
                         if (row.size < 3) {
                             repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                         }
@@ -169,7 +187,7 @@ fun SleepTimerSheet(
                 }
             }
 
-            // Custom row
+            // Custom row — now anchored and IME-aware
             if (!showCustom) {
                 OutlinedButton(onClick = { showCustom = true }, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Filled.Timer, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Custom minutes")
@@ -190,10 +208,16 @@ fun SleepTimerSheet(
                         )
                         Button(onClick = {
                             val v = customMinutes.toIntOrNull() ?: 0
-                            if (v in 1..180) onSetTimer(v * 60 * 1000L)
+                            if (v in 1..180) {
+                                focusManager.clearFocus()
+                                onSetTimer(v * 60 * 1000L)
+                            }
                             showCustom = false
                         }, shape = CircleShape) { Text("Set") }
-                        TextButton(onClick = { showCustom = false }) { Text("Cancel") }
+                        TextButton(onClick = {
+                            focusManager.clearFocus()
+                            showCustom = false
+                        }) { Text("Cancel") }
                     }
                 }
                 Text("1–180 minutes", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp))

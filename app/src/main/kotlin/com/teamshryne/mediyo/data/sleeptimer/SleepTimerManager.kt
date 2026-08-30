@@ -55,6 +55,7 @@ class SleepTimerManager @Inject constructor(
 
     // keep original radio enabled state to restore
     private var savedRadioEnabled: Boolean? = null
+    @Volatile private var timeoutGuard = false
 
     companion object {
         const val ACTION_SLEEP_TIMEOUT = "com.teamshryne.mediyo.SLEEP_TIMEOUT"
@@ -90,32 +91,9 @@ class SleepTimerManager @Inject constructor(
                 }
             }
         }
-        // attach player listener for EOT/EOQ
-        player.addListener(object : androidx.media3.common.Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == androidx.media3.common.Player.STATE_ENDED) {
-                    val s = _state.value
-                    when (s.mode) {
-                        SleepMode.END_OF_TRACK -> {
-                            scope.launch { onTimeout() }
-                        }
-                        SleepMode.END_OF_QUEUE -> {
-                            // if last index, timeout; otherwise allow next but if we reach end wrap, timeout
-                            val qs = queueManager.currentState()
-                            val atLast = qs.index == qs.entries.lastIndex && qs.entries.isNotEmpty()
-                            // with radio disabled queue is finite; last track ended => sleep
-                            if (atLast) {
-                                scope.launch { onTimeout() }
-                            } else {
-                                // if not at last, let PlayerViewModel autoNext run, but we stay active
-                                // we will timeout when last eventually ends
-                            }
-                        }
-                        else -> {}
-                    }
-                }
-            }
-        })
+        // EOT/EOQ are handled exclusively by PlayerViewModel.shouldBlockAutoNext() to avoid
+        // race where manager clears state before ViewModel checks it (which made EOT/EOQ appear broken).
+        // Manager only owns TIMER ticker/alarm; no player listener needed for END modes.
     }
 
     // ── Public API ──
@@ -176,31 +154,41 @@ class SleepTimerManager @Inject constructor(
     }
 
     /**
-     * Called from ticker, alarm receiver, or END_OF_* listener.
-     * Pauses with optional fade.
+     * Called from ticker, alarm receiver, or END_OF_* listener (via ViewModel).
+     * Pauses with optional fade. Guarded against double-fire race between ticker/alarm/ViewModel.
      */
     suspend fun onTimeout() {
+        if (timeoutGuard) return
         val cur = _state.value
         if (!cur.isActive) return
-        // prevent double fire
-        _state.value = cur.copy(remainingMs = 0)
-        cancelAlarm()
-        tickerJob?.cancel()
-        // fade out if enabled and currently playing
+        timeoutGuard = true
         try {
-            if (cur.fadeOut && player.isPlaying) {
-                fadePause()
-            } else {
-                player.pause()
-                player.volume = 1f
+            // prevent double fire
+            _state.value = cur.copy(remainingMs = 0)
+            cancelAlarm()
+            tickerJob?.cancel()
+            // fade out if enabled and currently playing (for TIMER); for EOT/EOQ track already ended so just pause
+            try {
+                if (cur.fadeOut && player.isPlaying) {
+                    fadePause()
+                } else {
+                    player.pause()
+                    player.volume = 1f
+                }
+            } catch (_: Throwable) {
+                try { player.pause() } catch (_: Throwable) {}
             }
-        } catch (_: Throwable) {
-            try { player.pause() } catch (_: Throwable) {}
+            // clear state after pause
+            _state.value = SleepTimerState()
+            applyRadioBlock(false)
+            scope.launch { prefs.clear() }
+        } finally {
+            // allow next timer to fire; small delay to swallow duplicate STATE_ENDED events
+            scope.launch {
+                delay(500)
+                timeoutGuard = false
+            }
         }
-        // clear state after pause
-        _state.value = SleepTimerState()
-        applyRadioBlock(false)
-        scope.launch { prefs.clear() }
     }
 
     fun isBlockingRadio(): Boolean = _state.value.isActive
