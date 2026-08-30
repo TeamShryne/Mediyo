@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Comment
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Favorite
@@ -54,7 +55,7 @@ import com.teamshryne.mediyo.domain.model.thumbSized
 // Mini player — floating pill above the nav bar (Spotify style)
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
-fun MiniPlayer(state: PlayerState, onToggle: () -> Unit, onNext: () -> Unit, onExpand: () -> Unit) {
+fun MiniPlayer(state: PlayerState, onToggle: () -> Unit, onNext: () -> Unit, onExpand: () -> Unit, sleepBadge: String? = null) {
     if (state.title.isEmpty()) return
     Card(
         onClick = onExpand,
@@ -97,6 +98,16 @@ fun MiniPlayer(state: PlayerState, onToggle: () -> Unit, onNext: () -> Unit, onE
                     Icon(Icons.Filled.SkipNext, contentDescription = "Next", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
+            if (sleepBadge != null) {
+                Row(
+                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primaryContainer).padding(horizontal = 8.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(Icons.Filled.Bedtime, null, Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Text(sleepBadge, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
+            }
             LinearProgressIndicator(
                 progress = { state.progress },
                 trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
@@ -123,6 +134,7 @@ fun FullPlayer(
     onCollapse: () -> Unit,
     onShowQueue: () -> Unit = {},
     onShowComments: () -> Unit = {},
+    onShowSleepTimer: () -> Unit = {},
     playerVm: PlayerViewModel? = null
 ) {
     val dominant: DominantColors = rememberDominantColors(state.artwork)
@@ -177,9 +189,17 @@ fun FullPlayer(
             IconButton(onClick = onCollapse) {
                 Icon(Icons.Filled.ExpandMore, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(30.dp))
             }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
                 Text("PLAYING FROM", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.7f), letterSpacing = 1.5.sp)
                 Text(contextLabel, style = MaterialTheme.typography.labelLarge, color = Color.White, maxLines = 1)
+            }
+            // sleep timer quick access + overflow
+            val topSleep = playerVm?.sleepState?.collectAsState()?.value
+            val topActive = topSleep?.isActive == true
+            BadgedBox(badge = { if (topActive) Badge(containerColor = MaterialTheme.colorScheme.primary, modifier = Modifier.size(6.dp)) }) {
+                IconButton(onClick = onShowSleepTimer) {
+                    Icon(Icons.Filled.Bedtime, contentDescription = "Sleep timer", tint = if (topActive) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.85f))
+                }
             }
             IconButton(onClick = { showMenu = true }) {
                 Icon(Icons.Filled.MoreVert, contentDescription = "More options", tint = Color.White.copy(alpha = 0.85f))
@@ -252,11 +272,35 @@ fun FullPlayer(
             }
         }
 
-        // quick actions row: Queue / Comments / Add
+        // quick actions row: Queue / Comments / Add / Sleep
+        // collect sleep state for badge
+        val sleepState = playerVm?.sleepState?.collectAsState()?.value
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
             TextButton(onClick = onShowQueue) { Icon(Icons.Filled.QueueMusic, null, tint = Color.White.copy(0.85f)); Spacer(Modifier.width(6.dp)); Text("Queue", color = Color.White.copy(0.85f)) }
             TextButton(onClick = onShowComments) { Icon(Icons.Filled.Comment, null, tint = Color.White.copy(0.85f)); Spacer(Modifier.width(6.dp)); Text("Comments", color = Color.White.copy(0.85f)) }
             TextButton(onClick = { showAddSheet = true }) { Icon(Icons.Filled.PlaylistAdd, null, tint = Color.White.copy(0.85f)); Spacer(Modifier.width(6.dp)); Text("Add", color = Color.White.copy(0.85f)) }
+            // Sleep timer with active indicator
+            val sleepActive = sleepState?.isActive == true
+            BadgedBox(badge = {
+                if (sleepActive) Badge(containerColor = MaterialTheme.colorScheme.primary, modifier = Modifier.size(8.dp))
+            }) {
+                TextButton(onClick = onShowSleepTimer) {
+                    Icon(Icons.Filled.Bedtime, null, tint = if (sleepActive) MaterialTheme.colorScheme.primary else Color.White.copy(0.85f))
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        when {
+                            !sleepActive -> "Sleep"
+                            sleepState!!.mode.name == "TIMER" -> {
+                                val s = sleepState.remainingMs / 1000
+                                if (s >= 3600) "%d:%02d:%02d".format(s/3600, (s%3600)/60, s%60) else "%d:%02d".format(s/60, s%60)
+                            }
+                            sleepState.mode.name == "END_OF_TRACK" -> "EOT"
+                            else -> "EOQ"
+                        },
+                        color = if (sleepActive) MaterialTheme.colorScheme.primary else Color.White.copy(0.85f)
+                    )
+                }
+            }
         }
 
         Spacer(Modifier.height(4.dp))

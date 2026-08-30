@@ -193,6 +193,12 @@ class PlaybackQueueManager @Inject constructor(
         _state.value = _state.value.copy(isFetchingRadio = f)
     }
 
+    fun setRadioEnabled(enabled: Boolean) {
+        if (_state.value.isRadioEnabled == enabled) return
+        _state.value = _state.value.copy(isRadioEnabled = enabled, isFetchingRadio = false)
+        if (enabled) maybePrefetchRadio()
+    }
+
     // ── Always-Radio prefetch ───────────────────────────────────────────────
     private fun maybePrefetchRadio() {
         val s = _state.value

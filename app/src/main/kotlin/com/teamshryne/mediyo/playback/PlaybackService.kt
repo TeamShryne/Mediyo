@@ -26,6 +26,8 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.teamshryne.mediyo.MainActivity
 import com.teamshryne.mediyo.R
+import com.teamshryne.mediyo.data.sleeptimer.SleepMode
+import com.teamshryne.mediyo.data.sleeptimer.SleepTimerManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -55,12 +57,16 @@ class PlaybackService : MediaSessionService() {
 
     companion object {
         const val ACTION_TOGGLE_LIKE = "com.teamshryne.mediyo.session.TOGGLE_LIKE"
+        const val ACTION_CANCEL_SLEEP = "com.teamshryne.mediyo.session.CANCEL_SLEEP"
         const val NOTIFICATION_ID = 1001
         const val CHANNEL_ID = "mediyo_playback"
+        const val SLEEP_CHANNEL_ID = "mediyo_sleep_timer"
+        const val SLEEP_NOTIFICATION_ID = 1002
     }
 
     @Inject lateinit var player: ExoPlayer
     @Inject lateinit var hub: PlaybackSessionHub
+    @Inject lateinit var sleepTimerManager: SleepTimerManager
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var session: MediaSession? = null
@@ -95,6 +101,56 @@ class PlaybackService : MediaSessionService() {
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_ID, getString(R.string.music_player), NotificationManager.IMPORTANCE_LOW)
         )
+        nm.createNotificationChannel(
+            NotificationChannel(SLEEP_CHANNEL_ID, "Sleep timer", NotificationManager.IMPORTANCE_LOW).apply {
+                description = "Shows remaining sleep timer time"
+            }
+        )
+    }
+
+    private fun formatSleepRemaining(ms: Long): String {
+        if (ms <= 0) return "0:00"
+        val s = ms / 1000
+        val h = s / 3600
+        val m = (s % 3600) / 60
+        val sec = s % 60
+        return if (h > 0) "%d:%02d:%02d".format(h, m, sec) else "%d:%02d".format(m, sec)
+    }
+
+    private fun sleepNotificationTitle(mode: SleepMode, remainingMs: Long): Pair<String, String> = when (mode) {
+        SleepMode.TIMER -> "Sleep timer" to "${formatSleepRemaining(remainingMs)} remaining"
+        SleepMode.END_OF_TRACK -> "Sleep timer" to "After this track"
+        SleepMode.END_OF_QUEUE -> "Sleep timer" to "After queue ends"
+        SleepMode.OFF -> "Sleep timer" to ""
+    }
+
+    private fun buildSleepNotification(mode: SleepMode, remainingMs: Long): Notification {
+        val (title, text) = sleepNotificationTitle(mode, remainingMs)
+        val pending = PendingIntent.getActivity(
+            this, 0, Intent(this, MainActivity::class.java),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val cancelIntent = Intent(this, PlaybackService::class.java).apply { action = ACTION_CANCEL_SLEEP }
+        val cancelPi = PendingIntent.getService(this, 1, cancelIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        return NotificationCompat.Builder(this, SLEEP_CHANNEL_ID)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setSmallIcon(R.drawable.ic_notification_small)
+            .setContentIntent(pending)
+            .setOngoing(true)
+            .setSilent(true)
+            .addAction(R.drawable.ic_media_like, "Cancel", cancelPi)
+            .setProgress(0, 0, mode == SleepMode.TIMER && remainingMs > 0)
+            .build()
+    }
+
+    private fun showOrUpdateSleepNotification(mode: SleepMode, remainingMs: Long) {
+        if (mode == SleepMode.OFF) {
+            try { (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).cancel(SLEEP_NOTIFICATION_ID) } catch (_: Throwable) {}
+            return
+        }
+        val n = buildSleepNotification(mode, remainingMs)
+        try { (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(SLEEP_NOTIFICATION_ID, n) } catch (_: Throwable) {}
     }
 
     private fun createPlaceholderNotification(): Notification {
@@ -223,9 +279,29 @@ class PlaybackService : MediaSessionService() {
         scope.launch {
             hub.snapshot.map { it.liked }.distinctUntilChanged().collect { syncCustomLayout() }
         }
+
+        // Sleep timer → second ongoing notification with countdown
+        scope.launch {
+            sleepTimerManager.state.collect { s ->
+                showOrUpdateSleepNotification(s.mode, s.remainingMs)
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_CANCEL_SLEEP -> {
+                sleepTimerManager.cancel()
+                // also dismiss sleep notification immediately
+                try { (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).cancel(SLEEP_NOTIFICATION_ID) } catch (_: Throwable) {}
+                return START_STICKY
+            }
+            SleepTimerManager.ACTION_SLEEP_TIMEOUT -> {
+                // Fallback path if alarm delivers to service instead of receiver
+                scope.launch { try { sleepTimerManager.onTimeout() } catch (_: Throwable) {} }
+                return START_STICKY
+            }
+        }
         // Re-promote on every start — OEMs strictly enforce an early startForeground()
         // even when the service is already considered foreground.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -255,6 +331,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        try { (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).cancel(SLEEP_NOTIFICATION_ID) } catch (_: Throwable) {}
         scope.cancel()
         session?.release()
         session = null

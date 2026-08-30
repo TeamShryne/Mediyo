@@ -6,6 +6,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>
     <application
         android:name=".MediyoApp"
@@ -30,5 +31,7 @@
             android:name=".playback.PlaybackService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback"/>
+
+        <receiver android:name=".playback.SleepTimerReceiver" android:exported="false"/>
     </application>
 </manifest>

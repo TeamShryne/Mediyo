@@ -110,9 +110,11 @@ private fun AppShell() {
 
     val playerVm: PlayerViewModel = hiltViewModel()
     val playerState by playerVm.state.collectAsState()
+    val sleepState by playerVm.sleepState.collectAsState()
     var showFullPlayer by remember { mutableStateOf(false) }
     var showQueueOverlay by remember { mutableStateOf(false) }
     var showCommentsId by remember { mutableStateOf<String?>(null) }
+    var showSleepSheet by remember { mutableStateOf(false) }
     // Player collapse has priority over nav pop — both handlers, inner one wins
     BackHandler(enabled = showFullPlayer && !showQueueOverlay) { showFullPlayer = false }
 
@@ -135,11 +137,23 @@ private fun AppShell() {
             containerColor = MaterialTheme.colorScheme.background,
             bottomBar = {
                 Column {
+                    val sleepBadge = when {
+                        !sleepState.isActive -> null
+                        sleepState.mode.name == "TIMER" -> {
+                            val s = sleepState.remainingMs / 1000
+                            val txt = if (s >= 3600) "%d:%02d:%02d".format(s/3600, (s%3600)/60, s%60) else "%02d:%02d".format(s/60, s%60)
+                            "Sleep • $txt"
+                        }
+                        sleepState.mode.name == "END_OF_TRACK" -> "Sleep after track"
+                        sleepState.mode.name == "END_OF_QUEUE" -> "Sleep after queue"
+                        else -> null
+                    }
                     MiniPlayer(
                         state = playerState,
                         onToggle = playerVm::toggle,
                         onNext = playerVm::next,
-                        onExpand = { if (playerState.title.isNotEmpty()) showFullPlayer = true }
+                        onExpand = { if (playerState.title.isNotEmpty()) showFullPlayer = true },
+                        sleepBadge = sleepBadge
                     )
                     NavigationBar(
                         containerColor = Color.Transparent,
@@ -217,6 +231,7 @@ private fun AppShell() {
                 onCollapse = { showFullPlayer = false },
                 onShowQueue = { showQueueOverlay = true },
                 onShowComments = { playerState.videoId?.let { showCommentsId = it } },
+                onShowSleepTimer = { showSleepSheet = true },
                 playerVm = playerVm
             )
         }
@@ -235,12 +250,30 @@ private fun AppShell() {
             QueueScreen(
                 player = playerVm,
                 onClose = { showQueueOverlay = false },
-                onShowComments = { vid -> showCommentsId = vid }
+                onShowComments = { vid -> showCommentsId = vid },
+                onShowSleepTimer = { showSleepSheet = true }
             )
         }
 
         showCommentsId?.let { vid ->
             CommentsBottomSheet(videoId = vid, onDismiss = { showCommentsId = null })
+        }
+
+        if (showSleepSheet) {
+            com.teamshryne.mediyo.feature.sleeptimer.SleepTimerSheet(
+                state = sleepState,
+                onSetTimer = { ms -> playerVm.sleepState.value // trigger via manager directly through vm
+                    // use vm helpers via exposed manager: we call sleep manager via playerVm
+                    // add helpers in PlayerViewModel for convenience
+                    playerVm.setSleepTimer(ms)
+                    showSleepSheet = false
+                },
+                onSetEndOfTrack = { playerVm.setSleepEndOfTrack(); showSleepSheet = false },
+                onSetEndOfQueue = { playerVm.setSleepEndOfQueue(); showSleepSheet = false },
+                onCancel = { playerVm.cancelSleepTimer(); showSleepSheet = false },
+                onAddFive = { playerVm.extendSleepTimer() },
+                onDismiss = { showSleepSheet = false }
+            )
         }
     }
 }
