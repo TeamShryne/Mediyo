@@ -74,6 +74,7 @@ fun QueueScreen(
     player: PlayerViewModel? = null,
     onClose: () -> Unit = {},
     onShowComments: (String) -> Unit = {},
+    onShowSleepTimer: () -> Unit = {},
     vm: QueueVm = hiltViewModel()
 ) {
     val qs by vm.state.collectAsState()
@@ -115,6 +116,16 @@ fun QueueScreen(
                     IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                 },
                 actions = {
+                    // sleep timer quick entry — player is always provided from MainActivity
+                    val sleepQ = player?.sleepState?.collectAsState()?.value
+                    val sleepActiveQ = sleepQ?.isActive == true
+                    IconButton(onClick = onShowSleepTimer) {
+                        Icon(
+                            Icons.Filled.Bedtime,
+                            contentDescription = "Sleep timer",
+                            tint = if (sleepActiveQ) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     IconButton(onClick = { scope.launch { vm.setLock(!lockQueue) } }) {
                         Icon(
                             if (lockQueue) Icons.Filled.Lock else Icons.Filled.LockOpen,

@@ -10,6 +10,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.exoplayer.ExoPlayer
 import com.teamshryne.mediyo.data.playback.NewPipeResolver
+import com.teamshryne.mediyo.data.sleeptimer.SleepTimerManager
 import com.teamshryne.mediyo.domain.model.PlayOrigin
 import com.teamshryne.mediyo.domain.model.Track
 import com.teamshryne.mediyo.domain.model.bestThumbUrl
@@ -61,8 +62,11 @@ class PlayerViewModel @Inject constructor(
     private val likeRepo: LikeRepository,
     private val hub: PlaybackSessionHub,
     private val player: ExoPlayer,
+    private val sleepManager: SleepTimerManager,
     @ApplicationContext private val ctx: Context
 ) : ViewModel() {
+
+    val sleepState = sleepManager.state
 
     private val _state = MutableStateFlow(PlayerState())
     val state: StateFlow<PlayerState> = _state
@@ -176,11 +180,21 @@ class PlayerViewModel @Inject constructor(
         player.addListener(object : androidx.media3.common.Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == androidx.media3.common.Player.STATE_ENDED) {
+                    // Sleep timer END_OF_TRACK / END_OF_QUEUE: block auto-next and pause instead
+                    if (sleepManager.shouldBlockAutoNext()) {
+                        viewModelScope.launch { sleepManager.onTimeout() }
+                        return
+                    }
                     val endedVid = _state.value.videoId
                     viewModelScope.launch {
                         delay(200)
                         // user already skipped away from the track that just ended → don't double-advance
                         if (endedVid != null && _state.value.videoId != endedVid) return@launch
+                        // re-check sleep after delay (timer may have fired)
+                        if (sleepManager.shouldBlockAutoNext()) {
+                            sleepManager.onTimeout()
+                            return@launch
+                        }
                         next(immediate = true)
                     }
                 }
@@ -397,6 +411,13 @@ class PlayerViewModel @Inject constructor(
         val dur = player.duration
         if (dur > 0) player.seekTo((dur * fraction.coerceIn(0f, 1f)).toLong())
     }
+
+    // ── Sleep timer delegation ────────────────────────────────────────
+    fun setSleepTimer(durationMs: Long) = sleepManager.setTimer(durationMs)
+    fun setSleepEndOfTrack() = sleepManager.setEndOfTrack()
+    fun setSleepEndOfQueue() = sleepManager.setEndOfQueue()
+    fun cancelSleepTimer() = sleepManager.cancel()
+    fun extendSleepTimer() = sleepManager.addFiveMinutes()
 
     override fun onCleared() {
         resolveJob?.cancel(); tickerJob?.cancel()
