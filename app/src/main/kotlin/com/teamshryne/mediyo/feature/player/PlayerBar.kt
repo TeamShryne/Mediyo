@@ -193,14 +193,6 @@ fun FullPlayer(
                 Text("PLAYING FROM", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.7f), letterSpacing = 1.5.sp)
                 Text(contextLabel, style = MaterialTheme.typography.labelLarge, color = Color.White, maxLines = 1)
             }
-            // sleep timer quick access + overflow
-            val topSleep = playerVm?.sleepState?.collectAsState()?.value
-            val topActive = topSleep?.isActive == true
-            BadgedBox(badge = { if (topActive) Badge(containerColor = MaterialTheme.colorScheme.primary, modifier = Modifier.size(6.dp)) }) {
-                IconButton(onClick = onShowSleepTimer) {
-                    Icon(Icons.Filled.Bedtime, contentDescription = "Sleep timer", tint = if (topActive) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.85f))
-                }
-            }
             IconButton(onClick = { showMenu = true }) {
                 Icon(Icons.Filled.MoreVert, contentDescription = "More options", tint = Color.White.copy(alpha = 0.85f))
             }
@@ -272,35 +264,11 @@ fun FullPlayer(
             }
         }
 
-        // quick actions row: Queue / Comments / Add / Sleep
-        // collect sleep state for badge
-        val sleepState = playerVm?.sleepState?.collectAsState()?.value
+        // quick actions row: Queue / Comments / Add (sleep moved to bottom)
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
             TextButton(onClick = onShowQueue) { Icon(Icons.Filled.QueueMusic, null, tint = Color.White.copy(0.85f)); Spacer(Modifier.width(6.dp)); Text("Queue", color = Color.White.copy(0.85f)) }
             TextButton(onClick = onShowComments) { Icon(Icons.Filled.Comment, null, tint = Color.White.copy(0.85f)); Spacer(Modifier.width(6.dp)); Text("Comments", color = Color.White.copy(0.85f)) }
             TextButton(onClick = { showAddSheet = true }) { Icon(Icons.Filled.PlaylistAdd, null, tint = Color.White.copy(0.85f)); Spacer(Modifier.width(6.dp)); Text("Add", color = Color.White.copy(0.85f)) }
-            // Sleep timer with active indicator
-            val sleepActive = sleepState?.isActive == true
-            BadgedBox(badge = {
-                if (sleepActive) Badge(containerColor = MaterialTheme.colorScheme.primary, modifier = Modifier.size(8.dp))
-            }) {
-                TextButton(onClick = onShowSleepTimer) {
-                    Icon(Icons.Filled.Bedtime, null, tint = if (sleepActive) MaterialTheme.colorScheme.primary else Color.White.copy(0.85f))
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        when {
-                            !sleepActive -> "Sleep"
-                            sleepState!!.mode.name == "TIMER" -> {
-                                val s = sleepState.remainingMs / 1000
-                                if (s >= 3600) "%d:%02d:%02d".format(s/3600, (s%3600)/60, s%60) else "%d:%02d".format(s/60, s%60)
-                            }
-                            sleepState.mode.name == "END_OF_TRACK" -> "EOT"
-                            else -> "EOQ"
-                        },
-                        color = if (sleepActive) MaterialTheme.colorScheme.primary else Color.White.copy(0.85f)
-                    )
-                }
-            }
         }
 
         Spacer(Modifier.height(4.dp))
@@ -377,26 +345,67 @@ fun FullPlayer(
 
         Spacer(Modifier.weight(0.5f))
 
-        // Bottom utilities
-        Row(
-            Modifier.fillMaxWidth().clickable(onClick = onShowQueue),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
+        // Bottom sleep timer — replaces old "2 of 50 • name • Autoplay"
+        val bottomSleep = playerVm?.sleepState?.collectAsState()?.value
+        val bottomActive = bottomSleep?.isActive == true
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = if (bottomActive) Color.White.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.08f),
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onShowSleepTimer)
         ) {
-            if (state.queueSize > 1) {
-                Text(
-                    "${state.queueIndex + 1} of ${state.queueSize} • ${contextLabel} • Autoplay",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.6f),
-                    maxLines = 1
-                )
-            } else {
-                Text(
-                    state.artist,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.45f),
-                    maxLines = 1
-                )
+            Row(
+                Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
+                    Icon(
+                        Icons.Filled.Bedtime,
+                        contentDescription = null,
+                        tint = if (bottomActive) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.85f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Column {
+                        Text(
+                            when {
+                                !bottomActive -> "Sleep timer"
+                                bottomSleep!!.mode.name == "TIMER" -> {
+                                    val s = bottomSleep.remainingMs / 1000
+                                    val txt = if (s >= 3600) "%d:%02d:%02d".format(s/3600, (s%3600)/60, s%60) else "%02d:%02d".format(s/60, s%60)
+                                    "$txt left"
+                                }
+                                bottomSleep.mode.name == "END_OF_TRACK" -> "After this track"
+                                else -> "After queue ends"
+                            },
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Color.White,
+                            maxLines = 1
+                        )
+                        if (bottomActive) {
+                            Text(
+                                "Radio paused • tap to manage",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.65f),
+                                maxLines = 1
+                            )
+                        } else {
+                            Text(
+                                "Tap to set 5–60 min, EOT or EOQ",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.55f),
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+                if (bottomActive) {
+                    // quick cancel without opening sheet
+                    TextButton(onClick = { playerVm?.cancelSleepTimer() }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)) {
+                        Text("Cancel", color = Color.White, style = MaterialTheme.typography.labelMedium)
+                    }
+                } else {
+                    Icon(Icons.Filled.ExpandMore, contentDescription = null, tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
+                }
             }
         }
         }
