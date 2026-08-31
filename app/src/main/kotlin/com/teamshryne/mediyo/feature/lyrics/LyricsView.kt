@@ -425,11 +425,13 @@ private fun MetrolistLine(
     }
 
     // no size pop — keep uniform size, only alpha/word-glow animates (per user request)
+    val isBg = line.words.any { it.isBackground }
+    val baseFontSize = if (isBg) 19.sp else 22.sp
     val style = TextStyle(
-        fontSize = if (line.words.any { it.isBackground }) 19.sp else 22.sp,
+        fontSize = baseFontSize,
         fontWeight = FontWeight.Bold,
-        fontStyle = if (line.words.any { it.isBackground }) FontStyle.Italic else FontStyle.Normal,
-        lineHeight = (animatedFontSize * 1.28f).sp,
+        fontStyle = if (isBg) FontStyle.Italic else FontStyle.Normal,
+        lineHeight = (baseFontSize.value * 1.28f).sp,
         letterSpacing = (-0.4).sp,
         textAlign = TextAlign.Center,
         color = Color.White,
