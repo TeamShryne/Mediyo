@@ -1,41 +1,46 @@
 package com.teamshryne.mediyo.feature.settings
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.ViewModel
+import androidx.navigation.NavController
 import com.teamshryne.mediyo.core.design.SectionHeader
-import com.teamshryne.mediyo.data.cache.CacheRepository
-import com.teamshryne.mediyo.data.cache.CachePrefs
-import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.launch
-import javax.inject.Inject
 
-@HiltViewModel
-class SettingsVm @Inject constructor(private val repo: CacheRepository) : ViewModel() {
-    val prefs = repo.prefs
-    suspend fun stats() = repo.stats()
-    suspend fun clear(type: String?) { if (type == null) repo.clearAll() else repo.clearType(type) }
-    suspend fun setPrefs(p: CachePrefs) = repo.setPrefs(p)
-}
+/**
+ * Data-driven hub. Add a new page by adding an entry to [hubEntries] — hub needs no other edits.
+ * Each entry's [SettingsEntry.route] must be registered in MainActivity NavHost.
+ */
+private val hubEntries = listOf(
+    SettingsEntry(
+        id = "lyrics",
+        title = "Lyrics",
+        subtitle = "Provider priority • LRCLIB + Apple TTML",
+        icon = Icons.Filled.MusicNote,
+        route = "settings/lyrics"
+    ),
+)
 
 @Composable
-fun SettingsScreen(vm: SettingsVm = hiltViewModel()) {
-    val prefs by vm.prefs.collectAsState(initial = CachePrefs())
-    var stats by remember { mutableStateOf("—") }
-    val scope = rememberCoroutineScope()
-    LaunchedEffect(Unit) { stats = vm.stats().let { "${it.totalBytes / 1024} KB" } }
-
+fun SettingsScreen(
+    nav: NavController? = null,
+) {
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(22.dp)
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         item {
             Text(
@@ -45,66 +50,54 @@ fun SettingsScreen(vm: SettingsVm = hiltViewModel()) {
                 modifier = Modifier.padding(horizontal = 20.dp)
             )
         }
-        item { SectionHeader("Storage & cache") }
         item {
-            Card(
-                Modifier.padding(horizontal = 20.dp).fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
-            ) {
-                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Cache used", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-                        Text(stats, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    LinearProgressIndicator(
-                        progress = { 0.4f },
-                        modifier = Modifier.fillMaxWidth().height(6.dp),
-                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                    )
-                    Text(
-                        "Limit ${prefs.maxBytes / 1024 / 1024} MB",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilledTonalButton(
-                            onClick = { scope.launch { vm.clear(null); stats = vm.stats().let { "${it.totalBytes / 1024} KB" } } },
-                            shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier.weight(1f)
-                        ) { Text("Clear all") }
-                        OutlinedButton(
-                            onClick = { scope.launch { vm.clear("search") } },
-                            shape = RoundedCornerShape(14.dp)
-                        ) { Text("Search") }
-                        OutlinedButton(
-                            onClick = { scope.launch { vm.clear("browse") } },
-                            shape = RoundedCornerShape(14.dp)
-                        ) { Text("Browse") }
-                    }
-                }
-            }
+            Text(
+                "Tweak how Mediyo looks and behaves",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 20.dp)
+            )
         }
-        item { SectionHeader("Network") }
-        item {
-            Card(
-                Modifier.padding(horizontal = 20.dp).fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+
+        item { SectionHeader("General") }
+
+        items(hubEntries, key = { it.id }) { entry ->
+            SettingsHubRow(entry = entry, onClick = { nav?.navigate(entry.route) })
+        }
+
+        // Future pages: append to hubEntries and add composable(route) in MainActivity.
+    }
+}
+
+@Composable
+private fun SettingsHubRow(entry: SettingsEntry, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .padding(horizontal = 16.dp)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp).fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHighest
             ) {
-                Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = prefs.wifiOnly,
-                        onClick = { scope.launch { vm.setPrefs(prefs.copy(wifiOnly = !prefs.wifiOnly)) } },
-                        label = { Text("Wi-Fi only") }
-                    )
-                    FilterChip(
-                        selected = prefs.offlineOnly,
-                        onClick = { scope.launch { vm.setPrefs(prefs.copy(offlineOnly = !prefs.offlineOnly)) } },
-                        label = { Text("Offline") }
-                    )
+                Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
+                    Icon(entry.icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
+            Column(Modifier.weight(1f)) {
+                Text(entry.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(entry.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
         }
     }
 }

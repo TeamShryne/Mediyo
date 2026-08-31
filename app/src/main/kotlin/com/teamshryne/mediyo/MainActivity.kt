@@ -68,6 +68,7 @@ import com.teamshryne.mediyo.feature.podcast.PodcastScreen
 import com.teamshryne.mediyo.feature.profile.ProfileScreen
 import com.teamshryne.mediyo.feature.queue.QueueScreen
 import com.teamshryne.mediyo.feature.search.SearchScreen
+import com.teamshryne.mediyo.feature.settings.LyricsSettingsScreen
 import com.teamshryne.mediyo.feature.settings.SettingsScreen
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -192,7 +193,8 @@ private fun AppShell() {
                 composable(Tab.Home.route) { HomeScreen(nav, playerVm) }
                 composable(Tab.Search.route) { SearchScreen(nav, playerVm) }
                 composable(Tab.Library.route) { LibraryScreen(nav, playerVm) }
-                composable(Tab.Settings.route) { SettingsScreen() }
+                composable(Tab.Settings.route) { SettingsScreen(nav) }
+                composable("settings/lyrics") { LyricsSettingsScreen(nav) }
                 composable("playlist/{id}") { PlaylistScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
                 composable("album/{id}") { AlbumScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
                 composable("artist/{id}") { ArtistScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
