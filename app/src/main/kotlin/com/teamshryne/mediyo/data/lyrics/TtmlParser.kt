@@ -122,15 +122,22 @@ object TtmlParser {
                 XmlPullParser.TEXT -> {
                     val text = parser.text ?: ""
                     if (pLine != null && text.isNotEmpty()) {
-                        // assign to topmost pending word if it exists and hasn't been filled
                         val top = spanStack.lastOrNull()
                         if (top?.word != null && top.word.text == null) {
                             top.word.text = text
+                        } else if (text.trim().isEmpty()) {
+                            // inter-span whitespace (e.g. "<span>Be</span> <span>gging</span>" has " " here)
+                            // mark previous syllable as having trailing space so rendering keeps word gap
+                            // but syllables within same lexical word have no whitespace -> keep false
+                            if (pLine.pendingWords.isNotEmpty()) {
+                                val last = pLine.pendingWords.last()
+                                if (!last.hasTrailingSpace) {
+                                    pLine.pendingWords[pLine.pendingWords.lastIndex] =
+                                        last.copy(hasTrailingSpace = true)
+                                }
+                            }
                         } else if (top?.isWrapper == true) {
-                            // text directly inside wrapper without inner span – ignore (whitespace)
-                        } else if (spanStack.isEmpty() || spanStack.last().word == null) {
-                            // stray text inside <p> but outside span – treat as word with p timing
-                            // Rare, but handle as single word
+                            // text directly inside wrapper without inner span – ignore
                         }
                     }
                 }
