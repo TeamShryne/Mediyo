@@ -16,6 +16,7 @@ import com.teamshryne.mediyo.data.local.HistoryDao
 import com.teamshryne.mediyo.data.local.LikedTrackDao
 import com.teamshryne.mediyo.data.local.LocalPlaylistDao
 import com.teamshryne.mediyo.data.local.LocalPlaylistEntryDao
+import com.teamshryne.mediyo.data.lyrics.BetterLyricsApi
 import com.teamshryne.mediyo.data.playback.NewPipeResolver
 import dagger.Module
 import dagger.Provides
@@ -40,6 +41,8 @@ object AppModule {
     @Provides fun provideLocalPlaylistEntryDao(db: MediyoDb): LocalPlaylistEntryDao = db.localPlaylistEntryDao()
     @Provides fun provideLikedDao(db: MediyoDb): LikedTrackDao = db.likedDao()
     @Provides fun provideHistoryDao(db: MediyoDb): HistoryDao = db.historyDao()
+
+    @Provides @Singleton fun provideBetterLyricsApi(): BetterLyricsApi = BetterLyricsApi()
 
     @OptIn(UnstableApi::class)
     @Provides

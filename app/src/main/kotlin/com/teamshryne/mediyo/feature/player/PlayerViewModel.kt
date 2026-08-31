@@ -412,6 +412,11 @@ class PlayerViewModel @Inject constructor(
         if (dur > 0) player.seekTo((dur * fraction.coerceIn(0f, 1f)).toLong())
     }
 
+    fun seekToMs(positionMs: Long) {
+        val dur = player.duration
+        if (dur > 0) player.seekTo(positionMs.coerceIn(0L, dur)) else player.seekTo(positionMs.coerceAtLeast(0L))
+    }
+
     // ── Sleep timer delegation ────────────────────────────────────────
     fun setSleepTimer(durationMs: Long) = sleepManager.setTimer(durationMs)
     fun setSleepEndOfTrack() = sleepManager.setEndOfTrack()
