@@ -11,6 +11,7 @@ data class LyricWord(
     val endMs: Long,
     val isBackground: Boolean = false,
     val agentId: String? = null,
+    val hasTrailingSpace: Boolean = false,
 )
 
 data class LyricLine(
@@ -22,7 +23,12 @@ data class LyricLine(
     val isBackground: Boolean = false,
     val songPart: String? = null,
 ) {
-    val text: String get() = words.joinToString("") { it.text }.trim()
+    val text: String get() = buildString {
+        for ((i, w) in words.withIndex()) {
+            append(w.text)
+            if (w.hasTrailingSpace && i != words.lastIndex) append(' ')
+        }
+    }.trim()
     val durationMs: Long get() = (endMs - beginMs).coerceAtLeast(0)
 }
 

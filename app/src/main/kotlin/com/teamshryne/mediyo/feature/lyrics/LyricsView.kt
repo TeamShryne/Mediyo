@@ -410,17 +410,16 @@ private fun MetrolistLine(
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
 
-    // mainText with single spaces — fixes “no spaces” bug (TTML inter-span spaces lost)
-    val mainText = remember(line) { line.words.joinToString(" ") { it.text.trim() }.trim() }
-
-    // words for mapping — trimmed text, keep original timing, mark hasTrailingSpace except last
+    // mainText with syllable-accurate spaces — uses hasTrailingSpace from parser (no gap for Be+gging)
+    val mainText = remember(line) { line.text }
+    // words for mapping — use parser's hasTrailingSpace so Be+gging stays together without gap
     val wordsForCanvas = remember(line) {
-        line.words.mapIndexed { idx, w ->
+        line.words.map { w ->
             Triple(
-                w.text.trim(),
+                w.text,
                 w.beginMs,
                 w.endMs
-            ) to (idx < line.words.lastIndex)
+            ) to w.hasTrailingSpace
         }
     }
 
