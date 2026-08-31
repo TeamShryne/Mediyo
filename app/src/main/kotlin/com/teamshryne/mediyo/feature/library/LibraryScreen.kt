@@ -24,13 +24,11 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.teamshryne.mediyo.data.auth.AuthRepository
 import com.teamshryne.mediyo.data.local.LocalPlaylistEntity
 import com.teamshryne.mediyo.domain.repository.HistoryRepository
 import com.teamshryne.mediyo.domain.repository.LikeRepository
 import com.teamshryne.mediyo.domain.repository.PlaylistRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -38,7 +36,6 @@ import javax.inject.Inject
 
 @HiltViewModel
 class LibraryVm @Inject constructor(
-    val auth: AuthRepository,
     private val playlistRepo: PlaylistRepository,
     likeRepo: LikeRepository,
     historyRepo: HistoryRepository
@@ -68,11 +65,9 @@ fun LibraryScreen(
     player: com.teamshryne.mediyo.feature.player.PlayerViewModel? = null,
     vm: LibraryVm = hiltViewModel()
 ) {
-    val auth by vm.auth.flow.collectAsState(initial = com.teamshryne.mediyo.data.auth.AuthState())
     val playlists by vm.playlists.collectAsState()
     val likedCount by vm.likedCount.collectAsState()
     val historyCount by vm.historyCount.collectAsState()
-    var showLoginNote by remember { mutableStateOf(false) }
 
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -84,23 +79,6 @@ fun LibraryScreen(
                 Text("Your Library", style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.onSurface)
                 FilledTonalButton(onClick = { vm.showCreateDialog = true }, shape = CircleShape, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)) {
                     Icon(Icons.Filled.Add, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text("New")
-                }
-            }
-        }
-
-        if (!auth.isLoggedIn) {
-            item {
-                Card(
-                    modifier = Modifier.padding(horizontal = 20.dp).fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
-                ) {
-                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Sync your music", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
-                        Text("Sign in to see your playlists, likes and listening history everywhere.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Button(onClick = { showLoginNote = true }, shape = CircleShape, contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp), modifier = Modifier.align(Alignment.Start)) { Text("Sign in with YouTube") }
-                        if (showLoginNote) Text("Sign-in is being set up — hang tight.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                    }
                 }
             }
         }
