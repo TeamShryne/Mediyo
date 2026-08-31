@@ -41,14 +41,14 @@ import javax.inject.Inject
 /**
  * Owns the app's MediaSession around the shared singleton [ExoPlayer].
  *
- * Follows the proven Media3 pattern (Innertune / Metrolist): go foreground
- * immediately in [onCreate] / [onStartCommand] with a placeholder notification
- * so the 5–10s ANR window after [android.content.Context.startForegroundService]
- * is never missed, even when the stream URL resolve takes a long time. The real
- * media notification (artwork, title, progress, like/shuffle/repeat) replaces
- * the placeholder once playback starts — exactly how YT Music / Spotify behave.
+ * Goes foreground immediately in [onCreate] / [onStartCommand] with a
+ * placeholder notification so the ANR window after
+ * [android.content.Context.startForegroundService] is never missed, even when
+ * the stream URL resolve takes a long time. The real media notification
+ * (artwork, title, progress, like/shuffle/repeat) replaces the placeholder
+ * once playback starts.
  *
- * - Android 13+: system media card + our custom Like/Shuffle/Repeat buttons
+ * - Android 13+: system media card + custom Like/Shuffle/Repeat buttons
  * - Pre-13: [DefaultMediaNotificationProvider] builds from custom layout
  */
 @OptIn(UnstableApi::class)
@@ -94,7 +94,7 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
-    // ── Foreground plumbing (Metrolist-proven) ──────────────────────────────
+    // ── Foreground plumbing ─────────────────────────────────────────────
 
     private fun ensureForegroundChannelExists() {
         val nm = getSystemService(NotificationManager::class.java) ?: return

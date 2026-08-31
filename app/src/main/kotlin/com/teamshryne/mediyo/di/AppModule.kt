@@ -53,10 +53,9 @@ object AppModule {
         @ApplicationContext ctx: Context,
         resolver: NewPipeResolver
     ): ExoPlayer {
-        // Like Metrolist/Innertune: the queue lives in ExoPlayer as MediaItems
-        // with placeholder URIs (mediyo://videoId). The actual googlevideo URL is
-        // resolved lazily on the loader thread when ExoPlayer needs the bytes, so
-        // the notification never flickers — new title/artwork appears instantly.
+        // Queue lives in ExoPlayer as MediaItems with placeholder URIs (mediyo://videoId).
+        // The actual stream URL is resolved lazily on the loader thread when ExoPlayer
+        // needs the bytes, so the notification updates instantly without clearing.
         val upstreamFactory = DefaultDataSource.Factory(ctx)
         val resolvingFactory = ResolvingDataSource.Factory(upstreamFactory) { dataSpec ->
             val videoId = dataSpec.key?.takeIf { it.isNotBlank() } ?: run {
@@ -75,9 +74,8 @@ object AppModule {
             dataSpec.withUri(Uri.parse(url))
         }
         val mediaSourceFactory = DefaultMediaSourceFactory(resolvingFactory)
-        // Audio focus + noisy handling exactly like Metrolist/Innertune — music
-        // pauses for calls/other media and resumes afterwards, and stops when
-        // headphones are unplugged.
+        // Audio focus + noisy handling — pauses for calls/other media and resumes
+        // afterwards, and stops when headphones are unplugged.
         return ExoPlayer.Builder(ctx)
             .setMediaSourceFactory(mediaSourceFactory)
             .setHandleAudioBecomingNoisy(true)
@@ -87,7 +85,7 @@ object AppModule {
                     .setUsage(C.USAGE_MEDIA)
                     .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
                     .build(),
-                true // handleAudioFocus — Metrolist uses false + manual focus, but ExoPlayer's auto handling is enough for the requested behaviour
+                true // handleAudioFocus — ExoPlayer's auto handling covers the required behaviour
             )
             .build()
     }

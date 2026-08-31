@@ -213,14 +213,21 @@ class PlayerViewModel @Inject constructor(
     private fun loadCurrent() {
         val cur = queueManager.currentState().current ?: return
         val vid = cur.videoId ?: return
-        // With the placeholder foreground in PlaybackService, starting early is
-        // safe and shows the notification instantly (like YT Music).
+        // Ensure service is foreground before swapping track so the notification
+        // can be updated without an intermediate empty state.
         ensurePlaybackService()
         resolveJob?.cancel()
-        resolving = true
-        // stop current playback right away so the old stream stops downloading/playing
-        // while we resolve (also resets position, keeping previous() navigation correct)
-        try { player.stop(); player.clearMediaItems() } catch (_: Throwable) {}
+        pendingLoadJob?.cancel()
+        pendingLoadJob = null
+
+        val metadata = MediaMetadata.Builder()
+            .setTitle(cur.title)
+            .setArtist(cur.artists.joinToString(", "))
+            .setArtworkUri(cur.artworkUrl?.let(Uri::parse))
+            .build()
+        val placeholderUri = Uri.parse("mediyo://$vid")
+        val mediaItem = MediaItem.Builder().setUri(placeholderUri).setMediaId(vid).setMediaMetadata(metadata).build()
+
         _state.value = _state.value.copy(
             videoId = vid,
             title = cur.title,
@@ -235,34 +242,23 @@ class PlayerViewModel @Inject constructor(
             queueIndex = queueManager.currentState().index,
             originLabel = queueManager.currentState().origin.label()
         )
-        resolveJob = viewModelScope.launch {
-            try {
-                // Like Metrolist: push new metadata instantly with a placeholder URI.
-                // The real googlevideo URL is resolved lazily by ResolvingDataSource on
-                // ExoPlayer's loader thread, so rapid next/prev never clears the
-                // notification — it just swaps metadata and rebuffers.
-                if (queueManager.currentState().current?.videoId != vid) return@launch
-                val metadata = MediaMetadata.Builder()
-                    .setTitle(cur.title)
-                    .setArtist(cur.artists.joinToString(", "))
-                    .setArtworkUri(cur.artworkUrl?.let(Uri::parse))
-                    .build()
-                val placeholderUri = Uri.parse("mediyo://$vid")
-                try {
-                    player.setMediaItem(
-                        MediaItem.Builder().setUri(placeholderUri).setMediaId(vid).setMediaMetadata(metadata).build()
-                    )
-                    player.prepare()
-                    player.play()
-                    _state.value = _state.value.copy(isPlaying = true, isBuffering = false)
-                    maybeRecordHistory(cur)
-                    prefetchNextForPlayback()
-                } catch (_: Throwable) {
-                    _state.value = _state.value.copy(isBuffering = false)
-                }
-            } finally {
-                resolving = false
-            }
+        resolving = true
+        try {
+            if (queueManager.currentState().current?.videoId != vid) return
+            // Atomic replacement — setMediaItem replaces the previous item without
+            // clearing the timeline to empty, so the media notification stays
+            // attached while the new source buffers. Stream URL is resolved lazily
+            // by ResolvingDataSource on the loader thread.
+            player.setMediaItem(mediaItem)
+            player.prepare()
+            player.play()
+            _state.value = _state.value.copy(isPlaying = true, isBuffering = false)
+            maybeRecordHistory(cur)
+            prefetchNextForPlayback()
+        } catch (_: Throwable) {
+            _state.value = _state.value.copy(isBuffering = false)
+        } finally {
+            resolving = false
         }
     }
 
