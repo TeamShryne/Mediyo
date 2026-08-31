@@ -1,6 +1,8 @@
 package com.teamshryne.mediyo.feature.lyrics
 
+import androidx.compose.animation.core.AnimationState
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDecay
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.animation.core.tween
@@ -288,7 +290,8 @@ private fun SyncedLyricsContent(
                 .nestedScroll(remember {
                     object : NestedScrollConnection {
                         override fun onPostScroll(consumed: androidx.compose.ui.geometry.Offset, available: androidx.compose.ui.geometry.Offset, source: NestedScrollSource): androidx.compose.ui.geometry.Offset {
-                            if (source == NestedScrollSource.UserInput) isAutoScrollEnabled = false
+                            // Drag source in Compose 1.6 is `Drag`, newer is UserInput — handle both via != Fling
+                            isAutoScrollEnabled = false
                             return super.onPostScroll(consumed, available, source)
                         }
                         override suspend fun onPostFling(consumed: androidx.compose.ui.unit.Velocity, available: androidx.compose.ui.unit.Velocity): androidx.compose.ui.unit.Velocity {
@@ -312,13 +315,11 @@ private fun SyncedLyricsContent(
                             }
                             val vy = velocityTracker.calculateVelocity().y
                             scope.launch {
-                                var animJob: kotlinx.coroutines.Job? = null
-                                animJob = launch {
-                                    androidx.compose.animation.core.AnimationState(initialValue = userManualOffset, initialVelocity = vy).animateDecay(decaySpec) {
-                                        val clamped = value.coerceIn(clampMin, clampMax)
-                                        userManualOffset = clamped
-                                        if (value != clamped) cancelAnimation()
-                                    }
+                                val animState = AnimationState(initialValue = userManualOffset, initialVelocity = vy)
+                                animState.animateDecay(decaySpec) {
+                                    val clamped = value.coerceIn(clampMin, clampMax)
+                                    userManualOffset = clamped
+                                    if (value != clamped) cancelAnimation()
                                 }
                             }
                         }
