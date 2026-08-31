@@ -52,7 +52,7 @@ object TtmlParser {
         while (event != XmlPullParser.END_DOCUMENT) {
             when (event) {
                 XmlPullParser.START_TAG -> {
-                    val name = parser.localName ?: parser.name
+                    val name = parser.name
                     when (name) {
                         TAG_TT -> {
                             language = parser.getAttributeValue(null, "lang")
@@ -135,7 +135,7 @@ object TtmlParser {
                     }
                 }
                 XmlPullParser.END_TAG -> {
-                    val name = parser.localName ?: parser.name
+                    val name = parser.name
                     when (name) {
                         TAG_SPAN -> {
                             val popped = if (spanStack.isNotEmpty()) spanStack.removeLast() else null

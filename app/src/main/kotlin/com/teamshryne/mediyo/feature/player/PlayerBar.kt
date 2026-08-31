@@ -250,117 +250,110 @@ fun FullPlayer(
 
             // ── Center area: fades between artwork+metadata vs synced lyrics
             // The spec: everything ABOVE timing slider fades away when in lyrics mode.
+            // Scalable: single AnimatedContent switches modes — adding new modes = new branch, no Box scope ambiguity.
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
-                // Normal mode — artwork, title, quick actions
-                AnimatedVisibility(
-                    visible = !isLyricsMode,
-                    enter = fadeIn(tween(300)) + slideInVertically(tween(320)) { it / 8 },
-                    exit = fadeOut(tween(250)) + slideOutVertically(tween(280)) { -it / 8 }
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Spacer(Modifier.weight(0.5f))
-
-                        val artShape = RoundedCornerShape(18.dp)
-                        val artPainter = rememberAsyncImagePainter(
-                            model = state.artwork.thumbSized(ART_HERO_PX),
-                            contentScale = ContentScale.Crop
-                        )
-                        val artReady = artPainter.state is AsyncImagePainter.State.Success
-                        val artAlpha by animateFloatAsState(
-                            targetValue = if (artReady) 1f else 0f,
-                            animationSpec = tween(350),
-                            label = "artAlpha"
-                        )
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(1f)
-                                .then(
-                                    if (artReady) {
-                                        Modifier
-                                            .shadow(32.dp, artShape, ambientColor = Color.Black, spotColor = Color.Black)
-                                            .clip(artShape)
-                                    } else Modifier
-                                )
-                        ) {
-                            Image(
-                                painter = artPainter,
-                                contentDescription = state.title,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize().alpha(artAlpha)
-                            )
-                            if (!artReady) {
-                                GlowingLoadingTitle(
-                                    title = state.title,
-                                    artist = state.artist,
-                                    modifier = Modifier.align(Alignment.Center)
-                                )
-                            }
-                        }
-
-                        Spacer(Modifier.height(28.dp))
-
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                MarqueeText(state.title, MaterialTheme.typography.headlineSmall, Color.White)
-                                Spacer(Modifier.height(2.dp))
-                                MarqueeText(state.artist, MaterialTheme.typography.bodyMedium, Color.White.copy(alpha = 0.72f))
-                            }
-                            IconButton(onClick = {
-                                if (playerVm != null) playerVm.toggleLikeCurrent() else liked = !liked
-                            }) {
-                                Icon(
-                                    if (liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                                    contentDescription = "Like",
-                                    tint = if (liked) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.9f)
-                                )
-                            }
-                        }
-
-                        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-                            TextButton(onClick = onShowQueue) { Icon(Icons.Filled.QueueMusic, null, tint = Color.White.copy(0.85f)); Spacer(Modifier.width(6.dp)); Text("Queue", color = Color.White.copy(0.85f)) }
-                            TextButton(onClick = onShowComments) { Icon(Icons.Filled.Comment, null, tint = Color.White.copy(0.85f)); Spacer(Modifier.width(6.dp)); Text("Comments", color = Color.White.copy(0.85f)) }
-                            TextButton(onClick = { showAddSheet = true }) { Icon(Icons.Filled.PlaylistAdd, null, tint = Color.White.copy(0.85f)); Spacer(Modifier.width(6.dp)); Text("Add", color = Color.White.copy(0.85f)) }
-                        }
-
-                        Spacer(Modifier.weight(0.5f))
-                    }
-                }
-
-                // Lyrics mode — uses empty area for word-level synced view
-                AnimatedVisibility(
-                    visible = isLyricsMode,
-                    enter = fadeIn(tween(320, delayMillis = 80)) + slideInVertically(tween(340)) { it / 6 },
-                    exit = fadeOut(tween(220)) + slideOutVertically(tween(260)) { it / 6 },
+                androidx.compose.animation.AnimatedContent(
+                    targetState = isLyricsMode,
+                    transitionSpec = {
+                        (fadeIn(tween(300)) + slideInVertically(tween(320)) { it / 8 }) togetherWith
+                            (fadeOut(tween(250)) + slideOutVertically(tween(280)) { -it / 8 })
+                    },
+                    label = "lyricsSwitch",
                     modifier = Modifier.fillMaxSize()
-                ) {
-                    SyncedLyricsView(
-                        state = lyricsState,
-                        positionMs = state.positionMs,
-                        durationMs = state.durationMs,
-                        isPlaying = state.isPlaying,
-                        onSeek = { ms ->
-                            // Scalable seek: delegate to VM's precise seek
-                            playerVm?.seekToMs(ms)
-                        },
-                        onRetry = {
-                            lyricsVm.retry(trackForMenu, state.durationMs.takeIf { it > 0 })
-                        },
-                        modifier = Modifier.fillMaxSize()
-                    )
+                ) { inLyrics ->
+                    if (inLyrics) {
+                        SyncedLyricsView(
+                            state = lyricsState,
+                            positionMs = state.positionMs,
+                            durationMs = state.durationMs,
+                            isPlaying = state.isPlaying,
+                            onSeek = { ms -> playerVm?.seekToMs(ms) },
+                            onRetry = { lyricsVm.retry(trackForMenu, state.durationMs.takeIf { it > 0 }) },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Spacer(Modifier.weight(0.5f))
+
+                            val artShape = RoundedCornerShape(18.dp)
+                            val artPainter = rememberAsyncImagePainter(
+                                model = state.artwork.thumbSized(ART_HERO_PX),
+                                contentScale = ContentScale.Crop
+                            )
+                            val artReady = artPainter.state is AsyncImagePainter.State.Success
+                            val artAlpha by animateFloatAsState(
+                                targetValue = if (artReady) 1f else 0f,
+                                animationSpec = tween(350),
+                                label = "artAlpha"
+                            )
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .aspectRatio(1f)
+                                    .then(
+                                        if (artReady) {
+                                            Modifier
+                                                .shadow(32.dp, artShape, ambientColor = Color.Black, spotColor = Color.Black)
+                                                .clip(artShape)
+                                        } else Modifier
+                                    )
+                            ) {
+                                Image(
+                                    painter = artPainter,
+                                    contentDescription = state.title,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize().alpha(artAlpha)
+                                )
+                                if (!artReady) {
+                                    GlowingLoadingTitle(
+                                        title = state.title,
+                                        artist = state.artist,
+                                        modifier = Modifier.align(Alignment.Center)
+                                    )
+                                }
+                            }
+
+                            Spacer(Modifier.height(28.dp))
+
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    MarqueeText(state.title, MaterialTheme.typography.headlineSmall, Color.White)
+                                    Spacer(Modifier.height(2.dp))
+                                    MarqueeText(state.artist, MaterialTheme.typography.bodyMedium, Color.White.copy(alpha = 0.72f))
+                                }
+                                IconButton(onClick = {
+                                    if (playerVm != null) playerVm.toggleLikeCurrent() else liked = !liked
+                                }) {
+                                    Icon(
+                                        if (liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                                        contentDescription = "Like",
+                                        tint = if (liked) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.9f)
+                                    )
+                                }
+                            }
+
+                            Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                                TextButton(onClick = onShowQueue) { Icon(Icons.Filled.QueueMusic, null, tint = Color.White.copy(0.85f)); Spacer(Modifier.width(6.dp)); Text("Queue", color = Color.White.copy(0.85f)) }
+                                TextButton(onClick = onShowComments) { Icon(Icons.Filled.Comment, null, tint = Color.White.copy(0.85f)); Spacer(Modifier.width(6.dp)); Text("Comments", color = Color.White.copy(0.85f)) }
+                                TextButton(onClick = { showAddSheet = true }) { Icon(Icons.Filled.PlaylistAdd, null, tint = Color.White.copy(0.85f)); Spacer(Modifier.width(6.dp)); Text("Add", color = Color.White.copy(0.85f)) }
+                            }
+
+                            Spacer(Modifier.weight(0.5f))
+                        }
+                    }
                 }
             }
 
