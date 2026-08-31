@@ -2,23 +2,29 @@ package com.teamshryne.mediyo.data.repository
 
 import com.teamshryne.mediyo.data.cache.CacheRepository
 import com.teamshryne.mediyo.data.lyrics.BetterLyricsApi
+import com.teamshryne.mediyo.data.lyrics.LrcLibApi
+import com.teamshryne.mediyo.data.lyrics.LyricsPrefs
 import com.teamshryne.mediyo.data.lyrics.LyricsResult
 import com.teamshryne.mediyo.data.lyrics.LyricTrack
+import com.teamshryne.mediyo.data.lyrics.LyricsSource
 import com.teamshryne.mediyo.data.lyrics.TtmlParser
 import com.teamshryne.mediyo.domain.model.Track
 import com.teamshryne.mediyo.domain.repository.LyricsRepository
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Maintainable repository: provider → parser → cache layers separated.
- * Scalable: swap [BetterLyricsApi] for another LyricsProvider via DI.
+ * Maintainable repository: ordered providers → parser → cache layers separated.
+ * Priority is data-driven via [LyricsPrefs.orderFlow] — reorderable in Settings > Lyrics.
  */
 @Singleton
 class LyricsRepositoryImpl @Inject constructor(
-    private val api: BetterLyricsApi,
+    private val betterLyrics: BetterLyricsApi,
+    private val lrcLib: LrcLibApi,
+    private val lyricsPrefs: LyricsPrefs,
     private val cache: CacheRepository
 ) : LyricsRepository {
 
@@ -34,33 +40,68 @@ class LyricsRepositoryImpl @Inject constructor(
 
     private fun cacheKey(track: Track, durationSec: Int?): String = keyFor(track, durationSec)
 
+    private suspend fun providerFor(source: LyricsSource) = when (source) {
+        LyricsSource.BetterLyrics -> betterLyrics
+        LyricsSource.LrcLib -> lrcLib
+    }
+
     override suspend fun getLyrics(track: Track, durationSec: Int?): LyricsResult {
         val key = cacheKey(track, durationSec)
 
-        // 1) Try cache (Room kv_cache type=lyrics) — instant, offline-friendly
-        cache.get(key)?.let { cachedTtml ->
-            if (cachedTtml.isNotBlank()) {
-                val parsed = TtmlParser.parse(cachedTtml)
-                if (!parsed.isEmpty) return LyricsResult.Success(parsed, cachedTtml)
+        // 1) Try cache — stored value may be TTML or Lyricsfile; try TTML first then Lyricsfile
+        cache.get(key)?.let { cached ->
+            if (cached.isNotBlank()) {
+                // Heuristic: TTML contains "<tt" or "<p ", Lyricsfile starts with "version:"
+                val parsed: LyricTrack = if (cached.trimStart().startsWith("version:") || cached.contains("start_ms:")) {
+                    com.teamshryne.mediyo.data.lyrics.LyricsfileParser.parse(cached).let { lf ->
+                        if (!lf.isEmpty) lf else TtmlParser.parse(cached)
+                    }
+                } else {
+                    TtmlParser.parse(cached).let { ttml ->
+                        if (!ttml.isEmpty) ttml else com.teamshryne.mediyo.data.lyrics.LyricsfileParser.parse(cached)
+                    }
+                }
+                if (!parsed.isEmpty) return LyricsResult.Success(parsed, cached)
             }
         }
 
-        // 2) Fetch from BetterLyrics
-        val result = api.fetch(
-            title = track.title,
-            artist = track.artists.firstOrNull() ?: track.album ?: "",
-            album = track.album,
-            durationSec = durationSec
-        )
+        // 2) Fetch in priority order (data-driven)
+        val order = try { lyricsPrefs.orderFlow.first() } catch (_: Exception) { LyricsSource.defaultOrder }
+        var lastNotFound: LyricsResult = LyricsResult.NotFound
+        var lastError: LyricsResult? = null
 
-        // 3) On success cache indefinitely (positive cache per docs)
-        if (result is LyricsResult.Success) {
-            runCatching { cache.put(key, "lyrics", result.rawTtml) }
+        for (source in order) {
+            val provider = providerFor(source)
+            val result = provider.fetch(
+                title = track.title,
+                artist = track.artists.firstOrNull() ?: track.album ?: "",
+                album = track.album,
+                durationSec = durationSec
+            )
+            when (result) {
+                is LyricsResult.Success -> {
+                    runCatching { cache.put(key, "lyrics", result.rawTtml) }
+                    return result
+                }
+                LyricsResult.NotFound -> lastNotFound = result
+                LyricsResult.RateLimited -> {
+                    // Don't fall through immediately on rate-limit? try next provider
+                    lastError = result
+                    continue
+                }
+                LyricsResult.NeedsApiKey -> {
+                    lastError = result
+                    continue
+                }
+                is LyricsResult.Error -> {
+                    lastError = result
+                    continue
+                }
+            }
         }
-        // Negative cache (NotFound) – we could cache empty sentinel for 7d but Room TTL evicts via CacheRepository.prefs
-        // For now leave negative ephemeral to allow retry after 429 backoff.
 
-        return result
+        // All providers exhausted
+        return lastError ?: lastNotFound
     }
 
     override suspend fun getLyricsCached(key: String): String? = cache.get(key)
