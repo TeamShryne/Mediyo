@@ -484,10 +484,17 @@ fun FullPlayer(
                                 )
                             }
                         }
+                        // simplify when active — keep same height as inactive (no TextButton minHeight bump)
                         if (bottomActive) {
-                            TextButton(onClick = { playerVm?.cancelSleepTimer() }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
-                                Text("Cancel", color = Color.White, style = MaterialTheme.typography.labelMedium)
-                            }
+                            Text(
+                                "Cancel",
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelMedium,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { playerVm?.cancelSleepTimer() }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
                         } else {
                             Icon(Icons.Filled.ExpandMore, null, tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
                         }
