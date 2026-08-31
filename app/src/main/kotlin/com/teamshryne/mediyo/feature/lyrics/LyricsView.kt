@@ -232,7 +232,9 @@ private fun SyncedLyricsContent(
             .clipToBounds(),
         contentAlignment = Alignment.TopCenter
     ) {
-        val maxHeightPx = constraints.maxHeight.toFloat()
+        val boxConstraints = constraints
+        val maxHeightPx = boxConstraints.maxHeight.toFloat()
+        val maxWidthPx = boxConstraints.maxWidth
         val anchorY = maxHeightPx * ANCHOR_RATIO
         val fallbackH = with(density) { FALLBACK_H_DP.toPx() }
         val gapPx = with(density) { GAP_DP.toPx() }
@@ -357,7 +359,7 @@ private fun SyncedLyricsContent(
                     val isActive = idx == currentIdx
                     val displayedIdx = if (isAutoScrollEnabled) currentIdx else -1
                     // pass available width to fix hidden words on right — measure with real constraints, not 1080
-                    val availableWidth = constraints.maxWidth
+                    val availableWidth = maxWidthPx
                     MetrolistLine(
                         line = line,
                         index = idx,
