@@ -3,6 +3,7 @@ package com.teamshryne.mediyo.feature.player
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -358,9 +359,16 @@ fun FullPlayer(
             }
 
             // ── Always-visible below: scrubber + transport + 50-50 bottom bar
+            // Slider stays exactly as before; in lyrics mode it slides down 10dp smoothly (no layout jump)
+            val sliderExtraTop by androidx.compose.animation.core.animateDpAsState(
+                targetValue = if (isLyricsMode) 12.dp else 0.dp,
+                animationSpec = tween(320, easing = FastOutSlowInEasing),
+                label = "sliderLyricsOffset"
+            )
             var dragging by remember { mutableStateOf(false) }
             var dragValue by remember { mutableStateOf(0f) }
             val shown = if (dragging) dragValue else state.progress
+            Spacer(Modifier.height(sliderExtraTop))
             Slider(
                 value = shown.coerceIn(0f, 1f),
                 onValueChange = { dragging = true; dragValue = it },
