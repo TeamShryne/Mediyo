@@ -18,9 +18,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -28,17 +25,13 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import coil.compose.AsyncImage
 import com.teamshryne.mediyo.core.design.ErrorState
 import com.teamshryne.mediyo.core.design.immersiveBrush
 import com.teamshryne.mediyo.core.design.rememberDominantColors
 import com.teamshryne.mediyo.data.auth.AuthRepository
-import com.teamshryne.mediyo.data.auth.AuthState
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -47,13 +40,8 @@ class ProfileVm @Inject constructor(
     private val bridge: MediyoBridge,
     private val auth: AuthRepository
 ) : ViewModel() {
-    val authFlow = auth.flow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AuthState())
-
     var loading by mutableStateOf(true)
     var error by mutableStateOf<String?>(null)
-    var name by mutableStateOf("")
-    var handle by mutableStateOf<String?>(null)
-    var photo by mutableStateOf<String?>(null)
     var visitorData by mutableStateOf("")
     var pageId by mutableStateOf<String?>(null)
     var rotating by mutableStateOf(false)
@@ -67,21 +55,6 @@ class ProfileVm @Inject constructor(
                 val vd = try { bridge.currentVisitorData() } catch (_: Throwable) { a.visitorData }
                 visitorData = vd
                 pageId = a.pageId.ifEmpty { null }
-                if (a.isLoggedIn) {
-                    try {
-                        val acc = bridge.account()
-                        name = acc.name
-                        handle = acc.handle
-                        photo = acc.photoUrl
-                    } catch (e: Throwable) {
-                        name = ""
-                        error = e.message
-                    }
-                } else {
-                    name = "Anonymous"
-                    handle = null
-                    photo = null
-                }
             } catch (e: Throwable) {
                 error = e.message
             } finally {
@@ -105,21 +78,11 @@ class ProfileVm @Inject constructor(
             }
         }
     }
-
-    fun clearAuth() {
-        viewModelScope.launch {
-            auth.clear()
-            bridge.clearAnonCache()
-            load()
-        }
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(nav: androidx.navigation.NavController? = null, vm: ProfileVm = hiltViewModel()) {
-    val authState by vm.authFlow.collectAsState()
-    val isLoggedIn = authState.isLoggedIn
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -128,9 +91,9 @@ fun ProfileScreen(nav: androidx.navigation.NavController? = null, vm: ProfileVm 
     BackHandler { nav?.popBackStack() }
     LaunchedEffect(Unit) { vm.load() }
 
-    val dominant = rememberDominantColors(vm.photo)
-    val displayName = if (isLoggedIn && vm.name.isNotBlank()) vm.name else "Anonymous user"
-    val displaySubtitle = if (isLoggedIn) vm.handle?.takeIf { it.isNotBlank() } ?: "Signed in" else "Local visitor"
+    val dominant = rememberDominantColors(null)
+    val displayName = "Anonymous user"
+    val displaySubtitle = "Local visitor"
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -139,7 +102,7 @@ fun ProfileScreen(nav: androidx.navigation.NavController? = null, vm: ProfileVm 
     ) { padding ->
         when {
             vm.loading -> Box(Modifier.fillMaxSize().padding(padding), Alignment.Center) { CircularProgressIndicator() }
-            vm.error != null && !isLoggedIn && vm.visitorData.isEmpty() -> ErrorState(vm.error ?: "Failed to load") { vm.load() }
+            vm.error != null && vm.visitorData.isEmpty() -> ErrorState(vm.error ?: "Failed to load") { vm.load() }
             else -> LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 24.dp),
@@ -181,16 +144,7 @@ fun ProfileScreen(nav: androidx.navigation.NavController? = null, vm: ProfileVm 
                                 modifier = Modifier.size(84.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHighest),
                                 contentAlignment = Alignment.Center
                             ) {
-                                if (vm.photo != null && isLoggedIn) {
-                                    AsyncImage(
-                                        model = vm.photo,
-                                        contentDescription = displayName,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize().clip(CircleShape)
-                                    )
-                                } else {
-                                    Icon(Icons.Filled.Person, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(42.dp))
-                                }
+                                Icon(Icons.Filled.Person, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(42.dp))
                             }
                             Spacer(Modifier.height(12.dp))
                             Text(displayName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
@@ -199,7 +153,7 @@ fun ProfileScreen(nav: androidx.navigation.NavController? = null, vm: ProfileVm 
                             Spacer(Modifier.height(10.dp))
                             Surface(
                                 shape = CircleShape,
-                                color = if (isLoggedIn) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -207,15 +161,15 @@ fun ProfileScreen(nav: androidx.navigation.NavController? = null, vm: ProfileVm 
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     Icon(
-                                        if (isLoggedIn) Icons.Filled.VerifiedUser else Icons.Filled.PersonOff,
+                                        Icons.Filled.PersonOff,
                                         null,
                                         modifier = Modifier.size(14.dp),
-                                        tint = if (isLoggedIn) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Text(
-                                        if (isLoggedIn) "YouTube Music" else "Anonymous",
+                                        "Anonymous",
                                         style = MaterialTheme.typography.labelMedium,
-                                        color = if (isLoggedIn) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
@@ -281,56 +235,6 @@ fun ProfileScreen(nav: androidx.navigation.NavController? = null, vm: ProfileVm 
                                 }
                             }
                             if (vm.pageId != null) Text("Page ID: ${vm.pageId}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-
-                // ── Account ──
-                item {
-                    Card(
-                        modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
-                        shape = RoundedCornerShape(18.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Box(
-                                    modifier = Modifier.size(32.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondaryContainer),
-                                    contentAlignment = Alignment.Center
-                                ) { Icon(Icons.Filled.AccountCircle, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer) }
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(if (isLoggedIn) "Account" else "Sign in", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                                    Text(if (isLoggedIn) "YouTube Music account" else "Sync library & history", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            }
-                            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceContainerHighest)
-                            if (isLoggedIn) {
-                                Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainerHighest, modifier = Modifier.fillMaxWidth()) {
-                                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        Icon(Icons.Filled.Person, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(vm.name.ifEmpty { "Account" }, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                                            Text(vm.handle ?: "—", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
-                                    }
-                                }
-                                Button(
-                                    onClick = {
-                                        vm.clearAuth()
-                                        scope.launch { snackbarHostState.showSnackbar("Signed out") }
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer)
-                                ) { Icon(Icons.Filled.Logout, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Sign out") }
-                            } else {
-                                Text("Browse as local visitor. Sign in to sync your library, history and mixes.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Button(
-                                    onClick = { scope.launch { snackbarHostState.showSnackbar("Sign-in coming soon") } },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) { Icon(Icons.Filled.Login, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Sign in") }
-                            }
                         }
                     }
                 }
