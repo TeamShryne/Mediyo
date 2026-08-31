@@ -33,6 +33,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -166,32 +167,42 @@ private fun SyncedLyricsContent(
     val scope = rememberCoroutineScope()
 
     // smoothPosition — frame-level interpolation like Metrolist (withFrameNanos)
+    // Use UpdatedState so the frame loop sees fresh positionMs/isPlaying without restarting
+    val posState by rememberUpdatedState(positionMs)
+    val playingState by rememberUpdatedState(isPlaying)
     var smoothPos by remember { mutableLongStateOf(positionMs) }
     var lastPlayerPos by remember { mutableLongStateOf(positionMs) }
     var lastUpdateTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
-    LaunchedEffect(positionMs) {
+    LaunchedEffect(positionMs, isPlaying) {
+        // any external tick/seek/paused update instantly re-bases
         lastPlayerPos = positionMs
         lastUpdateTime = System.currentTimeMillis()
-        if (!isPlaying) smoothPos = positionMs
+        smoothPos = positionMs
     }
-    LaunchedEffect(isPlaying, track) {
-        if (!isPlaying) return@LaunchedEffect
+    LaunchedEffect(track) {
+        // fresh track → reset
+        lastPlayerPos = posState
+        lastUpdateTime = System.currentTimeMillis()
+        smoothPos = posState
         while (isActive) {
             withFrameNanos { _ ->
                 val now = System.currentTimeMillis()
-                // if player tick jumped, resync base
-                if (positionMs != lastPlayerPos) {
-                    lastPlayerPos = positionMs
+                val curPos = posState
+                val curPlaying = playingState
+                // detect tick or seek jump (position jumps > 800ms or new value)
+                if (curPos != lastPlayerPos) {
+                    lastPlayerPos = curPos
                     lastUpdateTime = now
+                    smoothPos = curPos
+                } else if (curPlaying) {
+                    val elapsed = now - lastUpdateTime
+                    smoothPos = lastPlayerPos + elapsed
+                } else {
+                    smoothPos = lastPlayerPos
                 }
-                val elapsed = now - lastUpdateTime
-                smoothPos = lastPlayerPos + (if (isPlaying) elapsed else 0)
             }
         }
-    }
-    LaunchedEffect(isPlaying) {
-        if (!isPlaying) smoothPos = positionMs
     }
 
     var currentIdx by remember { mutableIntStateOf(findCurrentLine(lines, positionMs)) }
