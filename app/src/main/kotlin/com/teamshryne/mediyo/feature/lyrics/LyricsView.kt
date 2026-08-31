@@ -442,6 +442,15 @@ private fun MetrolistLine(
     val inactiveColor = Color.White.copy(alpha = animatedAlpha * 0.42f)
     val activeColor = Color.White
 
+    // Unified rendering — Canvas for both active/inactive to keep exact center alignment (no Text vs Canvas jump)
+    // fixes short single lines snapping to left when becoming active
+    val horizPadPx = with(density) { 18.dp.toPx().toInt() * 2 }
+    val measureWidth = (availableWidthPx - horizPadPx).coerceAtLeast(200)
+    val layout = remember(mainText, style, measureWidth) {
+        textMeasurer.measure(text = mainText, style = style, constraints = Constraints(maxWidth = measureWidth))
+    }
+    val height = with(density) { layout.size.height.toDp() }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -449,27 +458,14 @@ private fun MetrolistLine(
             .clickable { onSeek(line.beginMs) },
         contentAlignment = Alignment.Center
     ) {
-        if (!isActive) {
-            Text(
-                text = mainText,
-                style = style.copy(color = inactiveColor),
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
-        } else {
-            // measure with real available width (minus horizontal padding 18*2) — fixes right-hidden words
-            val horizPadPx = with(density) { 18.dp.toPx().toInt() * 2 }
-            val measureWidth = (availableWidthPx - horizPadPx).coerceAtLeast(200)
-            val layout = remember(mainText, style, measureWidth) {
-                textMeasurer.measure(text = mainText, style = style, constraints = Constraints(maxWidth = measureWidth))
-            }
-            val height = with(density) { layout.size.height.toDp() }
-            Canvas(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(height)
-            ) {
-                drawText(layout, color = inactiveColor)
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(height)
+        ) {
+            // dim base — all lines draw same centered layout, no alignment switch
+            drawText(layout, color = inactiveColor)
+            if (isActive) {
                 var charCursor = 0
                 wordsForCanvas.forEach { (wordTriple, hasSpace) ->
                     val (wText, wBegin, wEnd) = wordTriple
