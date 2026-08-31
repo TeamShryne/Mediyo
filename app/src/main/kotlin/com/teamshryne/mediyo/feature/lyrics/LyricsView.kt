@@ -424,25 +424,9 @@ private fun MetrolistLine(
         }
     }
 
-    // subtle scale for active line — bigger + smooth revert (fluid psychology)
-    val targetScale = if (isActive) 1.06f else 0.98f
-    val targetFontSize = if (line.words.any { it.isBackground }) {
-        if (isActive) 21.sp else 19.sp
-    } else {
-        if (isActive) 25.sp else 21.sp
-    }
-    val animatedScale by animateFloatAsState(
-        targetValue = targetScale,
-        animationSpec = tween(420, easing = FastOutSlowInEasing),
-        label = "scale$index"
-    )
-    val animatedFontSize by animateFloatAsState(
-        targetValue = targetFontSize.value,
-        animationSpec = tween(420, easing = FastOutSlowInEasing),
-        label = "fontSize$index"
-    )
+    // no size pop — keep uniform size, only alpha/word-glow animates (per user request)
     val style = TextStyle(
-        fontSize = animatedFontSize.sp,
+        fontSize = if (line.words.any { it.isBackground }) 19.sp else 22.sp,
         fontWeight = FontWeight.Bold,
         fontStyle = if (line.words.any { it.isBackground }) FontStyle.Italic else FontStyle.Normal,
         lineHeight = (animatedFontSize * 1.28f).sp,
@@ -460,10 +444,6 @@ private fun MetrolistLine(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 18.dp, vertical = 6.dp)
-            .graphicsLayer {
-                scaleX = animatedScale
-                scaleY = animatedScale
-            }
             .clickable { onSeek(line.beginMs) },
         contentAlignment = Alignment.Center
     ) {
