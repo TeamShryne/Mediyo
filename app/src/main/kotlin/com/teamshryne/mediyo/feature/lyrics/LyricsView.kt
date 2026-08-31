@@ -45,6 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -355,6 +356,8 @@ private fun SyncedLyricsContent(
                 ) {
                     val isActive = idx == currentIdx
                     val displayedIdx = if (isAutoScrollEnabled) currentIdx else -1
+                    // pass available width to fix hidden words on right — measure with real constraints, not 1080
+                    val availableWidth = constraints.maxWidth
                     MetrolistLine(
                         line = line,
                         index = idx,
@@ -362,6 +365,7 @@ private fun SyncedLyricsContent(
                         isAutoScrollEnabled = isAutoScrollEnabled,
                         displayedIdx = displayedIdx,
                         smoothPos = smoothPos,
+                        availableWidthPx = availableWidth,
                         onSeek = onSeek
                     )
                 }
@@ -383,6 +387,7 @@ private fun MetrolistLine(
     isAutoScrollEnabled: Boolean,
     displayedIdx: Int,
     smoothPos: Long,
+    availableWidthPx: Int,
     onSeek: (Long) -> Unit
 ) {
     // alpha like Metrolist — psychology-pleasing fade distance
@@ -417,11 +422,28 @@ private fun MetrolistLine(
         }
     }
 
+    // subtle scale for active line — bigger + smooth revert (fluid psychology)
+    val targetScale = if (isActive) 1.06f else 0.98f
+    val targetFontSize = if (line.words.any { it.isBackground }) {
+        if (isActive) 21.sp else 19.sp
+    } else {
+        if (isActive) 25.sp else 21.sp
+    }
+    val animatedScale by animateFloatAsState(
+        targetValue = targetScale,
+        animationSpec = tween(420, easing = FastOutSlowInEasing),
+        label = "scale$index"
+    )
+    val animatedFontSize by animateFloatAsState(
+        targetValue = targetFontSize.value,
+        animationSpec = tween(420, easing = FastOutSlowInEasing),
+        label = "fontSize$index"
+    )
     val style = TextStyle(
-        fontSize = if (line.words.any { it.isBackground }) 20.sp else 23.sp,
+        fontSize = animatedFontSize.sp,
         fontWeight = FontWeight.Bold,
         fontStyle = if (line.words.any { it.isBackground }) FontStyle.Italic else FontStyle.Normal,
-        lineHeight = if (line.words.any { it.isBackground }) 22.sp else 30.sp,
+        lineHeight = (animatedFontSize * 1.28f).sp,
         letterSpacing = (-0.4).sp,
         textAlign = TextAlign.Center,
         color = Color.White,
@@ -436,7 +458,10 @@ private fun MetrolistLine(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 18.dp, vertical = 6.dp)
-            .clipToBounds()
+            .graphicsLayer {
+                scaleX = animatedScale
+                scaleY = animatedScale
+            }
             .clickable { onSeek(line.beginMs) },
         contentAlignment = Alignment.Center
     ) {
@@ -448,8 +473,11 @@ private fun MetrolistLine(
                 modifier = Modifier.fillMaxWidth()
             )
         } else {
-            val layout = remember(mainText, style) {
-                textMeasurer.measure(text = mainText, style = style, constraints = Constraints(maxWidth = 1080))
+            // measure with real available width (minus horizontal padding 18*2) — fixes right-hidden words
+            val horizPadPx = with(density) { 18.dp.toPx().toInt() * 2 }
+            val measureWidth = (availableWidthPx - horizPadPx).coerceAtLeast(200)
+            val layout = remember(mainText, style, measureWidth) {
+                textMeasurer.measure(text = mainText, style = style, constraints = Constraints(maxWidth = measureWidth))
             }
             val height = with(density) { layout.size.height.toDp() }
             Canvas(
