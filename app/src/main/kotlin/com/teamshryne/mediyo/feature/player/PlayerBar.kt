@@ -19,13 +19,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Comment
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlaylistAdd
@@ -434,7 +434,7 @@ fun FullPlayer(
                 }
             }
 
-            // Bottom 50-50 bar: SleepTimer | Lyrics — scalable row, easy to add more actions
+            // Bottom 50-50 bar: Sleep timer | Lyrics — clean, no subtitles, single lyrics icon
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -442,107 +442,56 @@ fun FullPlayer(
                 val bottomSleep = playerVm?.sleepState?.collectAsState()?.value
                 val bottomActive = bottomSleep?.isActive == true
 
-                // Sleep timer — 50%
+                // Sleep timer — 50% — clean pill, icon + single label
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = if (bottomActive) Color.White.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.08f),
                     modifier = Modifier.weight(1f).clickable(onClick = onShowSleepTimer)
                 ) {
                     Row(
-                        Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.Center
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
-                            Icon(
-                                Icons.Filled.Bedtime,
-                                contentDescription = null,
-                                tint = if (bottomActive) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.85f),
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    when {
-                                        !bottomActive -> "Sleep timer"
-                                        bottomSleep!!.mode.name == "TIMER" -> {
-                                            val s = bottomSleep.remainingMs / 1000
-                                            val txt = if (s >= 3600) "%d:%02d:%02d".format(s/3600, (s%3600)/60, s%60) else "%02d:%02d".format(s/60, s%60)
-                                            "$txt left"
-                                        }
-                                        bottomSleep.mode.name == "END_OF_TRACK" -> "After track"
-                                        else -> "After queue"
-                                    },
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = Color.White,
-                                    maxLines = 1
-                                )
-                                Text(
-                                    if (bottomActive) "Tap to manage" else "5–60m • EOT",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color.White.copy(alpha = if (bottomActive) 0.65f else 0.55f),
-                                    maxLines = 1
-                                )
-                            }
-                        }
-                        // simplify when active — keep same height as inactive (no TextButton minHeight bump)
-                        if (bottomActive) {
-                            Text(
-                                "Cancel",
-                                color = Color.White,
-                                style = MaterialTheme.typography.labelMedium,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .clickable { playerVm?.cancelSleepTimer() }
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        } else {
-                            Icon(Icons.Filled.ExpandMore, null, tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
-                        }
+                        Icon(
+                            Icons.Filled.Bedtime,
+                            contentDescription = null,
+                            tint = if (bottomActive) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.85f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Sleep timer",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Color.White,
+                            maxLines = 1
+                        )
                     }
                 }
 
-                // Lyrics — 50% (spec)
-                val lyricsReady = lyricsState is com.teamshryne.mediyo.feature.lyrics.LyricsUiState.Ready
+                // Lyrics — 50% — single Article/lyrics icon, single label
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = if (isLyricsMode) Color.White.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.08f),
                     modifier = Modifier.weight(1f).clickable { isLyricsMode = !isLyricsMode }
                 ) {
                     Row(
-                        Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.Center
                     ) {
                         Icon(
-                            Icons.Filled.MusicNote,
+                            Icons.AutoMirrored.Filled.Article,
                             contentDescription = null,
                             tint = if (isLyricsMode) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.85f),
                             modifier = Modifier.size(18.dp)
                         )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                if (isLyricsMode) "Hide lyrics" else "Lyrics",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = Color.White,
-                                maxLines = 1
-                            )
-                            Text(
-                                when {
-                                    isLyricsMode && lyricsReady -> "Synced • word glow"
-                                    isLyricsMode -> "Tap to close"
-                                    lyricsReady -> "Word-level • tap"
-                                    else -> "Tap to view"
-                                },
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.55f),
-                                maxLines = 1
-                            )
-                        }
-                        Icon(
-                            if (isLyricsMode) Icons.Filled.ExpandMore else Icons.Filled.MusicNote,
-                            null,
-                            tint = Color.White.copy(alpha = 0.6f),
-                            modifier = Modifier.size(16.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Lyrics",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Color.White,
+                            maxLines = 1
                         )
                     }
                 }

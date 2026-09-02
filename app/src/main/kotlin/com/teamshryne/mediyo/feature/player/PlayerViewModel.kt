@@ -98,9 +98,12 @@ class PlayerViewModel @Inject constructor(
                     )
                 } else {
                     _state.value = _state.value.copy(
+                        videoId = null, title = "", artist = "", artwork = null,
+                        isPlaying = false, isBuffering = false,
                         queueSize = 0, queueIndex = -1, originLabel = qs.origin.label()
                     )
-                    // nothing left to play → take the media notification with us
+                    // nothing left to play → stop audio and remove notification so we don't leave ghost playback
+                    try { player.stop(); player.clearMediaItems() } catch (_: Throwable) {}
                     runCatching { ctx.stopService(Intent(ctx, PlaybackService::class.java)) }
                 }
                 pushSessionSnapshot()
@@ -147,10 +150,25 @@ class PlayerViewModel @Inject constructor(
     }
 
     /** The MediaSession lives in [PlaybackService] — make sure it's running before audio starts. */
-    private fun ensurePlaybackService() {
-        runCatching {
+    private fun ensurePlaybackService(): Boolean {
+        return try {
             ContextCompat.startForegroundService(ctx, Intent(ctx, PlaybackService::class.java))
+            true
+        } catch (e: Throwable) {
+            // ForegroundServiceStartNotAllowedException on Android 12+ from background (auto-next) — audio would be ghost playback
+            android.util.Log.w("PlayerVM", "ensurePlaybackService failed", e)
+            false
         }
+    }
+
+    private fun ensureServiceForPlayback(): Boolean {
+        // Best-effort: if FGS deny, we still allow player.play() for foreground case but log; caller can decide
+        val ok = ensurePlaybackService()
+        if (!ok && !_state.value.isPlaying && player.playWhenReady) {
+            // still try to keep session snapshot consistent
+            pushSessionSnapshot()
+        }
+        return ok
     }
 
     private fun startTicker() {
@@ -215,7 +233,8 @@ class PlayerViewModel @Inject constructor(
         val vid = cur.videoId ?: return
         // Ensure service is foreground before swapping track so the notification
         // can be updated without an intermediate empty state.
-        ensurePlaybackService()
+        // If background start is denied we still prepare but don't claim foreground — avoids ghost audio
+        ensureServiceForPlayback()
         resolveJob?.cancel()
         pendingLoadJob?.cancel()
         pendingLoadJob = null
@@ -357,7 +376,16 @@ class PlayerViewModel @Inject constructor(
     fun addNext(track: Track) { queueManager.addNext(track) }
     fun addToQueue(track: Track) { queueManager.addLast(track) }
     fun addNextList(tracks: List<Track>) { queueManager.addNextList(tracks) }
-    fun removeFromQueue(at: Int) { queueManager.removeAt(at) }
+    fun removeFromQueue(at: Int) {
+        val wasCurrent = at == queueManager.currentState().index
+        val wasOnly = queueManager.currentState().entries.size == 1
+        queueManager.removeAt(at)
+        if (wasCurrent && !wasOnly) {
+            // switched to next track (removeAt already moved index) — load it so player doesn't keep old audio
+            requestLoad(immediate = true)
+        }
+        // empty case handled by queue collector (stops player + service)
+    }
     fun moveQueue(from: Int, to: Int) { queueManager.move(from, to) }
     fun playAt(index: Int) { queueManager.setIndex(index); requestLoad(immediate = true) }
 
@@ -376,8 +404,12 @@ class PlayerViewModel @Inject constructor(
         val s = queueManager.currentState()
         if (s.entries.isEmpty()) return
         if (s.current != null && _state.value.repeatOne) {
-            // repeat same
-            player.seekTo(0); player.play(); return
+            // repeat same — ensure FGS before resuming, otherwise ghost playback without notification
+            ensureServiceForPlayback()
+            player.seekTo(0); player.play()
+            _state.value = _state.value.copy(isPlaying = true)
+            pushSessionSnapshot()
+            return
         }
         queueManager.next(_state.value.shuffle, _state.value.repeatOne) ?: return
         requestLoad(immediate)
@@ -385,7 +417,12 @@ class PlayerViewModel @Inject constructor(
 
     fun previous() {
         // standard restart rule when we're actually mid-track
-        if (!resolving && player.currentPosition > 3000) { player.seekTo(0); return }
+        if (!resolving && player.currentPosition > 3000) {
+            // seek within same track — if we were playing ensure service so notification keeps updating
+            if (player.isPlaying || player.playWhenReady) ensureServiceForPlayback()
+            player.seekTo(0)
+            return
+        }
         queueManager.previous(player.currentPosition) ?: return
         requestLoad(immediate = false)
     }
@@ -398,17 +435,26 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun toggle() {
-        if (player.isPlaying) { player.pause(); _state.value = _state.value.copy(isPlaying = false) }
-        else { player.play(); _state.value = _state.value.copy(isPlaying = true) }
+        if (player.isPlaying) {
+            player.pause(); _state.value = _state.value.copy(isPlaying = false)
+        } else {
+            // resuming from pause — must be foreground or notification disappears
+            ensureServiceForPlayback()
+            player.play(); _state.value = _state.value.copy(isPlaying = true)
+        }
         pushSessionSnapshot()
     }
 
     fun seekTo(fraction: Float) {
         val dur = player.duration
-        if (dur > 0) player.seekTo((dur * fraction.coerceIn(0f, 1f)).toLong())
+        if (dur > 0) {
+            if (player.isPlaying) ensureServiceForPlayback()
+            player.seekTo((dur * fraction.coerceIn(0f, 1f)).toLong())
+        }
     }
 
     fun seekToMs(positionMs: Long) {
+        if (player.isPlaying || player.playWhenReady) ensureServiceForPlayback()
         val dur = player.duration
         if (dur > 0) player.seekTo(positionMs.coerceIn(0L, dur)) else player.seekTo(positionMs.coerceAtLeast(0L))
     }
@@ -423,8 +469,11 @@ class PlayerViewModel @Inject constructor(
     override fun onCleared() {
         resolveJob?.cancel(); tickerJob?.cancel()
         pendingLoadJob?.cancel(); prefetchJob?.cancel()
-        // detach session actions so a stale VM never handles notification presses
-        hub.onSkipNext = null; hub.onSkipPrevious = null; hub.onToggleLike = null
+        // Only detach if nothing is playing — keep notification controls alive when music continues after UI gone
+        val stillActive = player.isPlaying || player.playWhenReady || queueManager.currentState().current != null
+        if (!stillActive) {
+            hub.onSkipNext = null; hub.onSkipPrevious = null; hub.onToggleLike = null
+        }
         // don't release singleton player here — AppModule singleton lives beyond VM
         super.onCleared()
     }
