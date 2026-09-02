@@ -37,7 +37,9 @@ fun TrackMenuSheet(
     onGoToArtist: (() -> Unit)? = null,
     onComments: (() -> Unit)? = null,
     onRemove: (() -> Unit)? = null,
-    onShare: (() -> Unit)? = null
+    onShare: (() -> Unit)? = null,
+    onRefetchLyrics: (() -> Unit)? = null,
+    onLyricsSettings: (() -> Unit)? = null
 ) {
     if (!show) return
     ModalBottomSheet(onDismissRequest = onDismiss, shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)) {
@@ -50,6 +52,12 @@ fun TrackMenuSheet(
                 }
             }
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            // Lyrics section — only when lyrics mode is active (caller passes non-null refetch)
+            if (onRefetchLyrics != null || onLyricsSettings != null) {
+                if (onRefetchLyrics != null) MenuItem(icon = Icons.Filled.Refresh, label = "Refetch lyrics", onClick = { onDismiss(); onRefetchLyrics() })
+                if (onLyricsSettings != null) MenuItem(icon = Icons.Filled.Settings, label = "Lyrics settings", onClick = { onDismiss(); onLyricsSettings() })
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            }
             MenuItem(icon = if (isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder, label = if (isLiked) "Remove from Liked" else "Add to Liked", onClick = { onDismiss(); onLike() })
             MenuItem(icon = Icons.Filled.PlaylistAdd, label = "Add to playlist", onClick = { onDismiss(); onAddToPlaylist() })
             MenuItem(icon = Icons.Filled.QueueMusic, label = "Play next", onClick = { onDismiss(); onPlayNext() })
@@ -87,7 +95,9 @@ fun FfiTrackMenuSheet(
     onGoToAlbum: (() -> Unit)? = null,
     onGoToArtist: (() -> Unit)? = null,
     onComments: (() -> Unit)? = null,
-    onRemove: (() -> Unit)? = null
+    onRemove: (() -> Unit)? = null,
+    onRefetchLyrics: (() -> Unit)? = null,
+    onLyricsSettings: (() -> Unit)? = null
 ) {
     val track = remember(item.videoId, item.title) {
         Track(
@@ -97,5 +107,5 @@ fun FfiTrackMenuSheet(
             category = item.category, year = item.year
         )
     }
-    TrackMenuSheet(track, show, onDismiss, isLiked, onLike, onAddToPlaylist, onPlayNext, onAddToQueue, onGoToAlbum, onGoToArtist, onComments, onRemove)
+    TrackMenuSheet(track, show, onDismiss, isLiked, onLike, onAddToPlaylist, onPlayNext, onAddToQueue, onGoToAlbum, onGoToArtist, onComments, onRemove, onRefetchLyrics, onLyricsSettings)
 }

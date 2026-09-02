@@ -23,6 +23,7 @@ data class KvCache(
 interface KvDao {
     @Query("SELECT * FROM kv_cache WHERE `key`=:key LIMIT 1") suspend fun get(key: String): KvCache?
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun put(e: KvCache)
+    @Query("DELETE FROM kv_cache WHERE `key`=:key") suspend fun delete(key: String)
     @Query("DELETE FROM kv_cache WHERE type=:type") suspend fun clearType(type: String)
     @Query("DELETE FROM kv_cache") suspend fun clearAll()
     @Query("SELECT type, COUNT(*) as cnt, SUM(sizeBytes) as bytes FROM kv_cache GROUP BY type")
