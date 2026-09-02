@@ -39,6 +39,7 @@ class CacheRepository @Inject constructor(
 
     suspend fun put(key: String, type: String, json: String) { dao.put(KvCache(key, type, json, json.toByteArray().size)) }
     suspend fun get(key: String): String? = dao.get(key)?.json
+    suspend fun remove(key: String) = dao.delete(key)
     suspend fun clearType(type: String) = dao.clearType(type)
     suspend fun clearAll() = dao.clearAll()
     suspend fun evictExpired(ttlMs: Long) = dao.evictOlderThan(System.currentTimeMillis()-ttlMs)

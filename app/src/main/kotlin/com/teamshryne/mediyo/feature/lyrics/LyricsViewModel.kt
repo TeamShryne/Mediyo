@@ -62,6 +62,31 @@ class LyricsViewModel @Inject constructor(
         load(track, durationMs)
     }
 
+    /**
+     * Force-bypass cache and refetch from network (used by three-dot menu when lyrics mode is on).
+     * Unlike [retry], this evicts the cached entry so the next fetch hits providers.
+     */
+    fun refetch(track: Track, durationMs: Long? = null) {
+        val key = "${track.videoId}:${track.title}:${track.artists.firstOrNull()}"
+        lastKey = null
+        _state.value = LyricsUiState.Loading
+        job?.cancel()
+        job = viewModelScope.launch {
+            val durSec = durationMs?.let { (it / 1000).toInt().takeIf { v -> v in 30..600 } }
+                ?: track.duration?.let { parseDurationToSec(it) }
+            when (val res = repo.refreshLyrics(track, durSec)) {
+                is LyricsResult.Success -> {
+                    lastKey = key
+                    _state.value = LyricsUiState.Ready(res.track)
+                }
+                LyricsResult.NotFound -> _state.value = LyricsUiState.NotFound
+                LyricsResult.NeedsApiKey -> _state.value = LyricsUiState.NeedsApiKey
+                LyricsResult.RateLimited -> _state.value = LyricsUiState.RateLimited
+                is LyricsResult.Error -> _state.value = LyricsUiState.Error(res.message)
+            }
+        }
+    }
+
     fun clear() {
         job?.cancel()
         _state.value = LyricsUiState.Idle

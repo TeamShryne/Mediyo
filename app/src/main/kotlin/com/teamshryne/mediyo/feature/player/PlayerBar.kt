@@ -561,7 +561,10 @@ fun FullPlayer(
                 onAddToPlaylist = { showAddSheet = true },
                 onPlayNext = { playerVm?.addNext(trackForMenu) },
                 onAddToQueue = { playerVm?.addToQueue(trackForMenu) },
-                onComments = { onShowComments() }
+                onComments = { onShowComments() },
+                onRefetchLyrics = if (isLyricsMode) {
+                    { lyricsVm.refetch(trackForMenu, state.durationMs.takeIf { it > 0 }) }
+                } else null
             )
         }
     }

@@ -426,7 +426,7 @@ private fun MetrolistLine(
     // no size pop — keep uniform size, only alpha/word-glow animates (per user request)
     val isBg = line.words.any { it.isBackground }
     val baseFontSize = if (isBg) 19.sp else 22.sp
-    val style = TextStyle(
+    val baseStyleCenter = TextStyle(
         fontSize = baseFontSize,
         fontWeight = FontWeight.Bold,
         fontStyle = if (isBg) FontStyle.Italic else FontStyle.Normal,
@@ -437,17 +437,24 @@ private fun MetrolistLine(
         platformStyle = PlatformTextStyle(includeFontPadding = false),
         lineHeightStyle = LineHeightStyle(alignment = LineHeightStyle.Alignment.Center, trim = LineHeightStyle.Trim.Both)
     )
+    val baseStyleStart = remember(baseStyleCenter) { baseStyleCenter.copy(textAlign = TextAlign.Start) }
 
     val inactiveColor = Color.White.copy(alpha = animatedAlpha * 0.42f)
     val activeColor = Color.White
 
     // Unified rendering — Canvas for both active/inactive to keep exact center alignment (no Text vs Canvas jump)
     // fixes short single lines snapping to left when becoming active
+    // Wrapped lines (>1 visual line) are left-aligned for readability; single lines stay centered.
     val horizPadPx = with(density) { 18.dp.toPx().toInt() * 2 }
     val measureWidth = (availableWidthPx - horizPadPx).coerceAtLeast(200)
-    val layout = remember(mainText, style, measureWidth) {
-        textMeasurer.measure(text = mainText, style = style, constraints = Constraints(maxWidth = measureWidth))
+    val centerLayout = remember(mainText, baseStyleCenter, measureWidth) {
+        textMeasurer.measure(text = mainText, style = baseStyleCenter, constraints = Constraints(maxWidth = measureWidth))
     }
+    val startLayout = remember(mainText, baseStyleStart, measureWidth) {
+        textMeasurer.measure(text = mainText, style = baseStyleStart, constraints = Constraints(maxWidth = measureWidth))
+    }
+    val isMultiline = centerLayout.lineCount > 1
+    val layout = if (isMultiline) startLayout else centerLayout
     val height = with(density) { layout.size.height.toDp() }
 
     Box(
@@ -455,7 +462,7 @@ private fun MetrolistLine(
             .fillMaxWidth()
             .padding(horizontal = 18.dp, vertical = 6.dp)
             .clickable { onSeek(line.beginMs) },
-        contentAlignment = Alignment.Center
+        contentAlignment = if (isMultiline) Alignment.CenterStart else Alignment.Center
     ) {
         Canvas(
             modifier = Modifier

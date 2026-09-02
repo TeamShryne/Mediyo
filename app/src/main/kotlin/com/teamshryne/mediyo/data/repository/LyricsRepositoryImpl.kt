@@ -45,23 +45,25 @@ class LyricsRepositoryImpl @Inject constructor(
         LyricsSource.LrcLib -> lrcLib
     }
 
-    override suspend fun getLyrics(track: Track, durationSec: Int?): LyricsResult {
+    override suspend fun getLyrics(track: Track, durationSec: Int?, forceRefresh: Boolean): LyricsResult {
         val key = cacheKey(track, durationSec)
 
         // 1) Try cache — stored value may be TTML or Lyricsfile; try TTML first then Lyricsfile
-        cache.get(key)?.let { cached ->
-            if (cached.isNotBlank()) {
-                // Heuristic: TTML contains "<tt" or "<p ", Lyricsfile starts with "version:"
-                val parsed: LyricTrack = if (cached.trimStart().startsWith("version:") || cached.contains("start_ms:")) {
-                    com.teamshryne.mediyo.data.lyrics.LyricsfileParser.parse(cached).let { lf ->
-                        if (!lf.isEmpty) lf else TtmlParser.parse(cached)
+        if (!forceRefresh) {
+            cache.get(key)?.let { cached ->
+                if (cached.isNotBlank()) {
+                    // Heuristic: TTML contains "<tt" or "<p ", Lyricsfile starts with "version:"
+                    val parsed: LyricTrack = if (cached.trimStart().startsWith("version:") || cached.contains("start_ms:")) {
+                        com.teamshryne.mediyo.data.lyrics.LyricsfileParser.parse(cached).let { lf ->
+                            if (!lf.isEmpty) lf else TtmlParser.parse(cached)
+                        }
+                    } else {
+                        TtmlParser.parse(cached).let { ttml ->
+                            if (!ttml.isEmpty) ttml else com.teamshryne.mediyo.data.lyrics.LyricsfileParser.parse(cached)
+                        }
                     }
-                } else {
-                    TtmlParser.parse(cached).let { ttml ->
-                        if (!ttml.isEmpty) ttml else com.teamshryne.mediyo.data.lyrics.LyricsfileParser.parse(cached)
-                    }
+                    if (!parsed.isEmpty) return LyricsResult.Success(parsed, cached)
                 }
-                if (!parsed.isEmpty) return LyricsResult.Success(parsed, cached)
             }
         }
 
@@ -102,6 +104,12 @@ class LyricsRepositoryImpl @Inject constructor(
 
         // All providers exhausted
         return lastError ?: lastNotFound
+    }
+
+    override suspend fun refreshLyrics(track: Track, durationSec: Int?): LyricsResult {
+        val key = cacheKey(track, durationSec)
+        runCatching { cache.remove(key) }
+        return getLyrics(track, durationSec, forceRefresh = true)
     }
 
     override suspend fun getLyricsCached(key: String): String? = cache.get(key)
