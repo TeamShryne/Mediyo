@@ -38,7 +38,7 @@ impl MediyoSession {
 // ── common ───────────────────────────────────────────────────────────────
 #[derive(Debug, Clone, uniffi::Record)] pub struct FfiThumbnail { pub url: String, pub width: u32, pub height: u32 }
 #[derive(Debug, Clone, uniffi::Record)] pub struct FfiSearchResult {
-    pub title: String, pub video_id: Option<String>, pub browse_id: Option<String>, pub playlist_id: Option<String>,
+    pub title: String, pub video_id: Option<String>, pub browse_id: Option<String>, pub browse_params: Option<String>, pub playlist_id: Option<String>,
     pub category: String, pub year: Option<String>, pub duration: Option<String>, pub explicit: bool,
     pub thumbnails: Vec<FfiThumbnail>,
     pub artists: Vec<String>,
@@ -51,7 +51,7 @@ impl MediyoSession {
 #[derive(Debug, Clone, uniffi::Record)] pub struct FfiWatchEndpoint { pub video_id: Option<String>, pub playlist_id: String, pub params: Option<String> }
 fn to_ffi_search(r: mediyo_core::model::SearchResult) -> FfiSearchResult {
     FfiSearchResult {
-        title: r.title.clone(), video_id: r.video_id.clone(), browse_id: r.browse_id.clone(), playlist_id: r.playlist_id.clone(),
+        title: r.title.clone(), video_id: r.video_id.clone(), browse_id: r.browse_id.clone(), browse_params: r.browse_params.clone(), playlist_id: r.playlist_id.clone(),
         category: format!("{:?}", r.category), year: r.year.clone(), duration: r.duration.clone(), explicit: r.explicit,
         thumbnails: r.thumbnails.into_iter().map(to_ffi_thumb).collect(),
         artists: r.artists.into_iter().map(|a| a.name).collect(),

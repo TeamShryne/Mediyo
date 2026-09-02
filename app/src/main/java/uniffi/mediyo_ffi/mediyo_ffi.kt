@@ -2425,6 +2425,7 @@ data class FfiSearchResult (
     var `title`: kotlin.String, 
     var `videoId`: kotlin.String?, 
     var `browseId`: kotlin.String?, 
+    var `browseParams`: kotlin.String?, 
     var `playlistId`: kotlin.String?, 
     var `category`: kotlin.String, 
     var `year`: kotlin.String?, 
@@ -2448,6 +2449,7 @@ public object FfiConverterTypeFfiSearchResult: FfiConverterRustBuffer<FfiSearchR
             FfiConverterOptionalString.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
             FfiConverterString.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterOptionalString.read(buf),
@@ -2462,6 +2464,7 @@ public object FfiConverterTypeFfiSearchResult: FfiConverterRustBuffer<FfiSearchR
             FfiConverterString.allocationSize(value.`title`) +
             FfiConverterOptionalString.allocationSize(value.`videoId`) +
             FfiConverterOptionalString.allocationSize(value.`browseId`) +
+            FfiConverterOptionalString.allocationSize(value.`browseParams`) +
             FfiConverterOptionalString.allocationSize(value.`playlistId`) +
             FfiConverterString.allocationSize(value.`category`) +
             FfiConverterOptionalString.allocationSize(value.`year`) +
@@ -2476,6 +2479,7 @@ public object FfiConverterTypeFfiSearchResult: FfiConverterRustBuffer<FfiSearchR
             FfiConverterString.write(value.`title`, buf)
             FfiConverterOptionalString.write(value.`videoId`, buf)
             FfiConverterOptionalString.write(value.`browseId`, buf)
+            FfiConverterOptionalString.write(value.`browseParams`, buf)
             FfiConverterOptionalString.write(value.`playlistId`, buf)
             FfiConverterString.write(value.`category`, buf)
             FfiConverterOptionalString.write(value.`year`, buf)

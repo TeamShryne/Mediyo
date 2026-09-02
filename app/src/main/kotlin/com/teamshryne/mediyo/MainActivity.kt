@@ -45,10 +45,12 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.teamshryne.mediyo.core.design.MediyoTheme
 import com.teamshryne.mediyo.feature.album.AlbumScreen
 import com.teamshryne.mediyo.feature.artist.ArtistScreen
@@ -200,7 +202,20 @@ private fun AppShell() {
                 composable("artist/{id}") { ArtistScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
                 composable("podcast/{id}") { PodcastScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
                 composable("episodes/{id}") { EpisodesScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
-                composable("list/{id}") { GenericListScreen(it.arguments?.getString("id") ?: "", null, nav, playerVm) }
+                composable(
+                    route = "list/{id}?params={params}",
+                    arguments = listOf(
+                        navArgument("id") { type = NavType.StringType },
+                        navArgument("params") { type = NavType.StringType; nullable = true; defaultValue = null }
+                    )
+                ) {
+                    GenericListScreen(
+                        browseId = it.arguments?.getString("id") ?: "",
+                        params = it.arguments?.getString("params"),
+                        nav = nav,
+                        player = playerVm
+                    )
+                }
                 composable("localPlaylist/{id}") { LocalPlaylistDetailScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
                 composable("liked") { LikedScreen(nav, playerVm) }
                 composable("history") { HistoryScreen(nav, playerVm) }
