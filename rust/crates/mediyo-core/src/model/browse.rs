@@ -718,6 +718,10 @@ fn parse_carousel(payload: &Value) -> Result<Carousel> {
                             .pointer("/clickCommand/browseEndpoint/browseId")
                             .and_then(Value::as_str)
                             .map(String::from);
+                        let browse_params = btn
+                            .pointer("/clickCommand/browseEndpoint/params")
+                            .and_then(Value::as_str)
+                            .map(String::from);
                         items.push(SearchResult {
                             category: Category::Unknown,
                             title,
@@ -725,6 +729,7 @@ fn parse_carousel(payload: &Value) -> Result<Carousel> {
                             album: None,
                             video_id: None,
                             browse_id,
+                            browse_params,
                             playlist_id: None,
                             year: None,
                             info: None,

@@ -491,7 +491,7 @@ fun InfiniteScrollHandler(
 // ── Pagination helpers ───────────────────────────────────────────────────────
 
 private fun FfiSearchResult.uniqueKey(): String =
-    videoId ?: browseId ?: playlistId ?: ("title:$title")
+    videoId ?: (browseId?.let { it + (browseParams?.let { p -> "|$p" } ?: "") }) ?: playlistId ?: ("title:$title")
 
 /**
  * Appends [newItems] while skipping anything already present (matched by

@@ -56,6 +56,7 @@ fun Track.toFfiSearchResult(): FfiSearchResult = FfiSearchResult(
     title = title,
     videoId = videoId,
     browseId = browseId,
+    browseParams = null,
     playlistId = playlistId,
     category = category,
     year = year,

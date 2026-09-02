@@ -74,6 +74,8 @@ pub struct SearchResult {
     pub video_id: Option<String>,
     /// browseId (albums, artists, playlists, profiles, podcasts).
     pub browse_id: Option<String>,
+    /// Optional browse params (e.g. moods category `ggMPOg...`).
+    pub browse_params: Option<String>,
     /// playlistId when the item is a playable playlist (watch context).
     pub playlist_id: Option<String>,
     /// Year, when present in the subtitle.
@@ -179,6 +181,7 @@ pub fn parse_search_result(v: &Value) -> Result<SearchResult> {
         album,
         video_id: video_id.map(String::from),
         browse_id: browse_id.map(String::from),
+        browse_params: None,
         playlist_id: playlist_id.map(String::from),
         year,
         info,
@@ -237,6 +240,7 @@ pub fn parse_two_row_item(v: &Value) -> Result<SearchResult> {
         album,
         video_id: video_id.map(String::from),
         browse_id: browse_id.map(String::from),
+        browse_params: None,
         playlist_id: None,
         year,
         info,
@@ -309,6 +313,7 @@ pub fn parse_multi_row_item(v: &Value) -> Result<SearchResult> {
         album,
         video_id,
         browse_id,
+        browse_params: None,
         playlist_id: None,
         year: None,
         info,

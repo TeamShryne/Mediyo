@@ -18,6 +18,7 @@ import uniffi.mediyo_ffi.FfiSong
 import uniffi.mediyo_ffi.MediyoSession
 import uniffi.mediyo_ffi.browseAlbum
 import uniffi.mediyo_ffi.browseArtist
+import uniffi.mediyo_ffi.browseExplore
 import uniffi.mediyo_ffi.browseHome
 import uniffi.mediyo_ffi.browseHomeContinue
 import uniffi.mediyo_ffi.browseListPage
@@ -126,6 +127,11 @@ class MediyoBridge @Inject constructor(private val auth: AuthRepository) {
     suspend fun home(): FfiHomePage = withContext(Dispatchers.IO) {
         val s = session()
         try { browseHome(s) } finally { s.close() }
+    }
+
+    suspend fun explore(): uniffi.mediyo_ffi.FfiExplorePage = withContext(Dispatchers.IO) {
+        val s = session()
+        try { browseExplore(s) } finally { s.close() }
     }
 
     suspend fun playlist(browseId: String): FfiPlaylistPage = withContext(Dispatchers.IO) {
