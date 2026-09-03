@@ -31,7 +31,6 @@ import com.teamshryne.mediyo.core.design.EmptyState
 import com.teamshryne.mediyo.core.design.ErrorState
 import com.teamshryne.mediyo.core.design.InfiniteScrollHandler
 import com.teamshryne.mediyo.core.design.LoadingFooter
-import com.teamshryne.mediyo.core.design.SectionHeader
 import com.teamshryne.mediyo.core.design.TrackOverflowIcon
 import com.teamshryne.mediyo.core.design.appendUnique
 import com.teamshryne.mediyo.core.design.shimmer
@@ -85,7 +84,7 @@ class SearchVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel
         }
     }
 
-    /** Submit from keyboard / suggestion tiles — resets to the All filter. */
+    /** Submit from keyboard — resets to the All filter. */
     fun submit() = runSearch(null)
 
     fun loadMore() {
@@ -182,21 +181,8 @@ fun SearchScreen(
         }
 
         when {
-            !vm.hasSearched -> item(key = "browse_all") {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    SectionHeader("Browse all")
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        items(listOf("Chill", "Workout", "Trending", "Lo-fi", "Focus")) { s ->
-                            SuggestionTile(s) {
-                                vm.query = s
-                                vm.submit()
-                            }
-                        }
-                    }
-                }
+            !vm.hasSearched -> item(key = "search_idle") {
+                EmptyState("Search Mediyo", "Find songs, artists, albums and playlists")
             }
             vm.loading -> items(7, key = { "skel_$it" }) {
                 Row(
@@ -293,26 +279,5 @@ private fun ResultRow(item: FfiSearchResult, onClick: () -> Unit, onMenu: () -> 
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         TrackOverflowIcon(onClick = onMenu)
-    }
-}
-
-@Composable
-private fun SuggestionTile(label: String, onClick: () -> Unit) {
-    Box(
-        Modifier
-            .size(width = 150.dp, height = 84.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .clickable(onClickLabel = label, onClick = onClick)
-            .padding(14.dp),
-        contentAlignment = Alignment.BottomStart
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1
-        )
     }
 }
