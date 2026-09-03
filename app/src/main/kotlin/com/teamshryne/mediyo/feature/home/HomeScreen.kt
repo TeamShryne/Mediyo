@@ -39,7 +39,6 @@ data class HomeState(
     val loading: Boolean = true,
     val refreshing: Boolean = false,
     val error: String? = null,
-    val moods: List<FfiSearchResult> = emptyList(),
     val charts: List<FfiSearchResult> = emptyList(),
     val newAlbums: List<FfiSearchResult> = emptyList(),
     val newVideos: List<FfiSearchResult> = emptyList(),
@@ -53,7 +52,7 @@ class HomeVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel()
     fun load(isRefresh: Boolean = false) {
         if (state.loading || state.refreshing) {
             // allow initial load when empty (loading=true but no data yet)
-            if (state.moods.isNotEmpty() || state.charts.isNotEmpty() || state.newAlbums.isNotEmpty()) return
+            if (state.charts.isNotEmpty() || state.newAlbums.isNotEmpty()) return
         }
         if (isRefresh) state = state.copy(refreshing = true, error = null)
         else state = state.copy(loading = true, error = null)
@@ -74,7 +73,6 @@ class HomeVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel()
                 return@launch
             }
 
-            val moods = explore?.carousels?.find { it.title == "Moods & genres" }?.items.orEmpty()
             val newAlbums = explore?.carousels?.find { it.title == "New albums & singles" }?.items.orEmpty()
             val newVideos = explore?.carousels?.find { it.title == "New music videos" }?.items.orEmpty()
             val trending = explore?.carousels?.find { it.title == "Trending" }?.items.orEmpty()
@@ -83,7 +81,6 @@ class HomeVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel()
             state = HomeState(
                 loading = false,
                 refreshing = false,
-                moods = moods,
                 charts = chartsItems,
                 newAlbums = newAlbums,
                 newVideos = newVideos,
@@ -105,7 +102,7 @@ fun HomeScreen(
     val s = vm.state
 
     fun open(r: FfiSearchResult, title: String) {
-        // Prefer browse with params when present (moods)
+        // Prefer browse with params when present
         if (r.browseId != null && r.browseParams != null) {
             val enc = Uri.encode(r.browseParams)
             nav.navigate("list/${r.browseId}?params=$enc")
@@ -150,44 +147,15 @@ fun HomeScreen(
             s.loading -> {
                 items(3) { ShimmerShelf(round = it == 1) }
             }
-            s.error != null && s.moods.isEmpty() && s.charts.isEmpty() && s.newAlbums.isEmpty() -> {
+            s.error != null && s.charts.isEmpty() && s.newAlbums.isEmpty() -> {
                 item { ErrorState(s.error ?: "Unknown error") { vm.load() } }
             }
-            s.moods.isEmpty() && s.charts.isEmpty() && s.newAlbums.isEmpty() && s.newVideos.isEmpty() -> {
+            s.charts.isEmpty() && s.newAlbums.isEmpty() && s.newVideos.isEmpty() -> {
                 item { EmptyState("Nothing here yet", "Check your connection") { vm.load() } }
             }
             else -> {
                 if (s.error != null) {
                     item { Text(s.error ?: "", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 20.dp)) }
-                }
-                if (s.moods.isNotEmpty()) {
-                    item(key = "moods") {
-                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                            SectionHeader("Moods & genres")
-                            LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                items(s.moods) { r ->
-                                    val browseId = r.browseId
-                                    val params = r.browseParams
-                                    Box(
-                                        Modifier.width(140.dp).height(72.dp)
-                                            .clip(RoundedCornerShape(16.dp))
-                                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                                            .clickable {
-                                                if (browseId != null && params != null) {
-                                                    val enc = Uri.encode(params)
-                                                    nav.navigate("list/$browseId?params=$enc")
-                                                } else if (browseId != null) {
-                                                    nav.navigate("list/$browseId")
-                                                } else {
-                                                    nav.navigate("search?q=${Uri.encode(r.title)}")
-                                                }
-                                            }
-                                            .padding(12.dp), contentAlignment = Alignment.CenterStart
-                                    ) { Text(r.title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface, maxLines = 2) }
-                                }
-                            }
-                        }
-                    }
                 }
                 if (s.charts.isNotEmpty()) {
                     item(key = "charts") {
