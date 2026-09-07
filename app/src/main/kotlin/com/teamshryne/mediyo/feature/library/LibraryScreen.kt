@@ -34,12 +34,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import coil.compose.AsyncImage
 import com.teamshryne.mediyo.data.local.FollowedArtistEntity
 import com.teamshryne.mediyo.data.local.LocalPlaylistEntity
@@ -58,6 +60,27 @@ import javax.inject.Inject
 
 enum class LibFilter { Playlists, Songs, Artists }
 enum class LibSort { Recent, Name }
+
+/** Singular/plural helper ("1 song" vs "3 songs"). */
+private fun qty(count: Int, one: String, many: String): String = "$count ${if (count == 1) one else many}"
+
+/** Same tab-switch behavior as the bottom bar — avoids stacking duplicates. */
+private fun switchTab(nav: androidx.navigation.NavController?, route: String) {
+    nav?.let { controller ->
+        controller.navigate(route) {
+            launchSingleTop = true
+            popUpTo(controller.graph.findStartDestination().id) { saveState = true }
+            restoreState = true
+        }
+    }
+}
+
+private data class EmptyCopy(
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val title: String,
+    val subtitle: String,
+    val cta: String?
+)
 
 // ── ViewModel: Room is the single source of truth (100% local) ───────────────
 
@@ -176,6 +199,7 @@ fun LibraryScreen(
     val artists by vm.artists.collectAsState()
     val likedCount by vm.likedCount.collectAsState()
     val historyCount by vm.historyCount.collectAsState()
+    val focusManager = LocalFocusManager.current
 
     val q = vm.query.trim()
     val showSongs = vm.filter == null || vm.filter == LibFilter.Songs
@@ -273,7 +297,7 @@ fun LibraryScreen(
                         singleLine = true,
                         shape = RoundedCornerShape(24.dp),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = {}),
+                        keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)
                     )
                 }
@@ -308,7 +332,7 @@ fun LibraryScreen(
                     filter = vm.filter,
                     hasQuery = q.isNotEmpty(),
                     onCreatePlaylist = { vm.showCreateDialog = true },
-                    onBrowse = { nav?.navigate("search") }
+                    onBrowse = { switchTab(nav, "search") }
                 )
             }
         } else {
@@ -316,7 +340,7 @@ fun LibraryScreen(
                 item(key = "liked") {
                     LibraryRow(
                         title = "Liked songs",
-                        subtitle = "Playlist • $likedCount songs",
+                        subtitle = "Playlist • " + qty(likedCount, "song", "songs"),
                         onClick = { nav?.navigate("liked") },
                         leading = {
                             TileIcon(
@@ -325,13 +349,8 @@ fun LibraryScreen(
                             )
                         },
                         trailing = {
-                            Row {
-                                IconButton(onClick = { vm.playLiked(player, shuffle = false) }) {
-                                    Icon(Icons.Filled.PlayArrow, "Play liked", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                                IconButton(onClick = { nav?.navigate("liked") }) {
-                                    Icon(Icons.Filled.MoreVert, "More", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
+                            IconButton(onClick = { vm.playLiked(player, shuffle = false) }) {
+                                Icon(Icons.Filled.PlayArrow, "Play liked", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     )
@@ -341,7 +360,7 @@ fun LibraryScreen(
                 item(key = "history") {
                     LibraryRow(
                         title = "History",
-                        subtitle = "$historyCount plays",
+                        subtitle = qty(historyCount, "play", "plays"),
                         onClick = { nav?.navigate("history") },
                         leading = {
                             TileIcon(
@@ -362,7 +381,7 @@ fun LibraryScreen(
                     var menu by remember { mutableStateOf(false) }
                     LibraryRow(
                         title = pl.title,
-                        subtitle = "Playlist • ${pl.trackCount} songs",
+                        subtitle = "Playlist • " + qty(pl.trackCount, "song", "songs"),
                         onClick = { nav?.navigate("localPlaylist/${pl.id}") },
                         leading = {
                             TileIcon(
@@ -520,7 +539,7 @@ fun LibraryScreen(
         AlertDialog(
             onDismissRequest = { vm.deleteTarget = null },
             title = { Text("Delete playlist?") },
-            text = { Text("\"${pl.title}\" and its ${pl.trackCount} entries will be removed from this device.") },
+            text = { Text("\"${pl.title}\" and its ${qty(pl.trackCount, "entry", "entries")} will be removed from this device.") },
             confirmButton = {
                 Button(
                     onClick = { vm.confirmDelete() },
@@ -677,12 +696,6 @@ private fun LibraryEmptyState(
     onCreatePlaylist: () -> Unit,
     onBrowse: () -> Unit
 ) {
-    data class EmptyCopy(
-        val icon: androidx.compose.ui.graphics.vector.ImageVector,
-        val title: String,
-        val subtitle: String,
-        val cta: String?
-    )
     val copy = when {
         hasQuery -> EmptyCopy(
             Icons.Filled.Search, "No matches",

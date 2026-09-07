@@ -166,6 +166,7 @@ private fun AppShell() {
                             NavigationBarItem(
                                 selected = currentRoute == t.route,
                                 onClick = {
+                                    android.util.Log.d("MediyoNav", "tab ${t.route} from $currentRoute")
                                     nav.navigate(t.route) {
                                         launchSingleTop = true
                                         popUpTo(nav.graph.findStartDestination().id) { saveState = true }
