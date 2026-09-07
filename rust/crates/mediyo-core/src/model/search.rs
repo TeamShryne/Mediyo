@@ -88,6 +88,9 @@ pub struct SearchResult {
     pub duration: Option<String>,
     pub thumbnails: Vec<thumbnails::Thumbnail>,
     pub explicit: bool,
+    /// True when the item came from the `musicCardShelfRenderer`
+    /// top-result shelf (see `parse_search_response`).
+    pub top_result: bool,
 }
 
 /// A search scope chip (Artists / Albums / Songs / ...) with its filter params.
@@ -189,6 +192,7 @@ pub fn parse_search_result(v: &Value) -> Result<SearchResult> {
         duration,
         thumbnails,
         explicit,
+        top_result: false,
     })
 }
 
@@ -248,6 +252,7 @@ pub fn parse_two_row_item(v: &Value) -> Result<SearchResult> {
         duration: None,
         thumbnails,
         explicit,
+        top_result: false,
     })
 }
 
@@ -321,6 +326,7 @@ pub fn parse_multi_row_item(v: &Value) -> Result<SearchResult> {
         duration: None,
         thumbnails,
         explicit: false,
+        top_result: false,
     })
 }
 
@@ -422,6 +428,11 @@ fn classify_segment(
     if let Some(ep) = ep {
         if let Some(parser::Endpoint::Browse { id }) = parser::endpoint(ep) {
             if id.starts_with("UC") {
+                // Upload channels (MUSIC_PAGE_TYPE_USER_CHANNEL) are not
+                // artists — linking them would open a dead artist page.
+                if parser::page_type(ep) == Some("MUSIC_PAGE_TYPE_USER_CHANNEL") {
+                    return;
+                }
                 artists.push(ArtistRef {
                     name: text.to_string(),
                     id: Some(id.to_string()),
@@ -570,5 +581,50 @@ mod tests {
         assert_eq!(r.artists.len(), 1);
         assert_eq!(r.artists[0].name, "Future");
         assert!(r.browse_id.is_none());
+    }
+
+    #[test]
+    fn user_channel_run_is_not_an_artist() {
+        // A subtitle run linking to a plain upload channel
+        // (MUSIC_PAGE_TYPE_USER_CHANNEL) must not be recorded as an artist —
+        // it would open a dead artist page.
+        let v = json!({
+            "musicResponsiveListItemRenderer": {
+                "flexColumns": [
+                    { "musicResponsiveListItemFlexColumnRenderer": { "text": { "runs": [{ "text": "Some Cover" }] } } },
+                    { "musicResponsiveListItemFlexColumnRenderer": { "text": { "runs": [
+                        { "text": "Video" },
+                        { "text": " • " },
+                        { "text": "Cover Channel", "navigationEndpoint": { "browseEndpoint": {
+                            "browseId": "UCh5zlvB1pZyU3KYjEPC38KQ",
+                            "browseEndpointContextSupportedConfigs": {
+                                "browseEndpointContextMusicConfig": { "pageType": "MUSIC_PAGE_TYPE_USER_CHANNEL" }
+                            }
+                        } } }
+                    ] } } }
+                ],
+                "playlistItemData": { "videoId": "abc123_-DEF" },
+                "overlay": {
+                    "musicItemThumbnailOverlayRenderer": {
+                        "content": {
+                            "musicPlayButtonRenderer": {
+                                "playNavigationEndpoint": {
+                                    "watchEndpoint": {
+                                        "videoId": "abc123_-DEF",
+                                        "watchEndpointMusicSupportedConfigs": {
+                                            "watchEndpointMusicConfig": { "musicVideoType": "MUSIC_VIDEO_TYPE_OMV" }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        let r = parse_search_result(&v).unwrap();
+        assert_eq!(r.category, Category::Video);
+        assert!(r.artists.is_empty());
+        assert!(!r.top_result);
     }
 }

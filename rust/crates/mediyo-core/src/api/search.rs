@@ -2,7 +2,7 @@ use serde_json::{json, Value};
 
 use crate::error::{Error, Result};
 use crate::model::search::parse_search_result;
-use crate::model::{SearchFilter, SearchResponse, SearchResult};
+use crate::model::{ArtistRef, SearchFilter, SearchResponse, SearchResult};
 use crate::parser;
 use crate::session::Session;
 
@@ -99,13 +99,35 @@ pub fn parse_search_response(resp: &Value) -> Result<SearchResponse> {
                     }
                 }
                 "musicCardShelfRenderer" => {
-                    // Top-result card: contents[0] is a result renderer.
+                    // Top-result shelf (titled by the topic, e.g. the artist):
+                    // holds several results plus sometimes a leading
+                    // messageRenderer. Parse every result row and flag them
+                    // so the UI can feature them.
+                    let topic_artist = topic_artist(payload);
                     if let Some(inner) = payload.get("contents").and_then(Value::as_array) {
-                        if let Some(first) = inner.first() {
-                            if let Some((rname, _)) = parser::renderer(first) {
-                                if rname == "musicResponsiveListItemRenderer" {
-                                    results.push(parse_search_result(first)?);
+                        for item in inner {
+                            let Some((rname, _)) = parser::renderer(item) else {
+                                continue;
+                            };
+                            match rname {
+                                "musicResponsiveListItemRenderer" => {
+                                    let mut r = parse_search_result(item)?;
+                                    // Card rows often omit the artist (the shelf
+                                    // title carries the topic) — backfill it.
+                                    if r.artists.is_empty() && r.video_id.is_some() {
+                                        if let Some(name) = topic_artist.clone() {
+                                            r.artists.push(ArtistRef { name, id: None });
+                                        }
+                                    }
+                                    r.top_result = true;
+                                    results.push(r);
                                 }
+                                "musicTwoRowItemRenderer" => {
+                                    let mut r = crate::model::search::parse_two_row_item(item)?;
+                                    r.top_result = true;
+                                    results.push(r);
+                                }
+                                _ => {}
                             }
                         }
                     }
@@ -164,6 +186,33 @@ pub fn parse_search_continuation(resp: &Value) -> Result<SearchResponse> {
         .map(String::from);
 
     Ok(SearchResponse { filters: Vec::new(), results, continuation })
+}
+
+/// Topic of a `musicCardShelfRenderer` when it links to an artist page
+/// (e.g. title "Drake" → UCU6cE7pdJPc6DU2jSrKEsdQ). Song-titled shelves
+/// (watchEndpoint titles) return None so we never mislabel a track title
+/// as an artist.
+fn topic_artist(card: &Value) -> Option<String> {
+    let title = card.get("title")?;
+    let (text, ep) = parser::runs::run_items(title).into_iter().next()?;
+    let ep = ep?;
+    let parser::Endpoint::Browse { id } = parser::endpoint(ep)? else {
+        return None;
+    };
+    if !id.starts_with("UC") {
+        return None;
+    }
+    match parser::page_type(ep) {
+        None | Some("MUSIC_PAGE_TYPE_ARTIST") => {
+            let t = text.trim();
+            if t.is_empty() {
+                None
+            } else {
+                Some(t.to_string())
+            }
+        }
+        _ => None,
+    }
 }
 
 fn parse_chips(header: &Value) -> Vec<SearchFilter> {

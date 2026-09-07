@@ -42,7 +42,11 @@ impl MediyoSession {
     pub category: String, pub year: Option<String>, pub duration: Option<String>, pub explicit: bool,
     pub thumbnails: Vec<FfiThumbnail>,
     pub artists: Vec<String>,
+    /// Parallel to `artists`; "" when the browseId is unknown.
+    pub artist_ids: Vec<String>,
     pub album: Option<String>,
+    pub album_id: Option<String>,
+    pub is_top_result: bool,
 }
 #[derive(Debug, Clone, uniffi::Record)] pub struct FfiSearchFilter { pub label: String, pub query: String, pub params: Option<String> }
 #[derive(Debug, Clone, uniffi::Record)] pub struct FfiSearchResponse { pub results: Vec<FfiSearchResult>, pub filters: Vec<FfiSearchFilter>, pub continuation: Option<String> }
@@ -54,8 +58,11 @@ fn to_ffi_search(r: mediyo_core::model::SearchResult) -> FfiSearchResult {
         title: r.title.clone(), video_id: r.video_id.clone(), browse_id: r.browse_id.clone(), browse_params: r.browse_params.clone(), playlist_id: r.playlist_id.clone(),
         category: format!("{:?}", r.category), year: r.year.clone(), duration: r.duration.clone(), explicit: r.explicit,
         thumbnails: r.thumbnails.into_iter().map(to_ffi_thumb).collect(),
-        artists: r.artists.into_iter().map(|a| a.name).collect(),
-        album: r.album.map(|a| a.name),
+        artists: r.artists.iter().map(|a| a.name.clone()).collect(),
+        artist_ids: r.artists.iter().map(|a| a.id.clone().unwrap_or_default()).collect(),
+        album: r.album.clone().map(|a| a.name),
+        album_id: r.album.and_then(|a| a.id),
+        is_top_result: r.top_result,
     }
 }
 fn to_ffi_thumb(t: mediyo_core::parser::thumbnails::Thumbnail) -> FfiThumbnail { FfiThumbnail { url: t.url, width: t.width, height: t.height } }
@@ -151,11 +158,15 @@ fn to_ffi_watch_ep(e: mediyo_core::model::WatchEndpoint) -> FfiWatchEndpoint { F
 // ── watch ──────────────────────────────────────────────────────────────────
 #[derive(Debug, Clone, uniffi::Record)] pub struct FfiQueueItem {
     pub title: String, pub video_id: String, pub artists: Vec<String>,
+    /// Parallel to `artists`; "" when the browseId is unknown.
+    pub artist_ids: Vec<String>,
     pub album: Option<String>, pub duration: Option<String>, pub thumbnails: Vec<FfiThumbnail>
 }
 #[derive(Debug, Clone, uniffi::Record)] pub struct FfiQueue { pub playlist_id: String, pub is_infinite: bool, pub items: Vec<FfiQueueItem>, pub continuation: Option<String> }
 #[derive(Debug, Clone, uniffi::Record)] pub struct FfiSong {
     pub title: String, pub video_id: String, pub artists: Vec<String>, pub album: Option<String>,
+    /// Parallel to `artists`; "" when the browseId is unknown.
+    pub artist_ids: Vec<String>,
     pub duration: Option<String>, pub thumbnails: Vec<FfiThumbnail>, pub lyrics_browse_id: Option<String>
 }
 #[derive(Debug, Clone, uniffi::Record)] pub struct FfiLyrics { pub lines: Vec<String> }
@@ -163,7 +174,10 @@ fn to_ffi_watch_ep(e: mediyo_core::model::WatchEndpoint) -> FfiWatchEndpoint { F
     let g = session.inner.lock().unwrap();
     let s = mediyo_core::api::watch::get_song(&g, &video_id, playlist_id.as_deref())?;
     Ok(FfiSong {
-        title: s.title, video_id: s.video_id, artists: s.artists.into_iter().map(|a| a.name).collect(), album: s.album,
+        title: s.title, video_id: s.video_id,
+        artists: s.artists.iter().map(|a| a.name.clone()).collect(),
+        artist_ids: s.artists.iter().map(|a| a.id.clone().unwrap_or_default()).collect(),
+        album: s.album,
         duration: s.duration, thumbnails: s.thumbnail.into_iter().map(|u| FfiThumbnail{url:u, width:0, height:0}).collect(), lyrics_browse_id: s.lyrics_browse_id
     })
 }
@@ -171,7 +185,10 @@ fn to_ffi_watch_ep(e: mediyo_core::model::WatchEndpoint) -> FfiWatchEndpoint { F
     let g = session.inner.lock().unwrap();
     let q = mediyo_core::api::watch::get_queue(&g, &video_id, playlist_id.as_deref())?;
     Ok(FfiQueue { playlist_id: q.playlist_id, is_infinite: q.is_infinite, items: q.items.into_iter().map(|i| FfiQueueItem{
-        title:i.title, video_id:i.video_id, artists:i.artists.into_iter().map(|a|a.name).collect(), album:i.album, duration:i.duration,
+        title:i.title, video_id:i.video_id,
+        artists:i.artists.iter().map(|a| a.name.clone()).collect(),
+        artist_ids:i.artists.iter().map(|a| a.id.clone().unwrap_or_default()).collect(),
+        album:i.album, duration:i.duration,
         thumbnails: i.thumbnail.into_iter().map(|u| FfiThumbnail{url:u, width:0, height:0}).collect()
     }).collect(), continuation: q.continuation })
 }
@@ -179,7 +196,10 @@ fn to_ffi_watch_ep(e: mediyo_core::model::WatchEndpoint) -> FfiWatchEndpoint { F
     let g = session.inner.lock().unwrap();
     let q = mediyo_core::api::watch::extend_queue(&g, &token)?;
     Ok(FfiQueue { playlist_id: q.playlist_id, is_infinite: q.is_infinite, items: q.items.into_iter().map(|i| FfiQueueItem{
-        title:i.title, video_id:i.video_id, artists:i.artists.into_iter().map(|a|a.name).collect(), album:i.album, duration:i.duration,
+        title:i.title, video_id:i.video_id,
+        artists:i.artists.iter().map(|a| a.name.clone()).collect(),
+        artist_ids:i.artists.iter().map(|a| a.id.clone().unwrap_or_default()).collect(),
+        album:i.album, duration:i.duration,
         thumbnails: i.thumbnail.into_iter().map(|u| FfiThumbnail{url:u, width:0, height:0}).collect()
     }).collect(), continuation: q.continuation })
 }
