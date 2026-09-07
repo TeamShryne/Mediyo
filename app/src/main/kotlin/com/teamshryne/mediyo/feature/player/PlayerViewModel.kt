@@ -38,6 +38,8 @@ data class PlayerState(
     val videoId: String? = null,
     val title: String = "",
     val artist: String = "",
+    /** Parallel to the comma-joined [artist] names; "" = unknown. */
+    val artistIds: List<String> = emptyList(),
     val artwork: String? = null,
     val isPlaying: Boolean = false,
     val isBuffering: Boolean = false,
@@ -91,6 +93,7 @@ class PlayerViewModel @Inject constructor(
                         videoId = cur.videoId,
                         title = cur.title,
                         artist = cur.artists.joinToString(", "),
+                        artistIds = cur.artistIds,
                         artwork = cur.artworkUrl,
                         queueSize = qs.entries.size,
                         queueIndex = qs.index,
@@ -98,7 +101,7 @@ class PlayerViewModel @Inject constructor(
                     )
                 } else {
                     _state.value = _state.value.copy(
-                        videoId = null, title = "", artist = "", artwork = null,
+                        videoId = null, title = "", artist = "", artistIds = emptyList(), artwork = null,
                         isPlaying = false, isBuffering = false,
                         queueSize = 0, queueIndex = -1, originLabel = qs.origin.label()
                     )
