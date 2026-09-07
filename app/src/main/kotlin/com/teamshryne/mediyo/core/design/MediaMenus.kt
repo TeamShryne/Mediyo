@@ -103,6 +103,7 @@ class MediaMenuVm @Inject constructor(
         private set
     var error by mutableStateOf<String?>(null)
 
+    @JvmName("setBusyState")
     fun setBusy(key: String?) { busy = key; if (key != null) error = null }
 
     fun isFollowedFlow(browseId: String) = artistRepo.isFollowedFlow(browseId)
