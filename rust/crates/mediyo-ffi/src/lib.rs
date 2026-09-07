@@ -46,6 +46,8 @@ impl MediyoSession {
     pub artist_ids: Vec<String>,
     pub album: Option<String>,
     pub album_id: Option<String>,
+    /// Loose trailing info (subscriber counts, view counts, ...).
+    pub info: Option<String>,
     pub is_top_result: bool,
 }
 #[derive(Debug, Clone, uniffi::Record)] pub struct FfiSearchFilter { pub label: String, pub query: String, pub params: Option<String> }
@@ -62,6 +64,7 @@ fn to_ffi_search(r: mediyo_core::model::SearchResult) -> FfiSearchResult {
         artist_ids: r.artists.iter().map(|a| a.id.clone().unwrap_or_default()).collect(),
         album: r.album.clone().map(|a| a.name),
         album_id: r.album.and_then(|a| a.id),
+        info: r.info.clone(),
         is_top_result: r.top_result,
     }
 }

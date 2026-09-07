@@ -2,7 +2,7 @@ use serde_json::{json, Value};
 
 use crate::error::{Error, Result};
 use crate::model::search::parse_search_result;
-use crate::model::{ArtistRef, SearchFilter, SearchResponse, SearchResult};
+use crate::model::{ArtistRef, Category, SearchFilter, SearchResponse, SearchResult};
 use crate::parser;
 use crate::session::Session;
 
@@ -100,9 +100,13 @@ pub fn parse_search_response(resp: &Value) -> Result<SearchResponse> {
                 }
                 "musicCardShelfRenderer" => {
                     // Top-result shelf (titled by the topic, e.g. the artist):
-                    // holds several results plus sometimes a leading
-                    // messageRenderer. Parse every result row and flag them
-                    // so the UI can feature them.
+                    // the shelf chrome itself carries the top artist entity
+                    // (title/subtitle/avatar) plus several result rows and
+                    // sometimes a leading messageRenderer. Emit the hero
+                    // first, then every result row, all flagged for featuring.
+                    if let Some(hero) = parse_card_hero(payload) {
+                        results.push(hero);
+                    }
                     let topic_artist = topic_artist(payload);
                     if let Some(inner) = payload.get("contents").and_then(Value::as_array) {
                         for item in inner {
@@ -193,6 +197,35 @@ pub fn parse_search_continuation(resp: &Value) -> Result<SearchResponse> {
 /// (watchEndpoint titles) return None so we never mislabel a track title
 /// as an artist.
 fn topic_artist(card: &Value) -> Option<String> {
+    topic_artist_entity(card).map(|(name, _)| name)
+}
+
+/// Artist hero carried by the card shelf chrome itself (title, subtitle,
+/// avatar): YTM renders it as the "Top result" artist card, so we emit it
+/// as an Artist result ahead of the shelf rows.
+fn parse_card_hero(card: &Value) -> Option<SearchResult> {
+    let (name, browse_id) = topic_artist_entity(card)?;
+    let info = card.get("subtitle").and_then(parser::runs::text);
+    Some(SearchResult {
+        category: Category::Artist,
+        title: name,
+        artists: Vec::new(),
+        album: None,
+        video_id: None,
+        browse_id: Some(browse_id),
+        browse_params: None,
+        playlist_id: None,
+        year: None,
+        info,
+        track_number: None,
+        duration: None,
+        thumbnails: parser::thumbnails::thumbnails(card),
+        explicit: false,
+        top_result: true,
+    })
+}
+
+fn topic_artist_entity(card: &Value) -> Option<(String, String)> {
     let title = card.get("title")?;
     let (text, ep) = parser::runs::run_items(title).into_iter().next()?;
     let ep = ep?;
@@ -208,7 +241,7 @@ fn topic_artist(card: &Value) -> Option<String> {
             if t.is_empty() {
                 None
             } else {
-                Some(t.to_string())
+                Some((t.to_string(), id.to_string()))
             }
         }
         _ => None,
