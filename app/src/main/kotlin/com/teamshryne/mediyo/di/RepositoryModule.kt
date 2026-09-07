@@ -1,10 +1,12 @@
 package com.teamshryne.mediyo.di
 
+import com.teamshryne.mediyo.data.repository.ArtistRepositoryImpl
 import com.teamshryne.mediyo.data.repository.CommentRepositoryImpl
 import com.teamshryne.mediyo.data.repository.HistoryRepositoryImpl
 import com.teamshryne.mediyo.data.repository.LikeRepositoryImpl
 import com.teamshryne.mediyo.data.repository.LocalPlaylistRepositoryImpl
 import com.teamshryne.mediyo.data.repository.LyricsRepositoryImpl
+import com.teamshryne.mediyo.domain.repository.ArtistRepository
 import com.teamshryne.mediyo.domain.repository.CommentRepository
 import com.teamshryne.mediyo.domain.repository.HistoryRepository
 import com.teamshryne.mediyo.domain.repository.LikeRepository
@@ -24,4 +26,5 @@ abstract class RepositoryModule {
     @Binds @Singleton abstract fun bindHistory(repo: HistoryRepositoryImpl): HistoryRepository
     @Binds @Singleton abstract fun bindComment(repo: CommentRepositoryImpl): CommentRepository
     @Binds @Singleton abstract fun bindLyrics(repo: LyricsRepositoryImpl): LyricsRepository
+    @Binds @Singleton abstract fun bindArtist(repo: ArtistRepositoryImpl): ArtistRepository
 }
