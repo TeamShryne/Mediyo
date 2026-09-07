@@ -6,6 +6,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.BookmarkAdd
+import androidx.compose.material.icons.filled.BookmarkRemove
 import androidx.compose.material.icons.filled.Comment
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -38,6 +40,7 @@ import com.teamshryne.mediyo.domain.model.toDomainTrack
 import com.teamshryne.mediyo.domain.model.toDomainTracks
 import com.teamshryne.mediyo.domain.repository.ArtistRepository
 import com.teamshryne.mediyo.domain.repository.LikeRepository
+import com.teamshryne.mediyo.domain.repository.SavedCollectionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import uniffi.mediyo_ffi.FfiSearchResult
@@ -78,6 +81,31 @@ fun openRoute(item: FfiSearchResult): String? = when {
     else -> null
 }
 
+/** Library kind for a savable public collection, null when not savable. */
+fun FfiSearchResult.libraryKind(): String? = when {
+    isAlbum() -> com.teamshryne.mediyo.data.local.SavedCollectionEntity.ALBUM
+    isPlaylist() -> com.teamshryne.mediyo.data.local.SavedCollectionEntity.PLAYLIST
+    isPodcast() -> com.teamshryne.mediyo.data.local.SavedCollectionEntity.PODCAST
+    // Generic browseable lists (mixes, charts…) behave like public playlists.
+    browseId != null && !isArtist() && videoId == null ->
+        com.teamshryne.mediyo.data.local.SavedCollectionEntity.PLAYLIST
+    else -> null
+}
+
+/** Stable library id for a savable collection: browseId preferred, playlistId fallback. */
+fun FfiSearchResult.libraryId(): String? = browseId ?: playlistId
+
+/** Subtitle snapshot for the library row (artist names / info). */
+fun FfiSearchResult.librarySubtitle(): String? {
+    val a = artists.joinToString().ifBlank { album }
+    val i = info?.takeIf { it.isNotBlank() }
+    return when {
+        a != null && a.isNotBlank() && i != null -> "$a • $i"
+        a != null && a.isNotBlank() -> a
+        else -> i
+    }
+}
+
 /** Playback origin matching the collection type. */
 fun originFor(item: FfiSearchResult): PlayOrigin {
     val id = item.browseId ?: item.playlistId ?: item.videoId ?: item.title
@@ -96,7 +124,8 @@ fun originFor(item: FfiSearchResult): PlayOrigin {
 class MediaMenuVm @Inject constructor(
     private val bridge: MediyoBridge,
     private val artistRepo: ArtistRepository,
-    private val likeRepo: LikeRepository
+    private val likeRepo: LikeRepository,
+    private val savedRepo: SavedCollectionRepository
 ) : ViewModel() {
     /** Which action is currently working ("play", "queue", "artist", "album", ...). */
     var busy by mutableStateOf<String?>(null)
@@ -120,6 +149,25 @@ class MediaMenuVm @Inject constructor(
 
     fun toggleLike(track: Track) {
         viewModelScope.launch { try { likeRepo.toggle(track) } catch (_: Throwable) { } }
+    }
+
+    fun isSavedFlow(browseId: String) = savedRepo.isSavedFlow(browseId)
+
+    /** Save / unsave a public collection (album, playlist, podcast, list). */
+    fun toggleSave(item: FfiSearchResult) {
+        val id = item.libraryId() ?: return
+        val kind = item.libraryKind() ?: return
+        viewModelScope.launch {
+            try {
+                savedRepo.toggle(
+                    browseId = id,
+                    kind = kind,
+                    title = item.title,
+                    subtitle = item.librarySubtitle(),
+                    artworkUrl = item.thumbnails.bestThumbUrl()
+                )
+            } catch (_: Throwable) { }
+        }
     }
 
     private suspend fun searchFirst(query: String, category: String): FfiSearchResult? =
@@ -455,11 +503,24 @@ private fun CollectionActions(
     }
 
     val route = openRoute(item)
+    val saveId = item.libraryId()
+    val saved by if (saveId != null) {
+        remember(saveId) { vm.isSavedFlow(saveId) }.collectAsState(initial = false)
+    } else {
+        remember { mutableStateOf(false) }
+    }
     MenuItem(
         icon = Icons.Filled.OpenInNew, label = "Open ${item.typeLabel().lowercase()}",
         enabled = route != null,
         onClick = { if (route != null) { onDismiss(); nav?.navigate(route) } }
     )
+    if (saveId != null && item.libraryKind() != null) {
+        MenuItem(
+            icon = if (saved) Icons.Filled.BookmarkRemove else Icons.Filled.BookmarkAdd,
+            label = if (saved) "Remove from library" else "Add to library",
+            onClick = { vm.toggleSave(item) }
+        )
+    }
     MenuItem(
         icon = { BusyIcon(vm.busy, "play", Icons.Filled.PlayArrow) },
         label = "Play",
