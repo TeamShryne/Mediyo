@@ -56,8 +56,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-private enum class LibFilter { Playlists, Songs, Artists }
-private enum class LibSort { Recent, Name }
+enum class LibFilter { Playlists, Songs, Artists }
+enum class LibSort { Recent, Name }
 
 // ── ViewModel: Room is the single source of truth (100% local) ───────────────
 
