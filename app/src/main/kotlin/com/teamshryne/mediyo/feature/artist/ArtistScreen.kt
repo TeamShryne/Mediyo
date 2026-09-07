@@ -97,6 +97,7 @@ fun ArtistScreen(
         when {
             r.videoId != null -> player?.playFrom(shelf, r)
             r.browseId != null && r.category.contains("Album", true) -> nav?.navigate("album/${r.browseId}")
+            r.browseId != null && r.category.contains("Artist", true) -> nav?.navigate("artist/${r.browseId}")
             r.browseId != null && r.category.contains("Playlist", true) -> nav?.navigate("playlist/${r.browseId}")
             r.browseId != null -> nav?.navigate("list/${r.browseId}")
         }

@@ -106,6 +106,8 @@ fun PlaylistScreen(
     LaunchedEffect(browseId) { vm.load(browseId) }
     var menuItem by remember { mutableStateOf<uniffi.mediyo_ffi.FfiSearchResult?>(null) }
     var showAddTrack by remember { mutableStateOf<Track?>(null) }
+    val menuScope = rememberCoroutineScope()
+    val menuVm: com.teamshryne.mediyo.core.design.MediaMenuVm = hiltViewModel()
 
     when {
         vm.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
@@ -221,6 +223,8 @@ fun PlaylistScreen(
                     onAddToPlaylist = { showAddTrack = track },
                     onPlayNext = { player?.addNext(track) },
                     onAddToQueue = { player?.addToQueue(track) },
+                    onGoToAlbum = m.album?.takeIf { it.isNotBlank() }?.let { { menuScope.launch { menuVm.resolveAlbumId(m)?.let { nav?.navigate("album/$it") } } } },
+                    onGoToArtist = m.artists.firstOrNull()?.takeIf { it.isNotBlank() }?.let { { menuScope.launch { menuVm.resolveArtistId(m)?.let { nav?.navigate("artist/$it") } } } },
                     onComments = { m.videoId?.let { nav?.navigate("comments/$it") } }
                 )
             }
