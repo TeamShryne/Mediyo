@@ -73,6 +73,7 @@ fun Track.toFfiSearchResult(): FfiSearchResult = FfiSearchResult(
     artistIds = artistIds,
     album = album,
     albumId = albumId,
+    info = null,
     isTopResult = false
 )
 

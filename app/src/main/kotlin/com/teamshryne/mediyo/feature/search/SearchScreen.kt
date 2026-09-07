@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
@@ -20,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -218,17 +220,21 @@ fun SearchScreen(
                     }
                     item(key = "top_card") {
                         val first = top[0]
+                        val firstIsArtist = first.category.contains("Artist", true)
                         TopResultCard(
                             item = first,
+                            circularArt = firstIsArtist,
+                            actionIcon = if (firstIsArtist) Icons.Filled.OpenInNew else Icons.Filled.PlayArrow,
                             onClick = { open(first) },
                             onMenu = { menuItem = first },
                             onPlay = {
-                                if (first.videoId != null) {
+                                if (firstIsArtist || first.videoId == null) open(first)
+                                else {
                                     player.playTrack(
                                         first.toDomainTrack(),
                                         PlayOrigin.Search(vm.lastQuery.ifEmpty { vm.query }, vm.selectedLabel)
                                     )
-                                } else open(first)
+                                }
                             }
                         )
                     }
@@ -277,7 +283,9 @@ private fun TopResultCard(
     item: FfiSearchResult,
     onClick: () -> Unit,
     onMenu: () -> Unit,
-    onPlay: () -> Unit
+    onPlay: () -> Unit,
+    circularArt: Boolean = false,
+    actionIcon: ImageVector = Icons.Filled.PlayArrow
 ) {
     Row(
         Modifier
@@ -295,7 +303,7 @@ private fun TopResultCard(
             contentScale = ContentScale.Crop,
             modifier = Modifier
                 .size(96.dp)
-                .clip(RoundedCornerShape(12.dp))
+                .let { if (circularArt) it.clip(CircleShape) else it.clip(RoundedCornerShape(12.dp)) }
                 .background(MaterialTheme.colorScheme.surfaceContainerHighest)
         )
         Spacer(Modifier.width(12.dp))
@@ -328,7 +336,7 @@ private fun TopResultCard(
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             FilledIconButton(onClick = onPlay, modifier = Modifier.size(48.dp)) {
-                Icon(Icons.Filled.PlayArrow, contentDescription = "Play", modifier = Modifier.size(24.dp))
+                Icon(actionIcon, contentDescription = "Open", modifier = Modifier.size(24.dp))
             }
             TrackOverflowIcon(onClick = onMenu)
         }
@@ -368,7 +376,10 @@ private fun ResultRow(item: FfiSearchResult, onClick: () -> Unit, onMenu: () -> 
             )
             Text(
                 buildString {
-                    append(item.artists.joinToString().ifBlank { item.category })
+                    append(
+                        item.artists.joinToString()
+                            .ifBlank { item.info?.takeIf { it.isNotBlank() } ?: item.category }
+                    )
                     append("  •  ")
                     append(item.category)
                 },
