@@ -102,7 +102,6 @@ class MediaMenuVm @Inject constructor(
     var busy by mutableStateOf<String?>(null)
         private set
     var error by mutableStateOf<String?>(null)
-        private set
 
     fun setBusy(key: String?) { busy = key; if (key != null) error = null }
 
