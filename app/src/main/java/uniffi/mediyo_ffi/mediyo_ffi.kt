@@ -2446,6 +2446,10 @@ data class FfiSearchResult (
     var `artistIds`: List<kotlin.String>, 
     var `album`: kotlin.String?, 
     var `albumId`: kotlin.String?, 
+    /**
+     * Loose trailing info (subscriber counts, view counts, ...).
+     */
+    var `info`: kotlin.String?, 
     var `isTopResult`: kotlin.Boolean
 ) {
     
@@ -2472,6 +2476,7 @@ public object FfiConverterTypeFfiSearchResult: FfiConverterRustBuffer<FfiSearchR
             FfiConverterSequenceString.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
             FfiConverterBoolean.read(buf),
         )
     }
@@ -2491,6 +2496,7 @@ public object FfiConverterTypeFfiSearchResult: FfiConverterRustBuffer<FfiSearchR
             FfiConverterSequenceString.allocationSize(value.`artistIds`) +
             FfiConverterOptionalString.allocationSize(value.`album`) +
             FfiConverterOptionalString.allocationSize(value.`albumId`) +
+            FfiConverterOptionalString.allocationSize(value.`info`) +
             FfiConverterBoolean.allocationSize(value.`isTopResult`)
     )
 
@@ -2509,6 +2515,7 @@ public object FfiConverterTypeFfiSearchResult: FfiConverterRustBuffer<FfiSearchR
             FfiConverterSequenceString.write(value.`artistIds`, buf)
             FfiConverterOptionalString.write(value.`album`, buf)
             FfiConverterOptionalString.write(value.`albumId`, buf)
+            FfiConverterOptionalString.write(value.`info`, buf)
             FfiConverterBoolean.write(value.`isTopResult`, buf)
     }
 }
