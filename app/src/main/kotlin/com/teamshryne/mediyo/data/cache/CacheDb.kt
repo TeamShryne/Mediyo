@@ -1,6 +1,7 @@
 package com.teamshryne.mediyo.data.cache
 
 import androidx.room.*
+import com.teamshryne.mediyo.data.local.FollowedArtistEntity
 import com.teamshryne.mediyo.data.local.HistoryDao
 import com.teamshryne.mediyo.data.local.HistoryEntryEntity
 import com.teamshryne.mediyo.data.local.LikedTrackDao
@@ -35,8 +36,8 @@ interface KvDao {
 data class CacheStatRow(val type: String, val cnt: Long, val bytes: Long?)
 
 @Database(
-    entities = [KvCache::class, LocalPlaylistEntity::class, LocalPlaylistEntryEntity::class, LikedTrackEntity::class, HistoryEntryEntity::class],
-    version = 2,
+    entities = [KvCache::class, LocalPlaylistEntity::class, LocalPlaylistEntryEntity::class, LikedTrackEntity::class, HistoryEntryEntity::class, FollowedArtistEntity::class],
+    version = 3,
     exportSchema = false
 )
 abstract class MediyoDb : RoomDatabase() {
@@ -45,6 +46,7 @@ abstract class MediyoDb : RoomDatabase() {
     abstract fun localPlaylistEntryDao(): LocalPlaylistEntryDao
     abstract fun likedDao(): LikedTrackDao
     abstract fun historyDao(): HistoryDao
+    abstract fun followedArtistDao(): com.teamshryne.mediyo.data.local.FollowedArtistDao
 }
 
 data class CacheStats(val totalBytes: Long, val byType: Map<String, Pair<Long,Long>>)

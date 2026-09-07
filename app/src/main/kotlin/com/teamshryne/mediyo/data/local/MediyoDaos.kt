@@ -79,6 +79,36 @@ interface LocalPlaylistEntryDao {
 }
 
 @Dao
+interface FollowedArtistDao {
+    @Query("SELECT * FROM followed_artists ORDER BY followedAt DESC")
+    fun flowAll(): Flow<List<com.teamshryne.mediyo.data.local.FollowedArtistEntity>>
+
+    @Query("SELECT * FROM followed_artists ORDER BY followedAt DESC")
+    suspend fun getAll(): List<com.teamshryne.mediyo.data.local.FollowedArtistEntity>
+
+    @Query("SELECT * FROM followed_artists WHERE browseId = :browseId LIMIT 1")
+    suspend fun getById(browseId: String): com.teamshryne.mediyo.data.local.FollowedArtistEntity?
+
+    @Query("SELECT EXISTS(SELECT 1 FROM followed_artists WHERE browseId = :browseId)")
+    fun isFollowedFlow(browseId: String): Flow<Boolean>
+
+    @Query("SELECT EXISTS(SELECT 1 FROM followed_artists WHERE browseId = :browseId)")
+    suspend fun isFollowed(browseId: String): Boolean
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: com.teamshryne.mediyo.data.local.FollowedArtistEntity)
+
+    @Query("DELETE FROM followed_artists WHERE browseId = :browseId")
+    suspend fun remove(browseId: String)
+
+    @Query("DELETE FROM followed_artists")
+    suspend fun clearAll()
+
+    @Query("SELECT COUNT(*) FROM followed_artists")
+    fun countFlow(): Flow<Int>
+}
+
+@Dao
 interface LikedTrackDao {
     @Query("SELECT * FROM liked_tracks ORDER BY likedAt DESC")
     fun flowAll(): Flow<List<LikedTrackEntity>>

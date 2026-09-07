@@ -42,6 +42,7 @@ object AppModule {
     @Provides fun provideLocalPlaylistEntryDao(db: MediyoDb): LocalPlaylistEntryDao = db.localPlaylistEntryDao()
     @Provides fun provideLikedDao(db: MediyoDb): LikedTrackDao = db.likedDao()
     @Provides fun provideHistoryDao(db: MediyoDb): HistoryDao = db.historyDao()
+    @Provides fun provideFollowedArtistDao(db: MediyoDb): com.teamshryne.mediyo.data.local.FollowedArtistDao = db.followedArtistDao()
 
     @Provides @Singleton fun provideBetterLyricsApi(): BetterLyricsApi = BetterLyricsApi()
     @Provides @Singleton fun provideLrcLibApi(): LrcLibApi = LrcLibApi()

@@ -37,15 +37,20 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import uniffi.mediyo_ffi.FfiSearchResult
 
-@HiltViewModel class ArtistVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel() {
+@HiltViewModel class ArtistVm @Inject constructor(
+    private val bridge: MediyoBridge,
+    private val artistRepo: com.teamshryne.mediyo.domain.repository.ArtistRepository
+) : ViewModel() {
     var loading by mutableStateOf(true); var error by mutableStateOf<String?>(null)
     var loadingMore by mutableStateOf(false); var continuation by mutableStateOf<String?>(null)
     var name by mutableStateOf(""); var subs by mutableStateOf<String?>(null)
     var thumb by mutableStateOf<String?>(null)
+    var browseId by mutableStateOf<String?>(null)
     var topSongs by mutableStateOf<List<FfiSearchResult>>(emptyList())
     var carousels by mutableStateOf<List<uniffi.mediyo_ffi.FfiCarousel>>(emptyList())
     fun load(id: String) {
         loading = true; error = null; continuation = null
+        browseId = id
         viewModelScope.launch {
             try {
                 val p = bridge.artist(id)
@@ -54,6 +59,14 @@ import uniffi.mediyo_ffi.FfiSearchResult
                 topSongs = p.topSongs; carousels = p.carousels
                 continuation = p.continuation.takeIf { p.topSongs.isNotEmpty() }
             } catch (e: Throwable) { error = e.message } finally { loading = false }
+        }
+    }
+    fun isFollowedFlow(id: String) = artistRepo.isFollowedFlow(id)
+
+    fun toggleFollow() {
+        val id = browseId ?: return
+        viewModelScope.launch {
+            artistRepo.toggle(id, name, thumb, subs)
         }
     }
     fun loadMore() {
@@ -130,7 +143,10 @@ fun ArtistScreen(
                                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Spacer(Modifier.height(14.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 FilledIconButton(
                                     onClick = { vm.topSongs.firstOrNull()?.let { player?.playFrom(vm.topSongs, it) } },
                                     shape = CircleShape,
@@ -148,6 +164,20 @@ fun ArtistScreen(
                                     shape = CircleShape,
                                     modifier = Modifier.size(52.dp)
                                 ) { Icon(Icons.Filled.Shuffle, contentDescription = "Shuffle") }
+                                // Local-only subscribe — Room is source of truth, no server call.
+                                val followFlow = remember(browseId) { vm.isFollowedFlow(browseId) }
+                                val isFollowed by followFlow.collectAsState(initial = false)
+                                if (isFollowed) {
+                                    FilledTonalButton(
+                                        onClick = { vm.toggleFollow() },
+                                        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp)
+                                    ) { Text("Following") }
+                                } else {
+                                    OutlinedButton(
+                                        onClick = { vm.toggleFollow() },
+                                        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp)
+                                    ) { Text("Follow") }
+                                }
                             }
                             Spacer(Modifier.height(6.dp))
                         }
