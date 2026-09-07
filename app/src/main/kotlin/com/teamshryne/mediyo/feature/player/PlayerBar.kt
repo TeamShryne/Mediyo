@@ -44,6 +44,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -53,6 +54,7 @@ import coil.compose.rememberAsyncImagePainter
 import com.teamshryne.mediyo.core.design.DominantColors
 import com.teamshryne.mediyo.core.design.GlowingLoadingTitle
 import com.teamshryne.mediyo.core.design.MarqueeText
+import com.teamshryne.mediyo.core.design.MediaMenuVm
 import com.teamshryne.mediyo.core.design.TrackMenuSheet
 import com.teamshryne.mediyo.core.design.formatTime
 import com.teamshryne.mediyo.core.design.immersiveBrush
@@ -62,6 +64,7 @@ import com.teamshryne.mediyo.domain.model.ART_ROW_PX
 import com.teamshryne.mediyo.domain.model.thumbSized
 import com.teamshryne.mediyo.feature.lyrics.LyricsViewModel
 import com.teamshryne.mediyo.feature.lyrics.SyncedLyricsView
+import kotlinx.coroutines.launch
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mini player — floating pill above the nav bar (Spotify style)
@@ -148,6 +151,7 @@ fun FullPlayer(
     onShowQueue: () -> Unit = {},
     onShowComments: () -> Unit = {},
     onShowSleepTimer: () -> Unit = {},
+    onGoToArtist: (String) -> Unit = {},
     playerVm: PlayerViewModel? = null
 ) {
     val dominant: DominantColors = rememberDominantColors(state.artwork)
@@ -156,10 +160,11 @@ fun FullPlayer(
     // lyrics mode: toggles between player and synced lyrics experience
     var isLyricsMode by remember { mutableStateOf(false) }
 
-    val trackForMenu = remember(state.videoId, state.title, state.artist, state.artwork) {
+    val trackForMenu = remember(state.videoId, state.title, state.artist, state.artwork, state.artistIds) {
         com.teamshryne.mediyo.domain.model.Track(
             videoId = state.videoId, title = state.title,
-            artists = if (state.artist.isBlank()) emptyList() else listOf(state.artist),
+            artists = if (state.artist.isBlank()) emptyList() else state.artist.split(",").map { it.trim() }.filter { it.isNotEmpty() },
+            artistIds = state.artistIds,
             artworkUrl = state.artwork
         )
     }
@@ -333,7 +338,11 @@ fun FullPlayer(
                                 Column(Modifier.weight(1f)) {
                                     MarqueeText(state.title, MaterialTheme.typography.headlineSmall, Color.White)
                                     Spacer(Modifier.height(2.dp))
-                                    MarqueeText(state.artist, MaterialTheme.typography.bodyMedium, Color.White.copy(alpha = 0.72f))
+                                    ArtistLinks(
+                                        artist = state.artist,
+                                        artistIds = state.artistIds,
+                                        onGoToArtist = onGoToArtist
+                                    )
                                 }
                                 IconButton(onClick = {
                                     if (playerVm != null) playerVm.toggleLikeCurrent() else liked = !liked
@@ -514,6 +523,60 @@ fun FullPlayer(
                 onRefetchLyrics = if (isLyricsMode) {
                     { lyricsVm.refetch(trackForMenu, state.durationMs.takeIf { it > 0 }) }
                 } else null
+            )
+        }
+    }
+}
+
+/**
+ * Now-playing artists as individual tappable links. Uses the parsed
+ * browseId when it survived to the queue, otherwise resolves by name.
+ */
+@Composable
+private fun ArtistLinks(
+    artist: String,
+    artistIds: List<String>,
+    onGoToArtist: (String) -> Unit,
+    menuVm: MediaMenuVm = hiltViewModel()
+) {
+    val names = remember(artist) { artist.split(",").map { it.trim() }.filter { it.isNotEmpty() } }
+    if (names.isEmpty()) return
+    val scope = rememberCoroutineScope()
+    var resolving by remember { mutableStateOf(false) }
+    val interaction = remember { MutableInteractionSource() }
+    val color = Color.White.copy(alpha = 0.72f)
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        names.forEachIndexed { i, name ->
+            if (i > 0) {
+                Text(", ", style = MaterialTheme.typography.bodyMedium, color = color, maxLines = 1)
+            }
+            Text(
+                text = name,
+                style = MaterialTheme.typography.bodyMedium,
+                color = color,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false).clickable(
+                    enabled = !resolving,
+                    indication = null,
+                    interactionSource = interaction
+                ) {
+                    scope.launch {
+                        val direct = artistIds.getOrNull(i)?.takeIf { it.isNotBlank() }
+                        if (direct != null) {
+                            onGoToArtist(direct)
+                            return@launch
+                        }
+                        if (resolving) return@launch
+                        resolving = true
+                        try {
+                            menuVm.resolveArtistIdByName(name)?.let { onGoToArtist(it) }
+                        } catch (_: Throwable) {
+                        } finally {
+                            resolving = false
+                        }
+                    }
+                }
             )
         }
     }

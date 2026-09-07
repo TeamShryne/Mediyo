@@ -131,7 +131,14 @@ class MediaMenuVm @Inject constructor(
     suspend fun resolveArtistId(item: FfiSearchResult): String? {
         if (item.isArtist()) return item.browseId
         val name = item.artists.firstOrNull()?.takeIf { it.isNotBlank() } ?: return null
-        return searchFirst(name, "Artist")?.browseId
+        return resolveArtistIdByName(name)
+    }
+
+    /** Resolve an artist browseId from a plain name (fallback when no ID survived). */
+    suspend fun resolveArtistIdByName(name: String): String? {
+        val q = name.trim()
+        if (q.isEmpty()) return null
+        return searchFirst(q, "Artist")?.browseId
     }
 
     /** Resolve an album browseId: direct for albums, search-by-name otherwise. */
@@ -306,7 +313,9 @@ private fun SongActions(
                 scope.launch {
                     vm.setBusy("artist")
                     try {
-                        val id = vm.resolveArtistId(item)
+                        // Prefer the parsed ID; fall back to search-by-name.
+                        val id = item.artistIds.firstOrNull { it.isNotBlank() }
+                            ?: vm.resolveArtistId(item)
                         if (id != null) { onDismiss(); nav?.navigate("artist/$id") }
                         else vm.error = "Couldn't find that artist"
                     } catch (e: Throwable) {
@@ -327,7 +336,8 @@ private fun SongActions(
                 scope.launch {
                     vm.setBusy("album")
                     try {
-                        val id = vm.resolveAlbumId(item)
+                        val id = item.albumId?.takeIf { it.isNotBlank() }
+                            ?: vm.resolveAlbumId(item)
                         if (id != null) { onDismiss(); nav?.navigate("album/$id") }
                         else vm.error = "Couldn't find that album"
                     } catch (e: Throwable) {

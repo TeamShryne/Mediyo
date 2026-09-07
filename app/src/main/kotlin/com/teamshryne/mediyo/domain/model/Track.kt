@@ -11,7 +11,10 @@ data class Track(
     val playlistId: String? = null,
     val title: String,
     val artists: List<String> = emptyList(),
+    /** Parallel to [artists]; "" when the browseId is unknown. */
+    val artistIds: List<String> = emptyList(),
     val album: String? = null,
+    val albumId: String? = null,
     val artworkUrl: String? = null,
     val duration: String? = null,
     val category: String = "Song",
@@ -28,7 +31,9 @@ fun FfiSearchResult.toDomainTrack(): Track = Track(
     playlistId = playlistId,
     title = title,
     artists = artists,
+    artistIds = artistIds,
     album = album,
+    albumId = albumId,
     artworkUrl = thumbnails.bestThumbUrl(),
     duration = duration,
     category = category,
@@ -42,6 +47,7 @@ fun FfiQueueItem.toDomainTrack(): Track = Track(
     playlistId = null,
     title = title,
     artists = artists,
+    artistIds = artistIds,
     album = album,
     duration = duration,
     artworkUrl = thumbnails.bestThumbUrl(),
@@ -64,7 +70,10 @@ fun Track.toFfiSearchResult(): FfiSearchResult = FfiSearchResult(
     explicit = explicit,
     thumbnails = artworkUrl?.let { listOf(FfiThumbnail(it, 0u, 0u)) } ?: emptyList(),
     artists = artists,
-    album = album
+    artistIds = artistIds,
+    album = album,
+    albumId = albumId,
+    isTopResult = false
 )
 
 fun newLocalId(): String = UUID.randomUUID().toString()

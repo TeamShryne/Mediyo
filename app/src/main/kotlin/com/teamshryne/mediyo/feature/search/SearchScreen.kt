@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -202,11 +203,49 @@ fun SearchScreen(
             vm.results.isEmpty() -> item(key = "empty") {
                 EmptyState("No results for \"${vm.lastQuery}\"", "Try different keywords or another filter")
             }
-            else -> items(vm.results.size, key = { i ->
-                vm.results[i].let { it.videoId ?: it.browseId ?: it.playlistId }?.let { "${it}_$i" } ?: "r_$i"
-            }) { i ->
-                val r = vm.results[i]
-                ResultRow(item = r, onClick = { open(r) }, onMenu = { menuItem = r })
+            else -> {
+                // Top-result shelf rows first, featured — the rest as plain rows.
+                val top = vm.results.filter { it.isTopResult }
+                val rest = vm.results.filterNot { it.isTopResult }
+                if (top.isNotEmpty()) {
+                    item(key = "top_header") {
+                        Text(
+                            "Top result",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(horizontal = 20.dp)
+                        )
+                    }
+                    item(key = "top_card") {
+                        val first = top[0]
+                        TopResultCard(
+                            item = first,
+                            onClick = { open(first) },
+                            onMenu = { menuItem = first },
+                            onPlay = {
+                                if (first.videoId != null) {
+                                    player.playTrack(
+                                        first.toDomainTrack(),
+                                        PlayOrigin.Search(vm.lastQuery.ifEmpty { vm.query }, vm.selectedLabel)
+                                    )
+                                } else open(first)
+                            }
+                        )
+                    }
+                    val moreTop = top.drop(1)
+                    items(moreTop.size, key = { i ->
+                        moreTop[i].let { it.videoId ?: it.browseId ?: it.playlistId }?.let { "t_${it}_$i" } ?: "t_$i"
+                    }) { i ->
+                        val r = moreTop[i]
+                        ResultRow(item = r, onClick = { open(r) }, onMenu = { menuItem = r })
+                    }
+                }
+                items(rest.size, key = { i ->
+                    rest[i].let { it.videoId ?: it.browseId ?: it.playlistId }?.let { "r_${it}_$i" } ?: "r_$i"
+                }) { i ->
+                    val r = rest[i]
+                    ResultRow(item = r, onClick = { open(r) }, onMenu = { menuItem = r })
+                }
             }
         }
 
@@ -231,6 +270,69 @@ fun SearchScreen(
         )
     }
     showAddTrack?.let { t -> com.teamshryne.mediyo.feature.playlist.AddToPlaylistSheet(track = t, onDismiss = { showAddTrack = null }) }
+}
+
+@Composable
+private fun TopResultCard(
+    item: FfiSearchResult,
+    onClick: () -> Unit,
+    onMenu: () -> Unit,
+    onPlay: () -> Unit
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .clickable(onClick = onClick)
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AsyncImage(
+            model = item.thumbnails.bestThumbUrl(),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(96.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                "Top result • ${item.category}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                item.title,
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2, overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                buildString {
+                    append(item.artists.joinToString().ifBlank { item.category })
+                    if (!item.duration.isNullOrBlank()) append(" • ${item.duration}")
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
+        }
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            FilledIconButton(onClick = onPlay, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Filled.PlayArrow, contentDescription = "Play", modifier = Modifier.size(24.dp))
+            }
+            TrackOverflowIcon(onClick = onMenu)
+        }
+    }
 }
 
 @Composable
