@@ -2,6 +2,7 @@ package com.teamshryne.mediyo.feature.library
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -11,6 +12,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.BookmarkRemove
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -24,6 +27,7 @@ import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.PlaylistPlay
+import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SortByAlpha
@@ -45,8 +49,10 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import coil.compose.AsyncImage
 import com.teamshryne.mediyo.data.local.FollowedArtistEntity
 import com.teamshryne.mediyo.data.local.LocalPlaylistEntity
+import com.teamshryne.mediyo.data.local.SavedCollectionEntity
 import com.teamshryne.mediyo.domain.model.PlayOrigin
 import com.teamshryne.mediyo.domain.model.Track
+import com.teamshryne.mediyo.domain.model.bestThumbUrl
 import com.teamshryne.mediyo.domain.model.upscaledThumbUrl
 import com.teamshryne.mediyo.domain.repository.ArtistRepository
 import com.teamshryne.mediyo.domain.repository.HistoryRepository
@@ -58,7 +64,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-enum class LibFilter { Playlists, Songs, Artists }
+enum class LibFilter { Playlists, Songs, Artists, Albums, Podcasts }
 enum class LibSort { Recent, Name }
 
 /** Singular/plural helper ("1 song" vs "3 songs"). */
@@ -89,16 +95,28 @@ class LibraryVm @Inject constructor(
     private val playlistRepo: PlaylistRepository,
     private val artistRepo: ArtistRepository,
     private val likeRepo: LikeRepository,
-    private val historyRepo: HistoryRepository
+    private val historyRepo: HistoryRepository,
+    private val savedRepo: com.teamshryne.mediyo.domain.repository.SavedCollectionRepository,
+    private val bridge: com.teamshryne.mediyo.data.mediyo.MediyoBridge
 ) : ViewModel() {
     val playlists = playlistRepo.flowPlaylists()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val artists = artistRepo.flowFollowed()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val saved = savedRepo.flowAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val likedCount = likeRepo.countFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
     val historyCount = historyRepo.countFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    init {
+        // Background refresh: re-fetch saved albums/playlists/podcasts metadata
+        // and update the local snapshot. Fire-and-forget; rows update via Flow.
+        viewModelScope.launch {
+            try { savedRepo.refreshAll() } catch (_: Throwable) { }
+        }
+    }
 
     var filter by mutableStateOf<LibFilter?>(null) // null = All (YT Music default)
     var sort by mutableStateOf(LibSort.Recent)
@@ -150,6 +168,64 @@ class LibraryVm @Inject constructor(
         }
     }
 
+    fun removeSaved(item: SavedCollectionEntity) {
+        viewModelScope.launch {
+            try { savedRepo.remove(item.browseId) } catch (_: Throwable) { }
+        }
+    }
+
+    /** Play a saved public collection (read-only: opens live tracks, never edits). */
+    fun playSaved(
+        item: SavedCollectionEntity,
+        player: com.teamshryne.mediyo.feature.player.PlayerViewModel?,
+        shuffle: Boolean
+    ) {
+        viewModelScope.launch {
+            try {
+                val (tracks, origin) = when (item.kind) {
+                    SavedCollectionEntity.ALBUM -> {
+                        val p = bridge.album(item.browseId)
+                        p.tracks.map {
+                            Track(
+                                videoId = it.videoId, title = it.title,
+                                artists = it.artists,
+                                artworkUrl = it.thumbnails.bestThumbUrl(), album = it.album,
+                                duration = it.duration, category = it.category
+                            )
+                        }.filter { it.videoId != null } to
+                            PlayOrigin.Album(item.browseId, item.title)
+                    }
+                    SavedCollectionEntity.PODCAST -> {
+                        val p = bridge.podcast(item.browseId)
+                        p.items.map {
+                            Track(
+                                videoId = it.videoId, title = it.title,
+                                artists = it.artists,
+                                artworkUrl = it.thumbnails.bestThumbUrl(), album = it.album,
+                                duration = it.duration, category = it.category
+                            )
+                        }.filter { it.videoId != null } to
+                            PlayOrigin.Podcast(item.browseId)
+                    }
+                    else -> {
+                        val p = bridge.playlist(item.browseId)
+                        p.tracks.map {
+                            Track(
+                                videoId = it.videoId, title = it.title,
+                                artists = it.artists,
+                                artworkUrl = it.thumbnails.bestThumbUrl(), album = it.album,
+                                duration = it.duration, category = it.category
+                            )
+                        }.filter { it.videoId != null } to
+                            PlayOrigin.Playlist(item.browseId, item.title)
+                    }
+                }
+                if (tracks.isEmpty()) return@launch
+                player?.playTracks(tracks.let { if (shuffle) it.shuffled() else it }, 0, origin)
+            } catch (_: Throwable) { }
+        }
+    }
+
     fun playPlaylist(
         playlist: LocalPlaylistEntity,
         player: com.teamshryne.mediyo.feature.player.PlayerViewModel?,
@@ -197,6 +273,7 @@ fun LibraryScreen(
 ) {
     val playlists by vm.playlists.collectAsState()
     val artists by vm.artists.collectAsState()
+    val savedAll by vm.saved.collectAsState()
     val likedCount by vm.likedCount.collectAsState()
     val historyCount by vm.historyCount.collectAsState()
     val focusManager = LocalFocusManager.current
@@ -205,6 +282,28 @@ fun LibraryScreen(
     val showSongs = vm.filter == null || vm.filter == LibFilter.Songs
     val showPlaylists = vm.filter == null || vm.filter == LibFilter.Playlists
     val showArtists = vm.filter == null || vm.filter == LibFilter.Artists
+    val showAlbums = vm.filter == null || vm.filter == LibFilter.Albums
+    val showPodcasts = vm.filter == null || vm.filter == LibFilter.Podcasts
+
+    fun sortSaved(list: List<SavedCollectionEntity>): List<SavedCollectionEntity> {
+        var l = if (q.isEmpty()) list else list.filter {
+            it.title.contains(q, true) || (it.subtitle?.contains(q, true) == true)
+        }
+        l = when (vm.sort) {
+            LibSort.Recent -> l.sortedByDescending { it.savedAt }
+            LibSort.Name -> l.sortedBy { it.title.lowercase() }
+        }
+        return l
+    }
+    val savedAlbums = remember(savedAll, q, vm.sort) {
+        sortSaved(savedAll.filter { it.kind == SavedCollectionEntity.ALBUM })
+    }
+    val savedPlaylists = remember(savedAll, q, vm.sort) {
+        sortSaved(savedAll.filter { it.kind == SavedCollectionEntity.PLAYLIST })
+    }
+    val savedPodcasts = remember(savedAll, q, vm.sort) {
+        sortSaved(savedAll.filter { it.kind == SavedCollectionEntity.PODCAST })
+    }
 
     val filteredPlaylists = remember(playlists, q, vm.sort) {
         var list = if (q.isEmpty()) playlists else playlists.filter { it.title.contains(q, true) }
@@ -224,11 +323,16 @@ fun LibraryScreen(
     }
     val showLikedRow = showSongs && (q.isEmpty() || "liked songs".contains(q, true)) && likedCount > 0
     val showHistoryRow = vm.filter == null && (q.isEmpty() || "history".contains(q, true)) && historyCount > 0
-    val isEmpty = !showLikedRow && !showHistoryRow && filteredPlaylists.isEmpty() && filteredArtists.isEmpty()
+    val showSavedAlbums = showAlbums && savedAlbums.isNotEmpty()
+    val showSavedPlaylists = showPlaylists && savedPlaylists.isNotEmpty()
+    val showSavedPodcasts = showPodcasts && savedPodcasts.isNotEmpty()
+    val isEmpty = !showLikedRow && !showHistoryRow && filteredPlaylists.isEmpty() && filteredArtists.isEmpty() &&
+        !showSavedAlbums && !showSavedPlaylists && !showSavedPodcasts
 
-    val summary = remember(playlists.size, artists.size, likedCount) {
+    val summary = remember(playlists.size, artists.size, likedCount, savedAll.size) {
         buildList {
             if (playlists.isNotEmpty()) add("${playlists.size} playlists")
+            if (savedAll.isNotEmpty()) add("${savedAll.size} saved")
             if (artists.isNotEmpty()) add("${artists.size} artists")
             if (likedCount > 0) add("$likedCount liked")
         }.joinToString(" • ")
@@ -304,13 +408,19 @@ fun LibraryScreen(
 
                 // Filter chips — YTM style, single-select (tap active to clear)
                 Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                    Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)
+                        .horizontalScroll(remember { androidx.compose.foundation.ScrollState(0) }),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     FilterChip(
                         selected = vm.filter == LibFilter.Playlists,
                         onClick = { vm.filter = if (vm.filter == LibFilter.Playlists) null else LibFilter.Playlists },
                         label = { Text("Playlists") }
+                    )
+                    FilterChip(
+                        selected = vm.filter == LibFilter.Albums,
+                        onClick = { vm.filter = if (vm.filter == LibFilter.Albums) null else LibFilter.Albums },
+                        label = { Text("Albums") }
                     )
                     FilterChip(
                         selected = vm.filter == LibFilter.Songs,
@@ -321,6 +431,11 @@ fun LibraryScreen(
                         selected = vm.filter == LibFilter.Artists,
                         onClick = { vm.filter = if (vm.filter == LibFilter.Artists) null else LibFilter.Artists },
                         label = { Text("Artists") }
+                    )
+                    FilterChip(
+                        selected = vm.filter == LibFilter.Podcasts,
+                        onClick = { vm.filter = if (vm.filter == LibFilter.Podcasts) null else LibFilter.Podcasts },
+                        label = { Text("Podcasts") }
                     )
                 }
             }
@@ -374,7 +489,7 @@ fun LibraryScreen(
             }
 
             if (showPlaylists && filteredPlaylists.isNotEmpty()) {
-                if (vm.filter == null && (showLikedRow || showHistoryRow || filteredArtists.isNotEmpty())) {
+                if (vm.filter == null && (showLikedRow || showHistoryRow || filteredArtists.isNotEmpty() || showSavedAlbums || showSavedPlaylists || showSavedPodcasts)) {
                     item(key = "pl_header") { ListSectionHeader("Playlists", filteredPlaylists.size) }
                 }
                 items(filteredPlaylists, key = { "pl_${it.id}" }) { pl ->
@@ -427,8 +542,56 @@ fun LibraryScreen(
                 }
             }
 
+            if (showSavedAlbums) {
+                if (vm.filter == null && (showLikedRow || showHistoryRow || filteredPlaylists.isNotEmpty() || filteredArtists.isNotEmpty() || showSavedPlaylists || showSavedPodcasts)) {
+                    item(key = "salb_header") { ListSectionHeader("Saved albums", savedAlbums.size) }
+                }
+                items(savedAlbums, key = { "salb_${it.browseId}" }) { s ->
+                    SavedCollectionRow(
+                        item = s,
+                        kindLabel = "Album",
+                        onOpen = { nav?.navigate("album/${s.browseId}") },
+                        onPlay = { vm.playSaved(s, player, shuffle = false) },
+                        onShuffle = { vm.playSaved(s, player, shuffle = true) },
+                        onRemove = { vm.removeSaved(s) }
+                    )
+                }
+            }
+
+            if (showSavedPlaylists) {
+                if (vm.filter == null && (showLikedRow || showHistoryRow || filteredPlaylists.isNotEmpty() || filteredArtists.isNotEmpty() || showSavedAlbums || showSavedPodcasts)) {
+                    item(key = "spl_header") { ListSectionHeader("Saved playlists", savedPlaylists.size) }
+                }
+                items(savedPlaylists, key = { "spl_${it.browseId}" }) { s ->
+                    SavedCollectionRow(
+                        item = s,
+                        kindLabel = "Playlist",
+                        onOpen = { nav?.navigate("playlist/${s.browseId}") },
+                        onPlay = { vm.playSaved(s, player, shuffle = false) },
+                        onShuffle = { vm.playSaved(s, player, shuffle = true) },
+                        onRemove = { vm.removeSaved(s) }
+                    )
+                }
+            }
+
+            if (showSavedPodcasts) {
+                if (vm.filter == null && (showLikedRow || showHistoryRow || filteredPlaylists.isNotEmpty() || filteredArtists.isNotEmpty() || showSavedAlbums || showSavedPlaylists)) {
+                    item(key = "spod_header") { ListSectionHeader("Saved podcasts", savedPodcasts.size) }
+                }
+                items(savedPodcasts, key = { "spod_${it.browseId}" }) { s ->
+                    SavedCollectionRow(
+                        item = s,
+                        kindLabel = "Podcast",
+                        onOpen = { nav?.navigate("podcast/${s.browseId}") },
+                        onPlay = { vm.playSaved(s, player, shuffle = false) },
+                        onShuffle = { vm.playSaved(s, player, shuffle = true) },
+                        onRemove = { vm.removeSaved(s) }
+                    )
+                }
+            }
+
             if (showArtists && filteredArtists.isNotEmpty()) {
-                if (vm.filter == null && (showLikedRow || showHistoryRow || filteredPlaylists.isNotEmpty())) {
+                if (vm.filter == null && (showLikedRow || showHistoryRow || filteredPlaylists.isNotEmpty() || showSavedAlbums || showSavedPlaylists || showSavedPodcasts)) {
                     item(key = "ar_header") { ListSectionHeader("Artists", filteredArtists.size) }
                 }
                 items(filteredArtists, key = { "ar_${it.browseId}" }) { a ->
@@ -666,6 +829,77 @@ private fun TileIcon(
     }
 }
 
+// ── Saved public collections (read-only: open / play / remove only) ──────────
+
+@Composable
+private fun SavedCollectionRow(
+    item: SavedCollectionEntity,
+    kindLabel: String,
+    onOpen: () -> Unit,
+    onPlay: () -> Unit,
+    onShuffle: () -> Unit,
+    onRemove: () -> Unit
+) {
+    var menu by remember { mutableStateOf(false) }
+    LibraryRow(
+        title = item.title,
+        subtitle = buildString {
+            append(kindLabel)
+            if (!item.subtitle.isNullOrBlank()) append(" • ${item.subtitle}")
+            else if (!item.trackCountText.isNullOrBlank()) append(" • ${item.trackCountText}")
+        },
+        onClick = onOpen,
+        leading = { SavedThumb(item) },
+        trailing = {
+            Box {
+                IconButton(onClick = { menu = true }) {
+                    Icon(Icons.Filled.MoreVert, "More", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Play") },
+                        leadingIcon = { Icon(Icons.Filled.PlayArrow, null) },
+                        onClick = { menu = false; onPlay() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Shuffle") },
+                        leadingIcon = { Icon(Icons.Filled.Shuffle, null) },
+                        onClick = { menu = false; onShuffle() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Remove from library") },
+                        leadingIcon = { Icon(Icons.Filled.BookmarkRemove, null) },
+                        onClick = { menu = false; onRemove() }
+                    )
+                }
+            }
+        }
+    )
+}
+
+@Composable
+private fun SavedThumb(s: SavedCollectionEntity) {
+    if (s.artworkUrl.isNullOrBlank()) {
+        TileIcon(
+            icon = when (s.kind) {
+                SavedCollectionEntity.ALBUM -> Icons.Filled.Album
+                SavedCollectionEntity.PODCAST -> Icons.Filled.Podcasts
+                else -> Icons.Filled.PlaylistPlay
+            },
+            contentDescription = null
+        )
+    } else {
+        AsyncImage(
+            model = s.artworkUrl,
+            contentDescription = s.title,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.size(56.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+        )
+    }
+}
+
 @Composable
 private fun ArtistThumb(a: FollowedArtistEntity) {
     if (a.artworkUrl.isNullOrBlank()) {
@@ -711,7 +945,15 @@ private fun LibraryEmptyState(
         )
         filter == LibFilter.Playlists -> EmptyCopy(
             Icons.Filled.PlaylistPlay, "No playlists yet",
-            "Create your first playlist — everything is stored locally.", "New playlist"
+            "Create your first playlist or save a public one — everything is stored locally.", "New playlist"
+        )
+        filter == LibFilter.Albums -> EmptyCopy(
+            Icons.Filled.Album, "No saved albums",
+            "Open any album and tap the bookmark — it will live here.", "Browse music"
+        )
+        filter == LibFilter.Podcasts -> EmptyCopy(
+            Icons.Filled.Podcasts, "No saved podcasts",
+            "Open any podcast and tap the bookmark — it will live here.", "Browse music"
         )
         else -> EmptyCopy(
             Icons.Filled.PlaylistAdd, "Your library is empty",

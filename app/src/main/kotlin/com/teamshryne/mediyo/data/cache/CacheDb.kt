@@ -10,6 +10,8 @@ import com.teamshryne.mediyo.data.local.LocalPlaylistDao
 import com.teamshryne.mediyo.data.local.LocalPlaylistEntryDao
 import com.teamshryne.mediyo.data.local.LocalPlaylistEntity
 import com.teamshryne.mediyo.data.local.LocalPlaylistEntryEntity
+import com.teamshryne.mediyo.data.local.SavedCollectionDao
+import com.teamshryne.mediyo.data.local.SavedCollectionEntity
 
 @Entity(tableName = "kv_cache")
 data class KvCache(
@@ -36,8 +38,8 @@ interface KvDao {
 data class CacheStatRow(val type: String, val cnt: Long, val bytes: Long?)
 
 @Database(
-    entities = [KvCache::class, LocalPlaylistEntity::class, LocalPlaylistEntryEntity::class, LikedTrackEntity::class, HistoryEntryEntity::class, FollowedArtistEntity::class],
-    version = 3,
+    entities = [KvCache::class, LocalPlaylistEntity::class, LocalPlaylistEntryEntity::class, LikedTrackEntity::class, HistoryEntryEntity::class, FollowedArtistEntity::class, SavedCollectionEntity::class],
+    version = 4,
     exportSchema = false
 )
 abstract class MediyoDb : RoomDatabase() {
@@ -46,6 +48,7 @@ abstract class MediyoDb : RoomDatabase() {
     abstract fun localPlaylistEntryDao(): LocalPlaylistEntryDao
     abstract fun likedDao(): LikedTrackDao
     abstract fun historyDao(): HistoryDao
+    abstract fun savedCollectionDao(): SavedCollectionDao
     abstract fun followedArtistDao(): com.teamshryne.mediyo.data.local.FollowedArtistDao
 }
 

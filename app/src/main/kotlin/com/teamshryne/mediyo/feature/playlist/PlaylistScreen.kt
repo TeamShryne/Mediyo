@@ -7,6 +7,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.BookmarkAdd
+import androidx.compose.material.icons.filled.BookmarkRemove
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.*
@@ -39,12 +41,30 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-@HiltViewModel class PlaylistVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel() {
+@HiltViewModel class PlaylistVm @Inject constructor(
+    private val bridge: MediyoBridge,
+    private val savedRepo: com.teamshryne.mediyo.domain.repository.SavedCollectionRepository
+) : ViewModel() {
     var loading by mutableStateOf(true); var error by mutableStateOf<String?>(null)
     var loadingMore by mutableStateOf(false); var continuation by mutableStateOf<String?>(null)
     var title by mutableStateOf(""); var subtitle by mutableStateOf("")
     var thumb by mutableStateOf<String?>(null)
     var tracks by mutableStateOf<List<uniffi.mediyo_ffi.FfiSearchResult>>(emptyList())
+    fun isSavedFlow(id: String) = savedRepo.isSavedFlow(id)
+    fun toggleSave(id: String) {
+        viewModelScope.launch {
+            try {
+                savedRepo.toggle(
+                    browseId = id,
+                    kind = com.teamshryne.mediyo.data.local.SavedCollectionEntity.PLAYLIST,
+                    title = title,
+                    subtitle = subtitle.ifBlank { null },
+                    artworkUrl = thumb,
+                    trackCountText = subtitle.ifBlank { null }
+                )
+            } catch (_: Throwable) { }
+        }
+    }
     fun load(id: String) {
         android.util.Log.d("PlaylistVm","load id=$id")
         loading = true; error = null; continuation = null
@@ -56,6 +76,18 @@ import javax.inject.Inject
                 thumb = p.thumbnails.bestThumbUrl(); tracks = p.tracks
                 continuation = p.continuation.takeIf { p.tracks.isNotEmpty() }
                 android.util.Log.d("PlaylistVm","load done cont=${continuation?.take(30)}")
+                // Background refresh of the library snapshot when this playlist is saved.
+                try {
+                    if (savedRepo.isSaved(id)) {
+                        savedRepo.save(
+                            browseId = id,
+                            kind = com.teamshryne.mediyo.data.local.SavedCollectionEntity.PLAYLIST,
+                            title = p.title,
+                            artworkUrl = p.thumbnails.bestThumbUrl(),
+                            trackCountText = p.trackCount
+                        )
+                    }
+                } catch (_: Throwable) { }
             } catch (e: Throwable) {
                 android.util.Log.e("PlaylistVm","load error $id", e)
                 error = e.message
@@ -125,11 +157,23 @@ fun PlaylistScreen(
                             .padding(top = 4.dp, bottom = 24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        IconButton(
-                            onClick = { nav?.popBackStack() },
-                            modifier = Modifier.align(Alignment.Start).padding(start = 8.dp)
+                        Row(
+                            Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
+                            IconButton(onClick = { nav?.popBackStack() }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
+                            }
+                            val saveFlow = remember(browseId) { vm.isSavedFlow(browseId) }
+                            val isSaved by saveFlow.collectAsState(initial = false)
+                            IconButton(onClick = { vm.toggleSave(browseId) }) {
+                                Icon(
+                                    if (isSaved) Icons.Filled.BookmarkRemove else Icons.Filled.BookmarkAdd,
+                                    contentDescription = if (isSaved) "Remove from library" else "Add to library",
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
                         }
                         AsyncImage(
                             model = vm.thumb,

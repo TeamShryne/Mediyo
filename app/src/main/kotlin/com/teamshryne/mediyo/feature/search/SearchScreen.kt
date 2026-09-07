@@ -218,32 +218,17 @@ fun SearchScreen(
                             modifier = Modifier.padding(horizontal = 20.dp)
                         )
                     }
+                    // One card holds every YT top result: the first is featured
+                    // big, the rest follow as a compact list inside the same card.
                     item(key = "top_card") {
-                        val first = top[0]
-                        val firstIsArtist = first.category.contains("Artist", true)
-                        TopResultCard(
-                            item = first,
-                            circularArt = firstIsArtist,
-                            actionIcon = if (firstIsArtist) Icons.Filled.OpenInNew else Icons.Filled.PlayArrow,
-                            onClick = { open(first) },
-                            onMenu = { menuItem = first },
-                            onPlay = {
-                                if (firstIsArtist || first.videoId == null) open(first)
-                                else {
-                                    player.playTrack(
-                                        first.toDomainTrack(),
-                                        PlayOrigin.Search(vm.lastQuery.ifEmpty { vm.query }, vm.selectedLabel)
-                                    )
-                                }
-                            }
+                        TopResultsCard(
+                            items = top,
+                            lastQuery = vm.lastQuery.ifEmpty { vm.query },
+                            selectedLabel = vm.selectedLabel,
+                            player = player,
+                            onOpen = { open(it) },
+                            onMenu = { menuItem = it }
                         )
-                    }
-                    val moreTop = top.drop(1)
-                    items(moreTop.size, key = { i ->
-                        moreTop[i].let { it.videoId ?: it.browseId ?: it.playlistId }?.let { "t_${it}_$i" } ?: "t_$i"
-                    }) { i ->
-                        val r = moreTop[i]
-                        ResultRow(item = r, onClick = { open(r) }, onMenu = { menuItem = r })
                     }
                 }
                 items(rest.size, key = { i ->
@@ -278,8 +263,60 @@ fun SearchScreen(
     showAddTrack?.let { t -> com.teamshryne.mediyo.feature.playlist.AddToPlaylistSheet(track = t, onDismiss = { showAddTrack = null }) }
 }
 
+/**
+ * All YT top results in a single card: the first result is featured big,
+ * every further top result follows as a compact row inside the same card.
+ * Order mirrors the server response ([items] must already be in YT order).
+ */
 @Composable
-private fun TopResultCard(
+private fun TopResultsCard(
+    items: List<FfiSearchResult>,
+    lastQuery: String,
+    selectedLabel: String,
+    player: com.teamshryne.mediyo.feature.player.PlayerViewModel,
+    onOpen: (FfiSearchResult) -> Unit,
+    onMenu: (FfiSearchResult) -> Unit
+) {
+    if (items.isEmpty()) return
+    val first = items[0]
+    val rest = items.drop(1)
+    val firstIsArtist = first.category.contains("Artist", true)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .padding(vertical = 4.dp)
+    ) {
+        TopResultHero(
+            item = first,
+            circularArt = firstIsArtist,
+            actionIcon = if (firstIsArtist) Icons.Filled.OpenInNew else Icons.Filled.PlayArrow,
+            onClick = { onOpen(first) },
+            onMenu = { onMenu(first) },
+            onPlay = {
+                if (firstIsArtist || first.videoId == null) onOpen(first)
+                else {
+                    player.playTrack(
+                        first.toDomainTrack(),
+                        PlayOrigin.Search(lastQuery, selectedLabel)
+                    )
+                }
+            }
+        )
+        rest.forEach { r ->
+            HorizontalDivider(
+                Modifier.padding(horizontal = 12.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHighest
+            )
+            TopResultMiniRow(item = r, onClick = { onOpen(r) }, onMenu = { onMenu(r) })
+        }
+    }
+}
+
+@Composable
+private fun TopResultHero(
     item: FfiSearchResult,
     onClick: () -> Unit,
     onMenu: () -> Unit,
@@ -290,9 +327,6 @@ private fun TopResultCard(
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .clickable(onClick = onClick)
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -340,6 +374,63 @@ private fun TopResultCard(
             }
             TrackOverflowIcon(onClick = onMenu)
         }
+    }
+}
+
+@Composable
+private fun TopResultMiniRow(item: FfiSearchResult, onClick: () -> Unit, onMenu: () -> Unit = {}) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AsyncImage(
+            model = item.thumbnails.bestThumbUrl(),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(44.dp)
+                .let {
+                    if (item.category.contains("Artist", true)) it.clip(CircleShape)
+                    else it.clip(RoundedCornerShape(8.dp))
+                }
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                item.title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                buildString {
+                    append(
+                        item.artists.joinToString()
+                            .ifBlank { item.info?.takeIf { it.isNotBlank() } ?: item.category }
+                    )
+                    append("  •  ")
+                    append(item.category)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        if (!item.duration.isNullOrBlank()) {
+            Text(
+                item.duration.orEmpty(),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        TrackOverflowIcon(onClick = onMenu)
     }
 }
 
