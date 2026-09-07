@@ -2305,6 +2305,10 @@ data class FfiQueueItem (
     var `title`: kotlin.String, 
     var `videoId`: kotlin.String, 
     var `artists`: List<kotlin.String>, 
+    /**
+     * Parallel to `artists`; "" when the browseId is unknown.
+     */
+    var `artistIds`: List<kotlin.String>, 
     var `album`: kotlin.String?, 
     var `duration`: kotlin.String?, 
     var `thumbnails`: List<FfiThumbnail>
@@ -2322,6 +2326,7 @@ public object FfiConverterTypeFfiQueueItem: FfiConverterRustBuffer<FfiQueueItem>
             FfiConverterString.read(buf),
             FfiConverterString.read(buf),
             FfiConverterSequenceString.read(buf),
+            FfiConverterSequenceString.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterSequenceTypeFfiThumbnail.read(buf),
@@ -2332,6 +2337,7 @@ public object FfiConverterTypeFfiQueueItem: FfiConverterRustBuffer<FfiQueueItem>
             FfiConverterString.allocationSize(value.`title`) +
             FfiConverterString.allocationSize(value.`videoId`) +
             FfiConverterSequenceString.allocationSize(value.`artists`) +
+            FfiConverterSequenceString.allocationSize(value.`artistIds`) +
             FfiConverterOptionalString.allocationSize(value.`album`) +
             FfiConverterOptionalString.allocationSize(value.`duration`) +
             FfiConverterSequenceTypeFfiThumbnail.allocationSize(value.`thumbnails`)
@@ -2341,6 +2347,7 @@ public object FfiConverterTypeFfiQueueItem: FfiConverterRustBuffer<FfiQueueItem>
             FfiConverterString.write(value.`title`, buf)
             FfiConverterString.write(value.`videoId`, buf)
             FfiConverterSequenceString.write(value.`artists`, buf)
+            FfiConverterSequenceString.write(value.`artistIds`, buf)
             FfiConverterOptionalString.write(value.`album`, buf)
             FfiConverterOptionalString.write(value.`duration`, buf)
             FfiConverterSequenceTypeFfiThumbnail.write(value.`thumbnails`, buf)
@@ -2433,7 +2440,13 @@ data class FfiSearchResult (
     var `explicit`: kotlin.Boolean, 
     var `thumbnails`: List<FfiThumbnail>, 
     var `artists`: List<kotlin.String>, 
-    var `album`: kotlin.String?
+    /**
+     * Parallel to `artists`; "" when the browseId is unknown.
+     */
+    var `artistIds`: List<kotlin.String>, 
+    var `album`: kotlin.String?, 
+    var `albumId`: kotlin.String?, 
+    var `isTopResult`: kotlin.Boolean
 ) {
     
     companion object
@@ -2456,7 +2469,10 @@ public object FfiConverterTypeFfiSearchResult: FfiConverterRustBuffer<FfiSearchR
             FfiConverterBoolean.read(buf),
             FfiConverterSequenceTypeFfiThumbnail.read(buf),
             FfiConverterSequenceString.read(buf),
+            FfiConverterSequenceString.read(buf),
             FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterBoolean.read(buf),
         )
     }
 
@@ -2472,7 +2488,10 @@ public object FfiConverterTypeFfiSearchResult: FfiConverterRustBuffer<FfiSearchR
             FfiConverterBoolean.allocationSize(value.`explicit`) +
             FfiConverterSequenceTypeFfiThumbnail.allocationSize(value.`thumbnails`) +
             FfiConverterSequenceString.allocationSize(value.`artists`) +
-            FfiConverterOptionalString.allocationSize(value.`album`)
+            FfiConverterSequenceString.allocationSize(value.`artistIds`) +
+            FfiConverterOptionalString.allocationSize(value.`album`) +
+            FfiConverterOptionalString.allocationSize(value.`albumId`) +
+            FfiConverterBoolean.allocationSize(value.`isTopResult`)
     )
 
     override fun write(value: FfiSearchResult, buf: ByteBuffer) {
@@ -2487,7 +2506,10 @@ public object FfiConverterTypeFfiSearchResult: FfiConverterRustBuffer<FfiSearchR
             FfiConverterBoolean.write(value.`explicit`, buf)
             FfiConverterSequenceTypeFfiThumbnail.write(value.`thumbnails`, buf)
             FfiConverterSequenceString.write(value.`artists`, buf)
+            FfiConverterSequenceString.write(value.`artistIds`, buf)
             FfiConverterOptionalString.write(value.`album`, buf)
+            FfiConverterOptionalString.write(value.`albumId`, buf)
+            FfiConverterBoolean.write(value.`isTopResult`, buf)
     }
 }
 
@@ -2498,6 +2520,10 @@ data class FfiSong (
     var `videoId`: kotlin.String, 
     var `artists`: List<kotlin.String>, 
     var `album`: kotlin.String?, 
+    /**
+     * Parallel to `artists`; "" when the browseId is unknown.
+     */
+    var `artistIds`: List<kotlin.String>, 
     var `duration`: kotlin.String?, 
     var `thumbnails`: List<FfiThumbnail>, 
     var `lyricsBrowseId`: kotlin.String?
@@ -2516,6 +2542,7 @@ public object FfiConverterTypeFfiSong: FfiConverterRustBuffer<FfiSong> {
             FfiConverterString.read(buf),
             FfiConverterSequenceString.read(buf),
             FfiConverterOptionalString.read(buf),
+            FfiConverterSequenceString.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterSequenceTypeFfiThumbnail.read(buf),
             FfiConverterOptionalString.read(buf),
@@ -2527,6 +2554,7 @@ public object FfiConverterTypeFfiSong: FfiConverterRustBuffer<FfiSong> {
             FfiConverterString.allocationSize(value.`videoId`) +
             FfiConverterSequenceString.allocationSize(value.`artists`) +
             FfiConverterOptionalString.allocationSize(value.`album`) +
+            FfiConverterSequenceString.allocationSize(value.`artistIds`) +
             FfiConverterOptionalString.allocationSize(value.`duration`) +
             FfiConverterSequenceTypeFfiThumbnail.allocationSize(value.`thumbnails`) +
             FfiConverterOptionalString.allocationSize(value.`lyricsBrowseId`)
@@ -2537,6 +2565,7 @@ public object FfiConverterTypeFfiSong: FfiConverterRustBuffer<FfiSong> {
             FfiConverterString.write(value.`videoId`, buf)
             FfiConverterSequenceString.write(value.`artists`, buf)
             FfiConverterOptionalString.write(value.`album`, buf)
+            FfiConverterSequenceString.write(value.`artistIds`, buf)
             FfiConverterOptionalString.write(value.`duration`, buf)
             FfiConverterSequenceTypeFfiThumbnail.write(value.`thumbnails`, buf)
             FfiConverterOptionalString.write(value.`lyricsBrowseId`, buf)
