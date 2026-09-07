@@ -376,6 +376,7 @@ class PlayerViewModel @Inject constructor(
     fun addNext(track: Track) { queueManager.addNext(track) }
     fun addToQueue(track: Track) { queueManager.addLast(track) }
     fun addNextList(tracks: List<Track>) { queueManager.addNextList(tracks) }
+    fun addToQueueList(tracks: List<Track>) { queueManager.addLastList(tracks) }
     fun removeFromQueue(at: Int) {
         val wasCurrent = at == queueManager.currentState().index
         val wasOnly = queueManager.currentState().entries.size == 1

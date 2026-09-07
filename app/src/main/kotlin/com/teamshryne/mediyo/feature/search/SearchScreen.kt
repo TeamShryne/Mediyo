@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -219,15 +220,14 @@ fun SearchScreen(
     ) { vm.loadMore() }
 
     menuItem?.let { m ->
-        val track = m.toDomainTrack()
-        com.teamshryne.mediyo.core.design.TrackMenuSheet(
-            track = track, show = true, onDismiss = { menuItem = null },
-            onLike = { player.toggleLike(track) },
-            onAddToPlaylist = { showAddTrack = track },
-            onPlayNext = { player.addNext(track) },
-            onAddToQueue = { player.addToQueue(track) },
-            onComments = { m.videoId?.let { nav.navigate("comments/$it") } },
-            onGoToAlbum = if (m.category.contains("Song", true) && m.browseId != null) {{ m.browseId?.let { nav.navigate("album/$it") } }} else null,
+        com.teamshryne.mediyo.core.design.MediaMenuSheet(
+            item = m, show = true, onDismiss = { menuItem = null }, nav = nav,
+            onPlayTracks = { tracks, idx, origin -> player.playTracks(tracks, idx, origin) },
+            onEnqueueTracks = { player.addToQueueList(it) },
+            onAddToPlaylist = { showAddTrack = it },
+            onPlayNext = { player.addNext(it) },
+            onAddToQueue = { player.addToQueue(it) },
+            onComments = { vid -> nav.navigate("comments/$vid") }
         )
     }
     showAddTrack?.let { t -> com.teamshryne.mediyo.feature.playlist.AddToPlaylistSheet(track = t, onDismiss = { showAddTrack = null }) }
@@ -248,7 +248,10 @@ private fun ResultRow(item: FfiSearchResult, onClick: () -> Unit, onMenu: () -> 
             contentScale = ContentScale.Crop,
             modifier = Modifier
                 .size(52.dp)
-                .clip(RoundedCornerShape(8.dp))
+                .let {
+                    if (item.category.contains("Artist", true)) it.clip(CircleShape)
+                    else it.clip(RoundedCornerShape(8.dp))
+                }
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
         )
         Spacer(Modifier.width(12.dp))
