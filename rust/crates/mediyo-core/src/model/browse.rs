@@ -737,6 +737,7 @@ fn parse_carousel(payload: &Value) -> Result<Carousel> {
                             duration: None,
                             thumbnails: Vec::new(),
                             explicit: false,
+                            top_result: false,
                         });
                     }
                 }
