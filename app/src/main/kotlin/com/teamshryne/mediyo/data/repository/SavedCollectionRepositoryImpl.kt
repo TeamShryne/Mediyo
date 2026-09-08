@@ -64,9 +64,7 @@ class SavedCollectionRepositoryImpl @Inject constructor(
     override suspend fun refreshAll() {
         // Snapshot ids first so a concurrent unsave can't crash the loop.
         val all: List<SavedCollectionEntity> = try {
-            // flowAll is a Flow; read one-shot via getById loop is awkward —
-            // expose via a direct query fallback: reuse flow first emission.
-            first(flowAll())
+            flowAll().first()
         } catch (_: Throwable) { return }
         for (e in all) {
             try { refreshOne(e.browseId) } catch (_: Throwable) { }
