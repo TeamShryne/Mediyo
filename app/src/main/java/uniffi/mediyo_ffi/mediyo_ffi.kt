@@ -1800,6 +1800,7 @@ data class FfiArtistPage (
     var `description`: kotlin.String?, 
     var `thumbnails`: List<FfiThumbnail>, 
     var `topSongs`: List<FfiSearchResult>, 
+    var `topSongsViewAll`: FfiViewAll?, 
     var `carousels`: List<FfiCarousel>, 
     var `continuation`: kotlin.String?, 
     var `playButton`: FfiWatchEndpoint?, 
@@ -1822,6 +1823,7 @@ public object FfiConverterTypeFfiArtistPage: FfiConverterRustBuffer<FfiArtistPag
             FfiConverterOptionalString.read(buf),
             FfiConverterSequenceTypeFfiThumbnail.read(buf),
             FfiConverterSequenceTypeFfiSearchResult.read(buf),
+            FfiConverterOptionalTypeFfiViewAll.read(buf),
             FfiConverterSequenceTypeFfiCarousel.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterOptionalTypeFfiWatchEndpoint.read(buf),
@@ -1837,6 +1839,7 @@ public object FfiConverterTypeFfiArtistPage: FfiConverterRustBuffer<FfiArtistPag
             FfiConverterOptionalString.allocationSize(value.`description`) +
             FfiConverterSequenceTypeFfiThumbnail.allocationSize(value.`thumbnails`) +
             FfiConverterSequenceTypeFfiSearchResult.allocationSize(value.`topSongs`) +
+            FfiConverterOptionalTypeFfiViewAll.allocationSize(value.`topSongsViewAll`) +
             FfiConverterSequenceTypeFfiCarousel.allocationSize(value.`carousels`) +
             FfiConverterOptionalString.allocationSize(value.`continuation`) +
             FfiConverterOptionalTypeFfiWatchEndpoint.allocationSize(value.`playButton`) +
@@ -1851,6 +1854,7 @@ public object FfiConverterTypeFfiArtistPage: FfiConverterRustBuffer<FfiArtistPag
             FfiConverterOptionalString.write(value.`description`, buf)
             FfiConverterSequenceTypeFfiThumbnail.write(value.`thumbnails`, buf)
             FfiConverterSequenceTypeFfiSearchResult.write(value.`topSongs`, buf)
+            FfiConverterOptionalTypeFfiViewAll.write(value.`topSongsViewAll`, buf)
             FfiConverterSequenceTypeFfiCarousel.write(value.`carousels`, buf)
             FfiConverterOptionalString.write(value.`continuation`, buf)
             FfiConverterOptionalTypeFfiWatchEndpoint.write(value.`playButton`, buf)
@@ -1864,6 +1868,7 @@ public object FfiConverterTypeFfiArtistPage: FfiConverterRustBuffer<FfiArtistPag
 data class FfiCarousel (
     var `title`: kotlin.String, 
     var `items`: List<FfiSearchResult>, 
+    var `viewAll`: FfiViewAll?, 
     var `continuation`: kotlin.String?
 ) {
     
@@ -1878,6 +1883,7 @@ public object FfiConverterTypeFfiCarousel: FfiConverterRustBuffer<FfiCarousel> {
         return FfiCarousel(
             FfiConverterString.read(buf),
             FfiConverterSequenceTypeFfiSearchResult.read(buf),
+            FfiConverterOptionalTypeFfiViewAll.read(buf),
             FfiConverterOptionalString.read(buf),
         )
     }
@@ -1885,12 +1891,14 @@ public object FfiConverterTypeFfiCarousel: FfiConverterRustBuffer<FfiCarousel> {
     override fun allocationSize(value: FfiCarousel) = (
             FfiConverterString.allocationSize(value.`title`) +
             FfiConverterSequenceTypeFfiSearchResult.allocationSize(value.`items`) +
+            FfiConverterOptionalTypeFfiViewAll.allocationSize(value.`viewAll`) +
             FfiConverterOptionalString.allocationSize(value.`continuation`)
     )
 
     override fun write(value: FfiCarousel, buf: ByteBuffer) {
             FfiConverterString.write(value.`title`, buf)
             FfiConverterSequenceTypeFfiSearchResult.write(value.`items`, buf)
+            FfiConverterOptionalTypeFfiViewAll.write(value.`viewAll`, buf)
             FfiConverterOptionalString.write(value.`continuation`, buf)
     }
 }
@@ -2801,6 +2809,38 @@ public object FfiConverterOptionalString: FfiConverterRustBuffer<kotlin.String?>
         } else {
             buf.put(1)
             FfiConverterString.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeFfiViewAll: FfiConverterRustBuffer<FfiViewAll?> {
+    override fun read(buf: ByteBuffer): FfiViewAll? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeFfiViewAll.read(buf)
+    }
+
+    override fun allocationSize(value: FfiViewAll?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeFfiViewAll.allocationSize(value)
+        }
+    }
+
+    override fun write(value: FfiViewAll?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeFfiViewAll.write(value, buf)
         }
     }
 }
