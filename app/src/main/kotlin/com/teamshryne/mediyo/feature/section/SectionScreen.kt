@@ -214,7 +214,7 @@ fun SectionScreen(
                                 ?.let { "s_${it}_$i" } ?: "s_$i"
                         }) { i ->
                             val r = vm.items[i]
-                            Box(Modifier.animateItem()) {
+                            Box {
                                 TrackRow(
                                     item = r,
                                     isPlaying = playingId != null && playingId == r.videoId,
@@ -258,8 +258,7 @@ fun SectionScreen(
                                 item = r,
                                 isPlaying = playingId != null && playingId == r.videoId,
                                 onClick = { handle(r) },
-                                onMenu = { menuItem = r },
-                                modifier = Modifier.animateItem()
+                                onMenu = { menuItem = r }
                             )
                         }
                         if (vm.continuation != null) {
