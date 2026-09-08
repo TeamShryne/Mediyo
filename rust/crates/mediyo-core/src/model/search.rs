@@ -358,7 +358,7 @@ fn resolve_category(
 }
 
 /// Parse the subtitle `runs` into artists / album / year / trailing info.
-fn parse_subtitle(
+pub(crate) fn parse_subtitle(
     node: &Value,
     artists: &mut Vec<ArtistRef>,
     album: &mut Option<AlbumRef>,
@@ -461,7 +461,7 @@ fn is_year(text: &str) -> bool {
     text.len() == 4 && text.chars().all(|c| c.is_ascii_digit())
 }
 
-fn is_explicit(payload: &Value) -> bool {
+pub(crate) fn is_explicit(payload: &Value) -> bool {
     let Some(badges) = payload.get("badges").and_then(Value::as_array) else {
         return false;
     };
