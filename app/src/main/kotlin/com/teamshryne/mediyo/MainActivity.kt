@@ -61,7 +61,7 @@ import com.teamshryne.mediyo.feature.home.HomeScreen
 import com.teamshryne.mediyo.feature.library.LibraryScreen
 import com.teamshryne.mediyo.feature.library.LikedScreen
 import com.teamshryne.mediyo.feature.library.LocalPlaylistDetailScreen
-import com.teamshryne.mediyo.feature.list.GenericListScreen
+import com.teamshryne.mediyo.feature.section.SectionScreen
 import com.teamshryne.mediyo.feature.player.FullPlayer
 import com.teamshryne.mediyo.feature.player.MiniPlayer
 import com.teamshryne.mediyo.feature.player.PlayerViewModel
@@ -204,15 +204,17 @@ private fun AppShell() {
                 composable("podcast/{id}") { PodcastScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
                 composable("episodes/{id}") { EpisodesScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
                 composable(
-                    route = "list/{id}?params={params}",
+                    route = "list/{id}?params={params}&title={title}",
                     arguments = listOf(
                         navArgument("id") { type = NavType.StringType },
-                        navArgument("params") { type = NavType.StringType; nullable = true; defaultValue = null }
+                        navArgument("params") { type = NavType.StringType; nullable = true; defaultValue = null },
+                        navArgument("title") { type = NavType.StringType; nullable = true; defaultValue = null }
                     )
                 ) {
-                    GenericListScreen(
+                    SectionScreen(
                         browseId = it.arguments?.getString("id") ?: "",
                         params = it.arguments?.getString("params"),
+                        title = it.arguments?.getString("title"),
                         nav = nav,
                         player = playerVm
                     )

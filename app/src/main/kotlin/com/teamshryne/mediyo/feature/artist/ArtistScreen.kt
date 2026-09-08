@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.*
@@ -47,6 +48,7 @@ import uniffi.mediyo_ffi.FfiSearchResult
     var thumb by mutableStateOf<String?>(null)
     var browseId by mutableStateOf<String?>(null)
     var topSongs by mutableStateOf<List<FfiSearchResult>>(emptyList())
+    var topSongsViewAll by mutableStateOf<uniffi.mediyo_ffi.FfiViewAll?>(null)
     var carousels by mutableStateOf<List<uniffi.mediyo_ffi.FfiCarousel>>(emptyList())
     fun load(id: String) {
         loading = true; error = null; continuation = null
@@ -56,7 +58,7 @@ import uniffi.mediyo_ffi.FfiSearchResult
                 val p = bridge.artist(id)
                 name = p.name; subs = p.subscriberCount
                 thumb = p.thumbnails.bestThumbUrl()
-                topSongs = p.topSongs; carousels = p.carousels
+                topSongs = p.topSongs; topSongsViewAll = p.topSongsViewAll; carousels = p.carousels
                 continuation = p.continuation.takeIf { p.topSongs.isNotEmpty() }
             } catch (e: Throwable) { error = e.message } finally { loading = false }
         }
@@ -82,6 +84,18 @@ import uniffi.mediyo_ffi.FfiSearchResult
             } catch (_: Throwable) { continuation = null } finally { loadingMore = false }
         }
     }
+}
+
+/** Section-screen route for a shelf "show all" (params/title encoded, optional). */
+private fun sectionRoute(browseId: String, params: String?, title: String): String {
+    val sb = StringBuilder("list/$browseId")
+    var first = true
+    if (!params.isNullOrBlank()) {
+        sb.append("?params=${android.net.Uri.encode(params)}")
+        first = false
+    }
+    sb.append(if (first) "?" else "&").append("title=${android.net.Uri.encode(title)}")
+    return sb.toString()
 }
 
 @Composable
@@ -186,7 +200,25 @@ fun ArtistScreen(
                 }
 
                 if (vm.topSongs.isNotEmpty()) {
-                    item { SectionHeader("Popular", Modifier.padding(top = 22.dp)) }
+                    item {
+                        SectionHeader(
+                            "Popular",
+                            Modifier.padding(top = 22.dp),
+                            trailing = vm.topSongsViewAll?.let { va ->
+                                {
+                                    IconButton(onClick = {
+                                        nav?.navigate(sectionRoute(va.browseId, va.params, "Popular"))
+                                    }) {
+                                        Icon(
+                                            Icons.Filled.ChevronRight,
+                                            contentDescription = "Show all popular songs",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        )
+                    }
                     items(vm.topSongs.size) { i ->
                         val t = vm.topSongs[i]
                         TrackRow(item = t, isPlaying = playingId != null && playingId == t.videoId, number = i + 1, showArtwork = true) {
@@ -198,7 +230,23 @@ fun ArtistScreen(
                 vm.carousels.forEachIndexed { ci, c ->
                     item(key = "shelf_$ci") {
                         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                            SectionHeader(c.title, Modifier.padding(top = 18.dp))
+                            SectionHeader(
+                                c.title,
+                                Modifier.padding(top = 18.dp),
+                                trailing = c.viewAll?.let { va ->
+                                    {
+                                        IconButton(onClick = {
+                                            nav?.navigate(sectionRoute(va.browseId, va.params, c.title))
+                                        }) {
+                                            Icon(
+                                                Icons.Filled.ChevronRight,
+                                                contentDescription = "Show all ${c.title}",
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            )
                             LazyRow(
                                 contentPadding = PaddingValues(horizontal = 16.dp),
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
