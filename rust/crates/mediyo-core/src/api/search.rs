@@ -99,12 +99,17 @@ pub fn parse_search_response(resp: &Value) -> Result<SearchResponse> {
                     }
                 }
                 "musicCardShelfRenderer" => {
-                    // Top-result shelf (titled by the topic, e.g. the artist):
-                    // the shelf chrome itself carries the top artist entity
-                    // (title/subtitle/avatar) plus several result rows and
-                    // sometimes a leading messageRenderer. Emit the hero
-                    // first, then every result row, all flagged for featuring.
-                    if let Some(hero) = parse_card_hero(payload) {
+                    // Top-result shelf: the shelf chrome itself carries the top
+                    // entity (artist title/subtitle/avatar, or the top song /
+                    // album / playlist tile) while `contents` holds the "More
+                    // from …" rows, plus sometimes a leading messageRenderer.
+                    // Emit the chrome first, then every non-duplicate result
+                    // row, all flagged for featuring.
+                    let hero = parse_card_hero(payload);
+                    let hero_key: Option<String> = hero.as_ref().and_then(|h| {
+                        h.video_id.clone().or_else(|| h.browse_id.clone())
+                    });
+                    if let Some(hero) = hero {
                         results.push(hero);
                     }
                     let topic_artist = topic_artist(payload);
@@ -116,6 +121,15 @@ pub fn parse_search_response(resp: &Value) -> Result<SearchResponse> {
                             match rname {
                                 "musicResponsiveListItemRenderer" => {
                                     let mut r = parse_search_result(item)?;
+                                    // Skip the chrome duplicate: some shelves
+                                    // repeat the top entity as the first row.
+                                    if let Some(key) = hero_key.as_deref() {
+                                        let row_key = r.video_id.as_deref()
+                                            .or(r.browse_id.as_deref());
+                                        if row_key == Some(key) {
+                                            continue;
+                                        }
+                                    }
                                     // Card rows often omit the artist (the shelf
                                     // title carries the topic) — backfill it.
                                     if r.artists.is_empty() && r.video_id.is_some() {
@@ -128,6 +142,13 @@ pub fn parse_search_response(resp: &Value) -> Result<SearchResponse> {
                                 }
                                 "musicTwoRowItemRenderer" => {
                                     let mut r = crate::model::search::parse_two_row_item(item)?;
+                                    if let Some(key) = hero_key.as_deref() {
+                                        let row_key = r.video_id.as_deref()
+                                            .or(r.browse_id.as_deref());
+                                        if row_key == Some(key) {
+                                            continue;
+                                        }
+                                    }
                                     r.top_result = true;
                                     results.push(r);
                                 }
@@ -200,27 +221,144 @@ fn topic_artist(card: &Value) -> Option<String> {
     topic_artist_entity(card).map(|(name, _)| name)
 }
 
-/// Artist hero carried by the card shelf chrome itself (title, subtitle,
-/// avatar): YTM renders it as the "Top result" artist card, so we emit it
-/// as an Artist result ahead of the shelf rows.
+/// Top result carried by the card shelf chrome itself: YTM renders the shelf
+/// title block as the big "Top result" tile (artist, song, album, playlist,
+/// podcast, …) while `contents` holds the "More from …" rows, so we emit the
+/// chrome as a result ahead of the shelf rows.
 fn parse_card_hero(card: &Value) -> Option<SearchResult> {
-    let (name, browse_id) = topic_artist_entity(card)?;
-    let info = card.get("subtitle").and_then(parser::runs::text);
+    // Artist-titled shelves first: the chrome carries the artist entity
+    // (title/subtitle/avatar) reported as the "Top result" artist tile.
+    if let Some((name, browse_id)) = topic_artist_entity(card) {
+        let info = card.get("subtitle").and_then(parser::runs::text);
+        return Some(SearchResult {
+            category: Category::Artist,
+            title: name,
+            artists: Vec::new(),
+            album: None,
+            video_id: None,
+            browse_id: Some(browse_id),
+            browse_params: None,
+            playlist_id: None,
+            year: None,
+            info,
+            track_number: None,
+            duration: None,
+            thumbnails: parser::thumbnails::thumbnails(card),
+            explicit: false,
+            top_result: true,
+        });
+    }
+    parse_card_chrome_top(card)
+}
+
+/// Chrome-based top result for song/video/album/playlist/podcast shelves:
+/// the shelf title links at the top entity (watch or browse endpoint) and
+/// the subtitle carries its artists / album / year / counts.
+fn parse_card_chrome_top(card: &Value) -> Option<SearchResult> {
+    let title_node = card.get("title")?;
+    let title = parser::runs::text(title_node)?;
+    if title.trim().is_empty() {
+        return None;
+    }
+    let mut video_id: Option<String> = None;
+    let mut browse_id: Option<String> = None;
+    let mut page_type: Option<&str> = None;
+    let mut mvt: Option<&str> = None;
+    if let Some((_, ep)) = parser::runs::run_items(title_node).into_iter().next() {
+        if let Some(ep) = ep {
+            page_type = parser::page_type(ep);
+            mvt = parser::music_video_type(ep);
+            match parser::endpoint(ep) {
+                Some(parser::Endpoint::Browse { id }) => browse_id = Some(id.to_string()),
+                Some(parser::Endpoint::Watch { video_id: vid }) => {
+                    video_id = Some(vid.to_string())
+                }
+                Some(parser::Endpoint::WatchPlaylist { playlist_id: pid }) => {
+                    browse_id = Some(pid.to_string())
+                }
+                _ => {}
+            }
+        }
+    }
+    // Without an id the chrome is not actionable — fall back to the rows.
+    if video_id.is_none() && browse_id.is_none() {
+        return None;
+    }
+
+    let subtitle_node = card.get("subtitle");
+    let mut category = match (&video_id, page_type) {
+        (Some(_), _) => mvt
+            .map(Category::from_music_video_type)
+            .filter(|c| *c != Category::Unknown)
+            .unwrap_or(Category::Unknown),
+        (None, Some(pt)) => {
+            let c = Category::from_page_type(pt);
+            if c != Category::Unknown {
+                c
+            } else if browse_id.as_deref().is_some_and(|id| id.starts_with("MPREb_")) {
+                Category::Album
+            } else {
+                Category::Unknown
+            }
+        }
+        (None, None) => Category::Unknown,
+    };
+    // The subtitle leads with the kind label ("Song", "Album", "Single", …)
+    // when the endpoint carries no usable page type.
+    if category == Category::Unknown {
+        if let Some(sub) = subtitle_node {
+            if let Some(first) = parser::runs::run_items(sub).first() {
+                category = Category::from_label(first.0);
+            }
+        }
+    }
+    if category == Category::Unknown {
+        category = if video_id.is_some() {
+            Category::Song
+        } else {
+            Category::Playlist
+        };
+    }
+
+    let mut artists = Vec::new();
+    let mut album = None;
+    let mut year = None;
+    let mut info = None;
+    if let Some(sub) = subtitle_node {
+        crate::model::search::parse_subtitle(sub, &mut artists, &mut album, &mut year, &mut info);
+    }
+    // Card subtitles sometimes carry the duration ("4:09") as a trailing
+    // segment — surface it as duration instead of loose info text.
+    let mut duration: Option<String> = None;
+    if let Some(sub) = subtitle_node {
+        for (text, _) in parser::runs::run_items(sub) {
+            let t = text.trim();
+            if t.len() <= 8 && t.contains(':') && t.chars().all(|c| c.is_ascii_digit() || c == ':')
+            {
+                duration = Some(t.to_string());
+                break;
+            }
+        }
+    }
+    if duration.is_some() && info.as_deref() == duration.as_deref() {
+        info = None;
+    }
+
     Some(SearchResult {
-        category: Category::Artist,
-        title: name,
-        artists: Vec::new(),
-        album: None,
-        video_id: None,
-        browse_id: Some(browse_id),
+        category,
+        title: title.trim().to_string(),
+        artists,
+        album,
+        video_id,
+        browse_id,
         browse_params: None,
         playlist_id: None,
-        year: None,
+        year,
         info,
         track_number: None,
-        duration: None,
+        duration,
         thumbnails: parser::thumbnails::thumbnails(card),
-        explicit: false,
+        explicit: crate::model::search::is_explicit(card),
         top_result: true,
     })
 }
@@ -275,4 +413,137 @@ fn parse_chips(header: &Value) -> Vec<SearchFilter> {
         });
     }
     filters
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    /// A song-titled card shelf must yield the chrome song as the first top
+    /// result, ahead of the "More from …" rows (which must not duplicate it).
+    #[test]
+    fn song_card_chrome_is_top_result() {
+        let v = json!({
+            "contents": {
+                "tabbedSearchResultsRenderer": {
+                    "tabs": [{
+                        "tabRenderer": {
+                            "selected": true,
+                            "content": {
+                                "sectionListRenderer": {
+                                    "contents": [{
+                                        "musicCardShelfRenderer": {
+                                            "title": { "runs": [{
+                                                "text": "Set Fire to the Rain",
+                                                "navigationEndpoint": {
+                                                    "watchEndpoint": {
+                                                        "videoId": "Ri7-vnrJD3k",
+                                                        "watchEndpointMusicSupportedConfigs": {
+                                                            "watchEndpointMusicConfig": {
+                                                                "musicVideoType": "MUSIC_VIDEO_TYPE_ATV"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }]},
+                                            "subtitle": { "runs": [
+                                                { "text": "Song" },
+                                                { "text": " • " },
+                                                { "text": "Adele", "navigationEndpoint": { "browseEndpoint": {
+                                                    "browseId": "UCsRM0GpXYTzNuuJzOsSNYtg",
+                                                    "browseEndpointContextSupportedConfigs": {
+                                                        "browseEndpointContextMusicConfig": { "pageType": "MUSIC_PAGE_TYPE_ARTIST" }
+                                                    }
+                                                } } },
+                                                { "text": " • " },
+                                                { "text": "2011" }
+                                            ]},
+                                            "thumbnail": {},
+                                            "contents": [
+                                                {
+                                                    "musicResponsiveListItemRenderer": {
+                                                        "flexColumns": [
+                                                            { "musicResponsiveListItemFlexColumnRenderer": { "text": { "runs": [{ "text": "Set Fire to the Rain" }] } } },
+                                                            { "musicResponsiveListItemFlexColumnRenderer": { "text": { "runs": [
+                                                                { "text": "Song" },
+                                                                { "text": " • " },
+                                                                { "text": "Adele", "navigationEndpoint": { "browseEndpoint": { "browseId": "UCsRM0GpXYTzNuuJzOsSNYtg" } } }
+                                                            ] } } }
+                                                        ],
+                                                        "playlistItemData": { "videoId": "Ri7-vnrJD3k" },
+                                                        "overlay": {
+                                                            "musicItemThumbnailOverlayRenderer": {
+                                                                "content": {
+                                                                    "musicPlayButtonRenderer": {
+                                                                        "playNavigationEndpoint": {
+                                                                            "watchEndpoint": {
+                                                                                "videoId": "Ri7-vnrJD3k",
+                                                                                "watchEndpointMusicSupportedConfigs": {
+                                                                                    "watchEndpointMusicConfig": { "musicVideoType": "MUSIC_VIDEO_TYPE_ATV" }
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                                {
+                                                    "musicResponsiveListItemRenderer": {
+                                                        "flexColumns": [
+                                                            { "musicResponsiveListItemFlexColumnRenderer": { "text": { "runs": [{ "text": "Someone Like You" }] } } },
+                                                            { "musicResponsiveListItemFlexColumnRenderer": { "text": { "runs": [
+                                                                { "text": "Song" },
+                                                                { "text": " • " },
+                                                                { "text": "Adele", "navigationEndpoint": { "browseEndpoint": { "browseId": "UCsRM0GpXYTzNuuJzOsSNYtg" } } }
+                                                            ] } } }
+                                                        ],
+                                                        "playlistItemData": { "videoId": "hLQl3WQQoQ0" },
+                                                        "overlay": {
+                                                            "musicItemThumbnailOverlayRenderer": {
+                                                                "content": {
+                                                                    "musicPlayButtonRenderer": {
+                                                                        "playNavigationEndpoint": {
+                                                                            "watchEndpoint": {
+                                                                                "videoId": "hLQl3WQQoQ0",
+                                                                                "watchEndpointMusicSupportedConfigs": {
+                                                                                    "watchEndpointMusicConfig": { "musicVideoType": "MUSIC_VIDEO_TYPE_ATV" }
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }]
+                                }
+                            }
+                        }
+                    }]
+                }
+            }
+        });
+        let r = parse_search_response(&v).unwrap();
+        // Chrome hero first: the top song itself, flagged for featuring.
+        assert_eq!(r.results.len(), 2);
+        let hero = &r.results[0];
+        assert_eq!(hero.title, "Set Fire to the Rain");
+        assert_eq!(hero.category, Category::Song);
+        assert_eq!(hero.video_id.as_deref(), Some("Ri7-vnrJD3k"));
+        assert!(hero.top_result);
+        assert_eq!(hero.artists.len(), 1);
+        assert_eq!(hero.artists[0].name, "Adele");
+        assert_eq!(hero.year.as_deref(), Some("2011"));
+        // The duplicate chrome row is skipped; the "more" row follows.
+        let more = &r.results[1];
+        assert_eq!(more.title, "Someone Like You");
+        assert!(more.top_result);
+    }
 }
