@@ -131,6 +131,9 @@ pub struct ArtistPage {
     pub thumbnails: Vec<thumbnails::Thumbnail>,
     pub top_songs: Vec<SearchResult>,
     pub carousels: Vec<Carousel>,
+    /// "Show all" for the top-songs shelf (`bottomEndpoint` browses the
+    /// full popular-songs playlist), if the shelf has one.
+    pub top_songs_view_all: Option<ViewAll>,
     /// Continuation token for more "top songs", if any.
     pub continuation: Option<String>,
     /// "Play" button endpoint (artist mix/radio).
@@ -368,6 +371,14 @@ fn parse_sections(sections: &[Value]) -> Result<(Vec<SearchResult>, Option<Strin
                     continuation = Some(tok);
                 }
             }
+            "musicPlaylistShelfRenderer" => {
+                // Song/video "view all" pages (artist Popular, Videos, ...)
+                // are playlist shelves: list rows + inline continuations.
+                let contents = payload.get("contents").unwrap_or(&Value::Null);
+                if let Some(tok) = append_continuation_items(contents, &mut items)? {
+                    continuation = Some(tok);
+                }
+            }
             _ => {}
         }
     }
@@ -391,6 +402,7 @@ pub fn parse_artist_page(resp: &Value) -> Result<ArtistPage> {
     let mut top_songs = Vec::new();
     let mut carousels = Vec::new();
     let mut continuation = None;
+    let mut top_songs_view_all = None;
     let mut fallback_description = None;
 
     let sections = resp
@@ -406,6 +418,14 @@ pub fn parse_artist_page(resp: &Value) -> Result<ArtistPage> {
             match name {
                 "musicShelfRenderer" => {
                     continuation = append_list_items(payload, &mut top_songs)?;
+                    // "Show all" for Popular: bottomEndpoint browses the full
+                    // songs playlist (VL... + params).
+                    if top_songs_view_all.is_none() {
+                        top_songs_view_all = payload
+                            .get("bottomEndpoint")
+                            .and_then(|b| b.get("browseEndpoint"))
+                            .and_then(view_all_from_browse);
+                    }
                 }
                 "musicCarouselShelfRenderer" => carousels.push(parse_carousel(payload)?),
                 "musicDescriptionShelfRenderer" => {
@@ -434,6 +454,7 @@ pub fn parse_artist_page(resp: &Value) -> Result<ArtistPage> {
         description: description.or(fallback_description),
         thumbnails,
         top_songs,
+        top_songs_view_all,
         carousels,
         continuation,
         play_button,
@@ -691,6 +712,28 @@ fn append_continuation_items(items: &Value, out: &mut Vec<SearchResult>) -> Resu
         }
     }
     Ok(continuation)
+}
+
+/// "View All" navigation from a `browseEndpoint` node (carousel header
+/// `moreContentButton`, shelf `bottomEndpoint`, ...).
+fn view_all_from_browse(ep: &Value) -> Option<ViewAll> {
+    let browse_id = ep.get("browseId")?.as_str()?;
+    if browse_id.is_empty() {
+        return None;
+    }
+    let params = ep
+        .get("params")
+        .and_then(Value::as_str)
+        .map(String::from);
+    let page_type = ep
+        .pointer("/browseEndpointContextSupportedConfigs/browseEndpointContextMusicConfig/pageType")
+        .and_then(Value::as_str)
+        .map(String::from);
+    Some(ViewAll {
+        browse_id: browse_id.to_string(),
+        params,
+        page_type,
+    })
 }
 
 fn parse_carousel(payload: &Value) -> Result<Carousel> {
