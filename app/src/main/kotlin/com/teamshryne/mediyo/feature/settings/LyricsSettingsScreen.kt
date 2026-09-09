@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MusicNote
@@ -20,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -84,7 +84,7 @@ fun LyricsSettingsScreen(
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Provider priority", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Text(
-                            "Drag to reorder. App tries providers top-to-bottom until one returns synced lyrics. First success is cached.",
+                            "Use the arrows to reorder. The app tries providers top-to-bottom until one returns synced lyrics. First success is cached.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -131,9 +131,9 @@ fun LyricsSettingsScreen(
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("How it works", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                         Text(
-                            "• Apple TTML (BetterLyrics) gives word-level timings with glow per syllable.\n" +
-                                "• LRCLIB gives line-level timings (Lyricsfile YAML) — large catalog, ~2s tolerance.\n" +
-                                "• Change order affects next fetch; cached lyrics stay until cleared or track re-queued.",
+                            "• Better Lyrics gives word-by-word timings with a karaoke glow.\n" +
+                                "• LRCLIB covers far more songs with line-by-line timings.\n" +
+                                "• Changing the order affects the next fetch; cached lyrics stay until cleared or the track is re-queued.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -187,11 +187,16 @@ private fun LyricsSourceRow(
             ) {
                 Icon(icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
             }
-            Column(Modifier.weight(1f)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(source.label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                Text(source.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    source.subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
-            Icon(Icons.Filled.DragHandle, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 IconButton(onClick = onUp, enabled = canUp, modifier = Modifier.size(28.dp)) {
                     Icon(Icons.Filled.KeyboardArrowUp, null, Modifier.size(18.dp))

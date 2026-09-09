@@ -27,7 +27,7 @@ private val hubEntries = listOf(
     SettingsEntry(
         id = "lyrics",
         title = "Lyrics",
-        subtitle = "Provider priority • LRCLIB + Apple TTML",
+        subtitle = "Provider priority • Better Lyrics + LRCLIB",
         icon = Icons.Filled.MusicNote,
         route = "settings/lyrics"
     ),

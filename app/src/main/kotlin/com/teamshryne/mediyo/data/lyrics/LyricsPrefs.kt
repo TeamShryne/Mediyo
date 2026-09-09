@@ -13,8 +13,8 @@ import javax.inject.Singleton
 private val Context.lyricsPrefs by preferencesDataStore("lyrics_prefs")
 
 enum class LyricsSource(val id: String, val label: String, val subtitle: String) {
-    BetterLyrics("betterLyrics", "Apple TTML", "Word-synced • higher accuracy"),
-    LrcLib("lrcLib", "LRCLIB", "Line-synced • large catalog");
+    BetterLyrics("betterLyrics", "Better Lyrics", "Word-by-word sync • best for karaoke glow"),
+    LrcLib("lrcLib", "LRCLIB", "Huge catalog • line-by-line, great fallback");
 
     companion object {
         fun fromId(id: String): LyricsSource? = entries.find { it.id == id }
