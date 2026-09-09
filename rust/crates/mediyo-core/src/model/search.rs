@@ -388,12 +388,57 @@ pub(crate) fn parse_subtitle(
             current_ep = None;
             continue;
         }
+        // Multi-artist lists arrive as separate linked runs joined by bare
+        // separators: [{Drake, ep1}, {" & ", none}, {21 Savage, ep2}].
+        // Flush a pending artist before the separator so each linked name
+        // becomes its own entry instead of one merged "Drake & 21 Savage".
+        if ep.is_none() && is_artist_separator(text) && current_ep_is_artist(current_ep) {
+            classify_segment(&current, current_ep, artists, album, year, info);
+            current.clear();
+            current_ep = None;
+            continue;
+        }
+        // Same guard for back-to-back artist links without a separator run:
+        // only batch when both runs address the same artist page.
+        if !current.is_empty() {
+            if let (Some(new_id), Some(cur_id)) =
+                (ep.and_then(artist_endpoint_id), current_ep.and_then(artist_endpoint_id))
+            {
+                if new_id != cur_id {
+                    classify_segment(&current, current_ep, artists, album, year, info);
+                    current.clear();
+                    current_ep = None;
+                }
+            }
+        }
         if current.is_empty() {
             current_ep = ep;
         }
         current.push_str(text);
     }
     classify_segment(&current, current_ep, artists, album, year, info);
+}
+
+/// BrowseId when `ep` links to an artist page (UC id, not an upload channel).
+fn artist_endpoint_id(ep: &Value) -> Option<&str> {
+    if let Some(parser::Endpoint::Browse { id }) = parser::endpoint(ep) {
+        if id.starts_with("UC") && parser::page_type(ep) != Some("MUSIC_PAGE_TYPE_USER_CHANNEL") {
+            return Some(id);
+        }
+    }
+    None
+}
+
+fn current_ep_is_artist(ep: Option<&Value>) -> bool {
+    ep.and_then(artist_endpoint_id).is_some()
+}
+
+/// Bare joins between linked artist names (never carry endpoints themselves).
+fn is_artist_separator(text: &str) -> bool {
+    matches!(
+        text,
+        "," | ", " | "&" | " & " | " and " | " feat. " | " feat " | " ft. " | " ft " | " x " | " X " | " with " | "/"
+    )
 }
 
 fn is_category_label(text: &str) -> bool {
@@ -626,5 +671,94 @@ mod tests {
         assert_eq!(r.category, Category::Video);
         assert!(r.artists.is_empty());
         assert!(!r.top_result);
+    }
+
+    fn artist_run(name: &str, id: &str) -> serde_json::Value {
+        serde_json::json!({
+            "text": name,
+            "navigationEndpoint": { "browseEndpoint": {
+                "browseId": id,
+                "browseEndpointContextSupportedConfigs": {
+                    "browseEndpointContextMusicConfig": { "pageType": "MUSIC_PAGE_TYPE_ARTIST" }
+                }
+            } }
+        })
+    }
+
+    fn song_item_with_subtitle(subtitle_runs: serde_json::Value) -> serde_json::Value {
+        serde_json::json!({
+            "musicResponsiveListItemRenderer": {
+                "flexColumns": [
+                    { "musicResponsiveListItemFlexColumnRenderer": { "text": { "runs": [{ "text": "Type Shit" }] } } },
+                    { "musicResponsiveListItemFlexColumnRenderer": { "text": subtitle_runs } }
+                ],
+                "playlistItemData": { "videoId": "abc123_-DEF" },
+                "overlay": {
+                    "musicItemThumbnailOverlayRenderer": {
+                        "content": {
+                            "musicPlayButtonRenderer": {
+                                "playNavigationEndpoint": {
+                                    "watchEndpoint": {
+                                        "videoId": "abc123_-DEF",
+                                        "watchEndpointMusicSupportedConfigs": {
+                                            "watchEndpointMusicConfig": { "musicVideoType": "MUSIC_VIDEO_TYPE_ATV" }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        })
+    }
+
+    #[test]
+    fn splits_linked_multi_artist_subtitle() {
+        // Live shape: [{Future, ep1}, {", ", none}, {Metro, ep2}, ...].
+        // Each linked name must become its own entry with its own id —
+        // never one merged "Future, Metro Boomin, ...".
+        let v = song_item_with_subtitle(serde_json::json!({ "runs": [
+            { "text": "Song" },
+            { "text": " • " },
+            artist_run("Future", "UC1_liDR4fRFJgH4Ho"),
+            { "text": ", " },
+            artist_run("Metro Boomin", "UCFYaIRiUe_1hvOtXu"),
+            { "text": ", " },
+            artist_run("Travis Scott", "UCf_gP4AMRSgAfyzbk"),
+            { "text": " & " },
+            artist_run("Playboi Carti", "UCRB-a6u9flpg0xuBq"),
+        ] }));
+        let r = parse_search_result(&v).unwrap();
+        assert_eq!(r.category, Category::Song);
+        let got: Vec<(&str, Option<&str>)> = r
+            .artists
+            .iter()
+            .map(|a| (a.name.as_str(), a.id.as_deref()))
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                ("Future", Some("UC1_liDR4fRFJgH4Ho")),
+                ("Metro Boomin", Some("UCFYaIRiUe_1hvOtXu")),
+                ("Travis Scott", Some("UCf_gP4AMRSgAfyzbk")),
+                ("Playboi Carti", Some("UCRB-a6u9flpg0xuBq")),
+            ]
+        );
+    }
+
+    #[test]
+    fn same_artist_runs_batch_together() {
+        // One name split across runs linking the same page stays one entry.
+        let v = song_item_with_subtitle(serde_json::json!({ "runs": [
+            { "text": "Song" },
+            { "text": " • " },
+            artist_run("Dra", "UCU6cE7pdJPc6DU2jSrKEsdQ"),
+            artist_run("ke", "UCU6cE7pdJPc6DU2jSrKEsdQ"),
+        ] }));
+        let r = parse_search_result(&v).unwrap();
+        assert_eq!(r.artists.len(), 1);
+        assert_eq!(r.artists[0].name, "Drake");
+        assert_eq!(r.artists[0].id.as_deref(), Some("UCU6cE7pdJPc6DU2jSrKEsdQ"));
     }
 }
