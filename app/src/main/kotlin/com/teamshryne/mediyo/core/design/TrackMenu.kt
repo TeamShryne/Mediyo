@@ -34,7 +34,7 @@ fun TrackMenuSheet(
     onPlayNext: () -> Unit = {},
     onAddToQueue: () -> Unit = {},
     onGoToAlbum: (() -> Unit)? = null,
-    onGoToArtist: (() -> Unit)? = null,
+    onShowArtist: ((name: String, id: String?) -> Unit)? = null,
     onComments: (() -> Unit)? = null,
     onRemove: (() -> Unit)? = null,
     onShare: (() -> Unit)? = null,
@@ -63,7 +63,24 @@ fun TrackMenuSheet(
             MenuItem(icon = Icons.Filled.QueueMusic, label = "Play next", onClick = { onDismiss(); onPlayNext() })
             MenuItem(icon = Icons.Filled.PlaylistPlay, label = "Add to queue", onClick = { onDismiss(); onAddToQueue() })
             if (onGoToAlbum != null) MenuItem(icon = Icons.Filled.Album, label = "Go to album", onClick = { onDismiss(); onGoToAlbum() })
-            if (onGoToArtist != null) MenuItem(icon = Icons.Filled.Person, label = "Show artist", onClick = { onDismiss(); onGoToArtist() })
+            if (onShowArtist != null) {
+                // One row per artist: single artist → plain entry, 2–6+ → named entries.
+                val entries = remember(track) {
+                    track.artists.mapIndexedNotNull { i, n ->
+                        n.takeIf { it.isNotBlank() }?.let { name ->
+                            name to track.artistIds.getOrNull(i)?.takeIf { it.isNotBlank() }
+                        }
+                    }
+                }
+                if (entries.size == 1) {
+                    val (name, id) = entries[0]
+                    MenuItem(icon = Icons.Filled.Person, label = "Show artist", onClick = { onDismiss(); onShowArtist(name, id) })
+                } else {
+                    entries.forEach { (name, id) ->
+                        MenuItem(icon = Icons.Filled.Person, label = "Show $name", onClick = { onDismiss(); onShowArtist(name, id) })
+                    }
+                }
+            }
             if (onComments != null) MenuItem(icon = Icons.Filled.Comment, label = "Comments", onClick = { onDismiss(); onComments() })
             if (onRemove != null) MenuItem(icon = Icons.Filled.Delete, label = "Remove from playlist", onClick = { onDismiss(); onRemove() })
             if (onShare != null) MenuItem(icon = Icons.Filled.Share, label = "Share", onClick = { onDismiss(); onShare() })
@@ -93,7 +110,7 @@ fun FfiTrackMenuSheet(
     onPlayNext: () -> Unit = {},
     onAddToQueue: () -> Unit = {},
     onGoToAlbum: (() -> Unit)? = null,
-    onGoToArtist: (() -> Unit)? = null,
+    onShowArtist: ((name: String, id: String?) -> Unit)? = null,
     onComments: (() -> Unit)? = null,
     onRemove: (() -> Unit)? = null,
     onRefetchLyrics: (() -> Unit)? = null,
@@ -102,10 +119,11 @@ fun FfiTrackMenuSheet(
     val track = remember(item.videoId, item.title) {
         Track(
             videoId = item.videoId, browseId = item.browseId, playlistId = item.playlistId,
-            title = item.title, artists = item.artists, album = item.album,
+            title = item.title, artists = item.artists, artistIds = item.artistIds,
+            album = item.album, albumId = item.albumId,
             artworkUrl = item.thumbnails.bestThumbUrl(), duration = item.duration,
             category = item.category, year = item.year
         )
     }
-    TrackMenuSheet(track, show, onDismiss, isLiked, onLike, onAddToPlaylist, onPlayNext, onAddToQueue, onGoToAlbum, onGoToArtist, onComments, onRemove, onRefetchLyrics, onLyricsSettings)
+    TrackMenuSheet(track, show, onDismiss, isLiked, onLike, onAddToPlaylist, onPlayNext, onAddToQueue, onGoToAlbum, onShowArtist, onComments, onRemove, onRefetchLyrics, onLyricsSettings)
 }

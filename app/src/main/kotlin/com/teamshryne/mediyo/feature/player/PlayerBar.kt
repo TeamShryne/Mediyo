@@ -162,10 +162,11 @@ fun FullPlayer(
     // lyrics mode: toggles between player and synced lyrics experience
     var isLyricsMode by remember { mutableStateOf(false) }
 
-    val trackForMenu = remember(state.videoId, state.title, state.artist, state.artwork, state.artistIds) {
+    val trackForMenu = remember(state.videoId, state.title, state.artist, state.artwork, state.artistIds, state.artistNames) {
         com.teamshryne.mediyo.domain.model.Track(
             videoId = state.videoId, title = state.title,
-            artists = if (state.artist.isBlank()) emptyList() else state.artist.split(",").map { it.trim() }.filter { it.isNotEmpty() },
+            artists = state.artistNames.takeIf { it.isNotEmpty() }
+                ?: if (state.artist.isBlank()) emptyList() else state.artist.split(",").map { it.trim() }.filter { it.isNotEmpty() },
             artistIds = state.artistIds,
             artworkUrl = state.artwork
         )
@@ -341,7 +342,8 @@ fun FullPlayer(
                                     MarqueeText(state.title, MaterialTheme.typography.headlineSmall, Color.White)
                                     Spacer(Modifier.height(2.dp))
                                     ArtistLinks(
-                                        artist = state.artist,
+                                        names = state.artistNames.takeIf { it.isNotEmpty() }
+                                            ?: if (state.artist.isBlank()) emptyList() else state.artist.split(",").map { it.trim() }.filter { it.isNotEmpty() },
                                         artistIds = state.artistIds,
                                         onGoToArtist = onGoToArtist
                                     )
@@ -521,8 +523,8 @@ fun FullPlayer(
                 onAddToPlaylist = { showAddSheet = true },
                 onPlayNext = { playerVm?.addNext(trackForMenu) },
                 onAddToQueue = { playerVm?.addToQueue(trackForMenu) },
-                onGoToArtist = trackForMenu.artists.firstOrNull { it.isNotBlank() }?.let { name ->
-                    { menuScope.launch { val id = trackForMenu.artistIds.firstOrNull { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name); id?.let { onGoToArtist(it) } } }
+                onShowArtist = { name, id ->
+                    menuScope.launch { (id?.takeIf { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name))?.let { onGoToArtist(it) } }
                 },
                 onComments = { onShowComments() },
                 onRefetchLyrics = if (isLyricsMode) {
@@ -539,12 +541,11 @@ fun FullPlayer(
  */
 @Composable
 private fun ArtistLinks(
-    artist: String,
+    names: List<String>,
     artistIds: List<String>,
     onGoToArtist: (String) -> Unit,
     menuVm: MediaMenuVm = hiltViewModel()
 ) {
-    val names = remember(artist) { artist.split(",").map { it.trim() }.filter { it.isNotEmpty() } }
     if (names.isEmpty()) return
     val scope = rememberCoroutineScope()
     var resolving by remember { mutableStateOf(false) }

@@ -340,7 +340,13 @@ private fun SongActions(
     } else {
         remember { mutableStateOf(false) }
     }
-    val canResolveArtist = item.artists.any { it.isNotBlank() }
+    val artistEntries = remember(item) {
+        item.artists.mapIndexedNotNull { i, n ->
+            n.takeIf { it.isNotBlank() }?.let { name ->
+                Triple(name, item.artistIds.getOrNull(i)?.takeIf { it.isNotBlank() }, "artist:$name")
+            }
+        }
+    }
     val canResolveAlbum = !item.album.isNullOrBlank()
 
     MenuItem(
@@ -352,19 +358,19 @@ private fun SongActions(
     MenuItem(icon = Icons.Filled.PlaylistAdd, label = "Add to playlist", onClick = { onDismiss(); onAddToPlaylist(track) })
     MenuItem(icon = Icons.Filled.QueueMusic, label = "Play next", onClick = { onDismiss(); onPlayNext(track) })
     MenuItem(icon = Icons.Filled.PlaylistPlay, label = "Add to queue", onClick = { onDismiss(); onAddToQueue(track) })
-    if (canResolveArtist) {
+    if (artistEntries.size == 1) {
+        val (name, id, key) = artistEntries[0]
         MenuItem(
-            icon = { BusyIcon(vm.busy, "artist", Icons.Filled.Person) },
+            icon = { BusyIcon(vm.busy, key, Icons.Filled.Person) },
             label = "Show artist",
             enabled = vm.busy == null,
             onClick = {
                 scope.launch {
-                    vm.setBusy("artist")
+                    vm.setBusy(key)
                     try {
                         // Prefer the parsed ID; fall back to search-by-name.
-                        val id = item.artistIds.firstOrNull { it.isNotBlank() }
-                            ?: vm.resolveArtistId(item)
-                        if (id != null) { onDismiss(); nav?.navigate("artist/$id") }
+                        val resolved = id ?: vm.resolveArtistId(item)
+                        if (resolved != null) { onDismiss(); nav?.navigate("artist/$resolved") }
                         else vm.error = "Couldn't find that artist"
                     } catch (e: Throwable) {
                         vm.error = "Couldn't find that artist"
@@ -374,6 +380,28 @@ private fun SongActions(
                 }
             }
         )
+    } else if (artistEntries.isNotEmpty()) {
+        artistEntries.forEach { (name, id, key) ->
+            MenuItem(
+                icon = { BusyIcon(vm.busy, key, Icons.Filled.Person) },
+                label = "Show $name",
+                enabled = vm.busy == null,
+                onClick = {
+                    scope.launch {
+                        vm.setBusy(key)
+                        try {
+                            val resolved = id ?: vm.resolveArtistIdByName(name)
+                            if (resolved != null) { onDismiss(); nav?.navigate("artist/$resolved") }
+                            else vm.error = "Couldn't find $name"
+                        } catch (e: Throwable) {
+                            vm.error = "Couldn't find $name"
+                        } finally {
+                            vm.setBusy(null)
+                        }
+                    }
+                }
+            )
+        }
     }
     if (canResolveAlbum) {
         MenuItem(

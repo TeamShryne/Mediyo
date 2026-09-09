@@ -229,15 +229,19 @@ fun AlbumScreen(
             ) { vm.loadMore() }
 
             menuItem?.let { m ->
-                val track = m.toDomainTrack()
+                // Album rows carry no artist of their own — attribute the album artist
+                // so Show artist (and like/add-to-playlist metadata) works per track.
+                val track = m.toDomainTrack().let { t ->
+                    if (t.artists.isEmpty() && vm.artist.isNotBlank()) t.copy(artists = listOf(vm.artist)) else t
+                }
                 com.teamshryne.mediyo.core.design.TrackMenuSheet(
                     track = track, show = true, onDismiss = { menuItem = null },
                     onLike = { player?.toggleLike(track) },
                     onAddToPlaylist = { showAddTrack = track },
                     onPlayNext = { player?.addNext(track) },
                     onAddToQueue = { player?.addToQueue(track) },
-                    onGoToArtist = vm.artist.takeIf { it.isNotBlank() }?.let { name ->
-                        { menuScope.launch { menuVm.resolveArtistIdByName(name)?.let { nav?.navigate("artist/$it") } } }
+                    onShowArtist = { name, id ->
+                        menuScope.launch { (id?.takeIf { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name))?.let { nav?.navigate("artist/$it") } }
                     },
                     onComments = { m.videoId?.let { nav?.navigate("comments/$it") } }
                 )
