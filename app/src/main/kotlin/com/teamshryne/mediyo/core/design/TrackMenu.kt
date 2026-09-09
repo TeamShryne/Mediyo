@@ -63,7 +63,7 @@ fun TrackMenuSheet(
             MenuItem(icon = Icons.Filled.QueueMusic, label = "Play next", onClick = { onDismiss(); onPlayNext() })
             MenuItem(icon = Icons.Filled.PlaylistPlay, label = "Add to queue", onClick = { onDismiss(); onAddToQueue() })
             if (onGoToAlbum != null) MenuItem(icon = Icons.Filled.Album, label = "Go to album", onClick = { onDismiss(); onGoToAlbum() })
-            if (onGoToArtist != null) MenuItem(icon = Icons.Filled.Person, label = "Go to artist", onClick = { onDismiss(); onGoToArtist() })
+            if (onGoToArtist != null) MenuItem(icon = Icons.Filled.Person, label = "Show artist", onClick = { onDismiss(); onGoToArtist() })
             if (onComments != null) MenuItem(icon = Icons.Filled.Comment, label = "Comments", onClick = { onDismiss(); onComments() })
             if (onRemove != null) MenuItem(icon = Icons.Filled.Delete, label = "Remove from playlist", onClick = { onDismiss(); onRemove() })
             if (onShare != null) MenuItem(icon = Icons.Filled.Share, label = "Share", onClick = { onDismiss(); onShare() })

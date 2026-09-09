@@ -157,6 +157,8 @@ fun FullPlayer(
     val dominant: DominantColors = rememberDominantColors(state.artwork)
     var showAddSheet by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
+    val menuScope = rememberCoroutineScope()
+    val menuVm: MediaMenuVm = hiltViewModel()
     // lyrics mode: toggles between player and synced lyrics experience
     var isLyricsMode by remember { mutableStateOf(false) }
 
@@ -519,6 +521,9 @@ fun FullPlayer(
                 onAddToPlaylist = { showAddSheet = true },
                 onPlayNext = { playerVm?.addNext(trackForMenu) },
                 onAddToQueue = { playerVm?.addToQueue(trackForMenu) },
+                onGoToArtist = trackForMenu.artists.firstOrNull { it.isNotBlank() }?.let { name ->
+                    { menuScope.launch { val id = trackForMenu.artistIds.firstOrNull { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name); id?.let { onGoToArtist(it) } } }
+                },
                 onComments = { onShowComments() },
                 onRefetchLyrics = if (isLyricsMode) {
                     { lyricsVm.refetch(trackForMenu, state.durationMs.takeIf { it > 0 }) }

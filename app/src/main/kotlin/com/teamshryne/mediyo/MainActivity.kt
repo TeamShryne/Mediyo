@@ -272,7 +272,8 @@ private fun AppShell() {
                 player = playerVm,
                 onClose = { showQueueOverlay = false },
                 onShowComments = { vid -> showCommentsId = vid },
-                onShowSleepTimer = { showSleepSheet = true }
+                onShowSleepTimer = { showSleepSheet = true },
+                onGoToArtist = { showQueueOverlay = false; nav.navigate("artist/$it") }
             )
         }
 

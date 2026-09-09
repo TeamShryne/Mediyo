@@ -75,6 +75,7 @@ fun QueueScreen(
     onClose: () -> Unit = {},
     onShowComments: (String) -> Unit = {},
     onShowSleepTimer: () -> Unit = {},
+    onGoToArtist: (String) -> Unit = {},
     vm: QueueVm = hiltViewModel()
 ) {
     val qs by vm.state.collectAsState()
@@ -87,6 +88,7 @@ fun QueueScreen(
     var menuTrack by remember { mutableStateOf<Track?>(null) }
     var menuIdx by remember { mutableStateOf<Int?>(null) }
     var showAddSheet by remember { mutableStateOf<Track?>(null) }
+    val menuVm: com.teamshryne.mediyo.core.design.MediaMenuVm = hiltViewModel()
 
     LaunchedEffect(currentIdx) {
         if (currentIdx in qs.entries.indices) {
@@ -257,6 +259,9 @@ fun QueueScreen(
             onAddToPlaylist = { showAddSheet = track },
             onPlayNext = { player?.addNext(track) },
             onAddToQueue = { player?.addToQueue(track) },
+            onGoToArtist = track.artists.firstOrNull { it.isNotBlank() }?.let { name ->
+                { scope.launch { val id = track.artistIds.firstOrNull { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name); id?.let(onGoToArtist) } }
+            },
             onComments = { track.videoId?.let(onShowComments) },
             onRemove = idx?.let { { vm.removeAt(it) } }
         )

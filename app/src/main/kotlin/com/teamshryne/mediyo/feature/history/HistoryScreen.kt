@@ -60,6 +60,8 @@ fun HistoryScreen(
     var menuTrack by remember { mutableStateOf<Track?>(null) }
     var showAddSheet by remember { mutableStateOf<Track?>(null) }
     var showClear by remember { mutableStateOf(false) }
+    val menuScope = rememberCoroutineScope()
+    val menuVm: com.teamshryne.mediyo.core.design.MediaMenuVm = hiltViewModel()
 
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -120,6 +122,9 @@ fun HistoryScreen(
             onAddToPlaylist = { showAddSheet = t; menuTrack = null },
             onPlayNext = { player?.addNext(t) },
             onAddToQueue = { player?.addToQueue(t) },
+            onGoToArtist = t.artists.firstOrNull { it.isNotBlank() }?.let { name ->
+                { menuScope.launch { menuVm.resolveArtistIdByName(name)?.let { nav?.navigate("artist/$it") } } }
+            },
             onComments = { nav?.navigate("comments/${t.videoId}") },
             onRemove = { vm.remove(t.videoId ?: ""); menuTrack = null }
         )
