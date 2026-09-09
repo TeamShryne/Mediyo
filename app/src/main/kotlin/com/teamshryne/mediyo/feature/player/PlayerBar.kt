@@ -213,7 +213,7 @@ fun FullPlayer(
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
-                .padding(top = 8.dp, start = 24.dp, end = 24.dp, bottom = 20.dp),
+                .padding(top = 4.dp, start = 24.dp, end = 24.dp, bottom = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Top bar — header transitions between "Playing From" vs Song/Artist
@@ -222,8 +222,8 @@ fun FullPlayer(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                IconButton(onClick = onCollapse) {
-                    Icon(Icons.Filled.ExpandMore, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(30.dp))
+                IconButton(onClick = onCollapse, modifier = Modifier.size(48.dp)) {
+                    Icon(Icons.Filled.ExpandMore, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(26.dp))
                 }
                 AnimatedContent(
                     targetState = isLyricsMode,
@@ -237,23 +237,27 @@ fun FullPlayer(
                                 state.title.ifBlank { contextLabel },
                                 style = MaterialTheme.typography.labelLarge,
                                 color = Color.White,
-                                maxLines = 1
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
+                            Spacer(Modifier.height(2.dp))
                             Text(
                                 state.artist.ifBlank { "Mediyo" },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Color.White.copy(alpha = 0.7f),
                                 maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                                 letterSpacing = 0.3.sp
                             )
                         } else {
                             Text("PLAYING FROM", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.7f), letterSpacing = 1.5.sp)
-                            Text(contextLabel, style = MaterialTheme.typography.labelLarge, color = Color.White, maxLines = 1)
+                            Spacer(Modifier.height(2.dp))
+                            Text(contextLabel, style = MaterialTheme.typography.labelLarge, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }
-                IconButton(onClick = { showMenu = true }) {
-                    Icon(Icons.Filled.MoreVert, contentDescription = "More options", tint = Color.White.copy(alpha = 0.85f))
+                IconButton(onClick = { showMenu = true }, modifier = Modifier.size(48.dp)) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "More options", tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(24.dp))
                 }
             }
 
@@ -331,16 +335,16 @@ fun FullPlayer(
                                 }
                             }
 
-                            Spacer(Modifier.height(28.dp))
+                            Spacer(Modifier.height(24.dp))
 
                             Row(
                                 Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.Start
                             ) {
                                 Column(Modifier.weight(1f)) {
                                     MarqueeText(state.title, MaterialTheme.typography.headlineSmall, Color.White)
-                                    Spacer(Modifier.height(2.dp))
+                                    Spacer(Modifier.height(4.dp))
                                     ArtistLinks(
                                         names = state.artistNames.takeIf { it.isNotEmpty() }
                                             ?: if (state.artist.isBlank()) emptyList() else state.artist.split(",").map { it.trim() }.filter { it.isNotEmpty() },
@@ -348,21 +352,39 @@ fun FullPlayer(
                                         onGoToArtist = onGoToArtist
                                     )
                                 }
-                                IconButton(onClick = {
-                                    if (playerVm != null) playerVm.toggleLikeCurrent() else liked = !liked
-                                }) {
+                                Spacer(Modifier.width(8.dp))
+                                IconButton(
+                                    onClick = {
+                                        if (playerVm != null) playerVm.toggleLikeCurrent() else liked = !liked
+                                    },
+                                    modifier = Modifier.size(48.dp)
+                                ) {
                                     Icon(
                                         if (liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
                                         contentDescription = "Like",
-                                        tint = if (liked) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.9f)
+                                        tint = if (liked) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.9f),
+                                        modifier = Modifier.size(26.dp)
                                     )
                                 }
                             }
 
-                            Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-                                TextButton(onClick = onShowQueue) { Icon(Icons.Filled.QueueMusic, null, tint = Color.White.copy(0.85f)); Spacer(Modifier.width(6.dp)); Text("Queue", color = Color.White.copy(0.85f)) }
-                                TextButton(onClick = onShowComments) { Icon(Icons.Filled.Comment, null, tint = Color.White.copy(0.85f)); Spacer(Modifier.width(6.dp)); Text("Comments", color = Color.White.copy(0.85f)) }
-                                TextButton(onClick = { showAddSheet = true }) { Icon(Icons.Filled.PlaylistAdd, null, tint = Color.White.copy(0.85f)); Spacer(Modifier.width(6.dp)); Text("Add", color = Color.White.copy(0.85f)) }
+                            Row(
+                                Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                TextButton(
+                                    onClick = onShowQueue,
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                                ) { Icon(Icons.Filled.QueueMusic, null, tint = Color.White.copy(0.85f), modifier = Modifier.size(20.dp)); Spacer(Modifier.width(6.dp)); Text("Queue", color = Color.White.copy(0.85f), style = MaterialTheme.typography.labelLarge) }
+                                TextButton(
+                                    onClick = onShowComments,
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                                ) { Icon(Icons.Filled.Comment, null, tint = Color.White.copy(0.85f), modifier = Modifier.size(20.dp)); Spacer(Modifier.width(6.dp)); Text("Comments", color = Color.White.copy(0.85f), style = MaterialTheme.typography.labelLarge) }
+                                TextButton(
+                                    onClick = { showAddSheet = true },
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                                ) { Icon(Icons.Filled.PlaylistAdd, null, tint = Color.White.copy(0.85f), modifier = Modifier.size(20.dp)); Spacer(Modifier.width(6.dp)); Text("Add", color = Color.White.copy(0.85f), style = MaterialTheme.typography.labelLarge) }
                             }
 
                             Spacer(Modifier.weight(0.5f))
@@ -372,9 +394,9 @@ fun FullPlayer(
             }
 
             // ── Always-visible below: scrubber + transport + 50-50 bottom bar
-            // Slider stays exactly as before; in lyrics mode it slides down 10dp smoothly (no layout jump)
+            // Slider stays exactly as before; in lyrics mode it slides down 8dp smoothly (no layout jump)
             val sliderExtraTop by androidx.compose.animation.core.animateDpAsState(
-                targetValue = if (isLyricsMode) 12.dp else 0.dp,
+                targetValue = if (isLyricsMode) 8.dp else 0.dp,
                 animationSpec = tween(320, easing = FastOutSlowInEasing),
                 label = "sliderLyricsOffset"
             )
@@ -395,7 +417,10 @@ fun FullPlayer(
                 ),
                 modifier = Modifier.fillMaxWidth().height(26.dp)
             )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
                 val dur = state.durationMs
                 Text(
                     formatTime(if (dragging) (dur * dragValue).toLong() else state.positionMs),
@@ -406,14 +431,14 @@ fun FullPlayer(
             }
 
             Row(
-                Modifier.fillMaxWidth().padding(vertical = 14.dp),
+                Modifier.fillMaxWidth().padding(vertical = 10.dp, horizontal = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 val shuffleActive by animateColorAsState(
                     if (state.shuffle) Color.White else Color.White.copy(alpha = 0.55f), label = "shuffle"
                 )
-                IconButton(onClick = onToggleShuffle) {
+                IconButton(onClick = onToggleShuffle, modifier = Modifier.size(48.dp)) {
                     Icon(Icons.Filled.Shuffle, contentDescription = "Shuffle", tint = shuffleActive)
                 }
                 IconButton(onClick = onPrevious, modifier = Modifier.size(56.dp)) {
@@ -423,7 +448,7 @@ fun FullPlayer(
                     onClick = onToggle,
                     shape = CircleShape,
                     colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color.White, contentColor = Color.Black),
-                    modifier = Modifier.size(74.dp)
+                    modifier = Modifier.size(72.dp)
                 ) {
                     if (state.isBuffering) {
                         CircularProgressIndicator(Modifier.size(26.dp), color = Color.Black, strokeWidth = 2.5.dp)
@@ -438,7 +463,7 @@ fun FullPlayer(
                 IconButton(onClick = onNext, modifier = Modifier.size(56.dp)) {
                     Icon(Icons.Filled.SkipNext, contentDescription = "Next", tint = Color.White, modifier = Modifier.size(38.dp))
                 }
-                IconButton(onClick = onToggleRepeat) {
+                IconButton(onClick = onToggleRepeat, modifier = Modifier.size(48.dp)) {
                     Icon(
                         if (state.repeatOne) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
                         contentDescription = "Repeat",
@@ -449,7 +474,7 @@ fun FullPlayer(
 
             // Bottom 50-50 bar: Sleep timer | Lyrics — clean, no subtitles, single lyrics icon
             Row(
-                Modifier.fillMaxWidth(),
+                Modifier.fillMaxWidth().padding(top = 2.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 val bottomSleep = playerVm?.sleepState?.collectAsState()?.value
@@ -457,12 +482,13 @@ fun FullPlayer(
 
                 // Sleep timer — 50% — clean pill, icon + single label
                 Surface(
+                    onClick = onShowSleepTimer,
                     shape = RoundedCornerShape(16.dp),
                     color = if (bottomActive) Color.White.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.08f),
-                    modifier = Modifier.weight(1f).clickable(onClick = onShowSleepTimer)
+                    modifier = Modifier.weight(1f)
                 ) {
                     Row(
-                        Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center
                     ) {
@@ -484,12 +510,13 @@ fun FullPlayer(
 
                 // Lyrics — 50% — single Article/lyrics icon, single label
                 Surface(
+                    onClick = { isLyricsMode = !isLyricsMode },
                     shape = RoundedCornerShape(16.dp),
                     color = if (isLyricsMode) Color.White.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.08f),
-                    modifier = Modifier.weight(1f).clickable { isLyricsMode = !isLyricsMode }
+                    modifier = Modifier.weight(1f)
                 ) {
                     Row(
-                        Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center
                     ) {
