@@ -259,8 +259,8 @@ fun QueueScreen(
             onAddToPlaylist = { showAddSheet = track },
             onPlayNext = { player?.addNext(track) },
             onAddToQueue = { player?.addToQueue(track) },
-            onGoToArtist = track.artists.firstOrNull { it.isNotBlank() }?.let { name ->
-                { scope.launch { val id = track.artistIds.firstOrNull { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name); id?.let(onGoToArtist) } }
+            onShowArtist = { name, id ->
+                scope.launch { (id?.takeIf { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name))?.let(onGoToArtist) }
             },
             onComments = { track.videoId?.let(onShowComments) },
             onRemove = idx?.let { { vm.removeAt(it) } }

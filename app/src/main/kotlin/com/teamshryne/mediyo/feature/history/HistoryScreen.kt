@@ -122,8 +122,8 @@ fun HistoryScreen(
             onAddToPlaylist = { showAddSheet = t; menuTrack = null },
             onPlayNext = { player?.addNext(t) },
             onAddToQueue = { player?.addToQueue(t) },
-            onGoToArtist = t.artists.firstOrNull { it.isNotBlank() }?.let { name ->
-                { menuScope.launch { menuVm.resolveArtistIdByName(name)?.let { nav?.navigate("artist/$it") } } }
+            onShowArtist = { name, id ->
+                menuScope.launch { (id?.takeIf { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name))?.let { nav?.navigate("artist/$it") } }
             },
             onComments = { nav?.navigate("comments/${t.videoId}") },
             onRemove = { vm.remove(t.videoId ?: ""); menuTrack = null }
