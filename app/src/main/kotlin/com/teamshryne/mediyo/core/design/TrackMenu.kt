@@ -1,8 +1,10 @@
 package com.teamshryne.mediyo.core.design
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -42,8 +44,36 @@ fun TrackMenuSheet(
     onLyricsSettings: (() -> Unit)? = null
 ) {
     if (!show) return
+    // One entry point for artists; multi-artist tracks swap the sheet
+    // to a picker listing every artist (single artist opens directly).
+    val artistEntries = remember(track) {
+        track.artists.mapIndexedNotNull { i, n ->
+            n.takeIf { it.isNotBlank() }?.let { name ->
+                name to track.artistIds.getOrNull(i)?.takeIf { it.isNotBlank() }
+            }
+        }
+    }
+    var showArtists by remember(track) { mutableStateOf(false) }
+    BackHandler(enabled = showArtists) { showArtists = false }
     ModalBottomSheet(onDismissRequest = onDismiss, shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)) {
         Column(Modifier.padding(horizontal = 8.dp, vertical = 8.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            if (showArtists && artistEntries.size > 1) {
+                // ── Artist picker ──
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    IconButton(onClick = { showArtists = false }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                    Text("Artists", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                }
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                artistEntries.forEach { (name, id) ->
+                    MenuItem(icon = Icons.Filled.Person, label = name, onClick = { onDismiss(); onShowArtist?.invoke(name, id) })
+                }
+            } else {
             // header
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Column(Modifier.weight(1f)) {
@@ -63,27 +93,18 @@ fun TrackMenuSheet(
             MenuItem(icon = Icons.Filled.QueueMusic, label = "Play next", onClick = { onDismiss(); onPlayNext() })
             MenuItem(icon = Icons.Filled.PlaylistPlay, label = "Add to queue", onClick = { onDismiss(); onAddToQueue() })
             if (onGoToAlbum != null) MenuItem(icon = Icons.Filled.Album, label = "Go to album", onClick = { onDismiss(); onGoToAlbum() })
-            if (onShowArtist != null) {
-                // One row per artist: single artist → plain entry, 2–6+ → named entries.
-                val entries = remember(track) {
-                    track.artists.mapIndexedNotNull { i, n ->
-                        n.takeIf { it.isNotBlank() }?.let { name ->
-                            name to track.artistIds.getOrNull(i)?.takeIf { it.isNotBlank() }
-                        }
-                    }
-                }
-                if (entries.size == 1) {
-                    val (name, id) = entries[0]
+            if (onShowArtist != null && artistEntries.isNotEmpty()) {
+                if (artistEntries.size == 1) {
+                    val (name, id) = artistEntries[0]
                     MenuItem(icon = Icons.Filled.Person, label = "Show artist", onClick = { onDismiss(); onShowArtist(name, id) })
                 } else {
-                    entries.forEach { (name, id) ->
-                        MenuItem(icon = Icons.Filled.Person, label = "Show $name", onClick = { onDismiss(); onShowArtist(name, id) })
-                    }
+                    MenuItem(icon = Icons.Filled.Person, label = "Show artists", onClick = { showArtists = true })
                 }
             }
             if (onComments != null) MenuItem(icon = Icons.Filled.Comment, label = "Comments", onClick = { onDismiss(); onComments() })
             if (onRemove != null) MenuItem(icon = Icons.Filled.Delete, label = "Remove from playlist", onClick = { onDismiss(); onRemove() })
             if (onShare != null) MenuItem(icon = Icons.Filled.Share, label = "Share", onClick = { onDismiss(); onShare() })
+            }
         }
     }
 }
