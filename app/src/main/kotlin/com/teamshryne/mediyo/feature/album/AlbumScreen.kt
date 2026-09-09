@@ -236,7 +236,9 @@ fun AlbumScreen(
                     onAddToPlaylist = { showAddTrack = track },
                     onPlayNext = { player?.addNext(track) },
                     onAddToQueue = { player?.addToQueue(track) },
-                    onGoToArtist = m.artists.firstOrNull()?.takeIf { it.isNotBlank() }?.let { { menuScope.launch { val id = m.artistIds.firstOrNull { it.isNotBlank() } ?: menuVm.resolveArtistId(m); id?.let { nav?.navigate("artist/$it") } } } },
+                    onGoToArtist = vm.artist.takeIf { it.isNotBlank() }?.let { name ->
+                        { menuScope.launch { menuVm.resolveArtistIdByName(name)?.let { nav?.navigate("artist/$it") } } }
+                    },
                     onComments = { m.videoId?.let { nav?.navigate("comments/$it") } }
                 )
             }

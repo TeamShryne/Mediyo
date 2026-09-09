@@ -355,7 +355,7 @@ private fun SongActions(
     if (canResolveArtist) {
         MenuItem(
             icon = { BusyIcon(vm.busy, "artist", Icons.Filled.Person) },
-            label = "Go to artist",
+            label = "Show artist",
             enabled = vm.busy == null,
             onClick = {
                 scope.launch {

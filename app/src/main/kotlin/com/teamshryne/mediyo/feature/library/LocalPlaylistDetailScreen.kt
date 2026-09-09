@@ -76,6 +76,8 @@ fun LocalPlaylistDetailScreen(
     var menuTrack by remember { mutableStateOf<Track?>(null) }
     var menuEntryId by remember { mutableStateOf<String?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    val menuScope = rememberCoroutineScope()
+    val menuVm: com.teamshryne.mediyo.core.design.MediaMenuVm = hiltViewModel()
 
     Column(Modifier.fillMaxSize()) {
         // header
@@ -144,6 +146,9 @@ fun LocalPlaylistDetailScreen(
             onAddToPlaylist = { /* already in playlist, could add to another */ },
             onPlayNext = { player?.addNext(t) },
             onAddToQueue = { player?.addToQueue(t) },
+            onGoToArtist = t.artists.firstOrNull { it.isNotBlank() }?.let { name ->
+                { menuScope.launch { menuVm.resolveArtistIdByName(name)?.let { nav?.navigate("artist/$it") } } }
+            },
             onComments = { nav?.navigate("comments/${t.videoId}") },
             onRemove = { menuEntryId?.let { vm.remove(it) } }
         )
