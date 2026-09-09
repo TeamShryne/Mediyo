@@ -1,10 +1,12 @@
 package com.teamshryne.mediyo.core.design
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.BookmarkRemove
@@ -348,61 +350,66 @@ private fun SongActions(
         }
     }
     val canResolveAlbum = !item.album.isNullOrBlank()
+    var showArtists by remember(item) { mutableStateOf(false) }
+    BackHandler(enabled = showArtists) { showArtists = false }
 
-    MenuItem(
-        icon = if (liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-        label = if (liked) "Remove from Liked" else "Add to Liked",
-        enabled = vid != null,
-        onClick = { onDismiss(); if (vid != null) vm.toggleLike(track) }
-    )
-    MenuItem(icon = Icons.Filled.PlaylistAdd, label = "Add to playlist", onClick = { onDismiss(); onAddToPlaylist(track) })
-    MenuItem(icon = Icons.Filled.QueueMusic, label = "Play next", onClick = { onDismiss(); onPlayNext(track) })
-    MenuItem(icon = Icons.Filled.PlaylistPlay, label = "Add to queue", onClick = { onDismiss(); onAddToQueue(track) })
-    if (artistEntries.size == 1) {
-        val (name, id, key) = artistEntries[0]
-        MenuItem(
-            icon = { BusyIcon(vm.busy, key, Icons.Filled.Person) },
-            label = "Show artist",
-            enabled = vm.busy == null,
-            onClick = {
-                scope.launch {
-                    vm.setBusy(key)
-                    try {
-                        // Prefer the parsed ID; fall back to search-by-name.
-                        val resolved = id ?: vm.resolveArtistId(item)
-                        if (resolved != null) { onDismiss(); nav?.navigate("artist/$resolved") }
-                        else vm.error = "Couldn't find that artist"
-                    } catch (e: Throwable) {
-                        vm.error = "Couldn't find that artist"
-                    } finally {
-                        vm.setBusy(null)
-                    }
-                }
+    fun openArtist(name: String, id: String?, key: String, miss: String) {
+        scope.launch {
+            vm.setBusy(key)
+            try {
+                // Prefer the parsed ID; fall back to search-by-name.
+                val resolved = id ?: vm.resolveArtistIdByName(name)
+                if (resolved != null) { onDismiss(); nav?.navigate("artist/$resolved") }
+                else vm.error = miss
+            } catch (e: Throwable) {
+                vm.error = miss
+            } finally {
+                vm.setBusy(null)
             }
-        )
-    } else if (artistEntries.isNotEmpty()) {
+        }
+    }
+
+    if (showArtists && artistEntries.size > 1) {
+        // ── Artist picker ──
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            IconButton(onClick = { showArtists = false }, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            }
+            Text("Artists", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+        }
         artistEntries.forEach { (name, id, key) ->
             MenuItem(
                 icon = { BusyIcon(vm.busy, key, Icons.Filled.Person) },
-                label = "Show $name",
+                label = name,
                 enabled = vm.busy == null,
-                onClick = {
-                    scope.launch {
-                        vm.setBusy(key)
-                        try {
-                            val resolved = id ?: vm.resolveArtistIdByName(name)
-                            if (resolved != null) { onDismiss(); nav?.navigate("artist/$resolved") }
-                            else vm.error = "Couldn't find $name"
-                        } catch (e: Throwable) {
-                            vm.error = "Couldn't find $name"
-                        } finally {
-                            vm.setBusy(null)
-                        }
-                    }
-                }
+                onClick = { openArtist(name, id, key, "Couldn't find $name") }
             )
         }
-    }
+    } else {
+        MenuItem(
+            icon = if (liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+            label = if (liked) "Remove from Liked" else "Add to Liked",
+            enabled = vid != null,
+            onClick = { onDismiss(); if (vid != null) vm.toggleLike(track) }
+        )
+        MenuItem(icon = Icons.Filled.PlaylistAdd, label = "Add to playlist", onClick = { onDismiss(); onAddToPlaylist(track) })
+        MenuItem(icon = Icons.Filled.QueueMusic, label = "Play next", onClick = { onDismiss(); onPlayNext(track) })
+        MenuItem(icon = Icons.Filled.PlaylistPlay, label = "Add to queue", onClick = { onDismiss(); onAddToQueue(track) })
+        if (artistEntries.size == 1) {
+            val (name, id, key) = artistEntries[0]
+            MenuItem(
+                icon = { BusyIcon(vm.busy, key, Icons.Filled.Person) },
+                label = "Show artist",
+                enabled = vm.busy == null,
+                onClick = { openArtist(name, id, key, "Couldn't find that artist") }
+            )
+        } else if (artistEntries.isNotEmpty()) {
+            MenuItem(icon = Icons.Filled.Person, label = "Show artists", onClick = { showArtists = true })
+        }
     if (canResolveAlbum) {
         MenuItem(
             icon = { BusyIcon(vm.busy, "album", Icons.Filled.Album) },
@@ -427,6 +434,7 @@ private fun SongActions(
     }
     if (onComments != null && vid != null) {
         MenuItem(icon = Icons.Filled.Comment, label = "Comments", onClick = { onDismiss(); onComments(vid) })
+    }
     }
 }
 
