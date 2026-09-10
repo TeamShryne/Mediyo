@@ -8,13 +8,15 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>
+    <!-- Required for the in-app updater (GitHub Releases side-load). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
     <application
         android:name=".MediyoApp"
         android:extractNativeLibs="true"
         android:allowBackup="true"
         android:icon="@android:drawable/sym_def_app_icon"
         android:roundIcon="@android:drawable/sym_def_app_icon"
-        android:label="Mediyo"
+        android:label="${appName}"
         android:supportsRtl="true"
         android:theme="@style/Theme.Mediyo">
         <activity
