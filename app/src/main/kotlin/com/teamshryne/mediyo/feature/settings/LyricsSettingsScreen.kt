@@ -7,6 +7,9 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Audiotrack
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MusicNote
@@ -137,6 +140,9 @@ fun LyricsSettingsScreen(
                         Text("How it works", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                         Text(
                             "• Better Lyrics gives word-by-word timings with a karaoke glow.\n" +
+                                "• Lyrics Plus serves cached Apple word-sync from multiple sources.\n" +
+                                "• Paxsenix resolves Apple syllable-sync via iTunes lookup.\n" +
+                                "• Kugou covers far more songs with line-by-line timings.\n" +
                                 "• LRCLIB covers far more songs with line-by-line timings.\n" +
                                 "• Changing the order affects the next fetch; cached lyrics stay until cleared or the track is re-queued.",
                             style = MaterialTheme.typography.bodySmall,
@@ -160,6 +166,9 @@ private fun LyricsSourceRow(
 ) {
     val icon = when (source) {
         LyricsSource.BetterLyrics -> Icons.Filled.MusicNote
+        LyricsSource.LyricsPlus -> Icons.Filled.Audiotrack
+        LyricsSource.Paxsenix -> Icons.Filled.Bolt
+        LyricsSource.Kugou -> Icons.Filled.CloudDownload
         LyricsSource.LrcLib -> Icons.Filled.QueueMusic
     }
     val container = if (rank == 1) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh

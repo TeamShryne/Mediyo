@@ -2,12 +2,15 @@ package com.teamshryne.mediyo.data.repository
 
 import com.teamshryne.mediyo.data.cache.CacheRepository
 import com.teamshryne.mediyo.data.lyrics.BetterLyricsApi
+import com.teamshryne.mediyo.data.lyrics.CachedLyricsParser
+import com.teamshryne.mediyo.data.lyrics.KugouApi
 import com.teamshryne.mediyo.data.lyrics.LrcLibApi
+import com.teamshryne.mediyo.data.lyrics.LyricsPlusApi
 import com.teamshryne.mediyo.data.lyrics.LyricsPrefs
 import com.teamshryne.mediyo.data.lyrics.LyricsResult
 import com.teamshryne.mediyo.data.lyrics.LyricTrack
 import com.teamshryne.mediyo.data.lyrics.LyricsSource
-import com.teamshryne.mediyo.data.lyrics.TtmlParser
+import com.teamshryne.mediyo.data.lyrics.PaxsenixApi
 import com.teamshryne.mediyo.domain.model.Track
 import com.teamshryne.mediyo.domain.repository.LyricsRepository
 import kotlinx.coroutines.flow.Flow
@@ -23,6 +26,9 @@ import javax.inject.Singleton
 @Singleton
 class LyricsRepositoryImpl @Inject constructor(
     private val betterLyrics: BetterLyricsApi,
+    private val lyricsPlus: LyricsPlusApi,
+    private val paxsenix: PaxsenixApi,
+    private val kugou: KugouApi,
     private val lrcLib: LrcLibApi,
     private val lyricsPrefs: LyricsPrefs,
     private val cache: CacheRepository
@@ -42,26 +48,21 @@ class LyricsRepositoryImpl @Inject constructor(
 
     private suspend fun providerFor(source: LyricsSource) = when (source) {
         LyricsSource.BetterLyrics -> betterLyrics
+        LyricsSource.LyricsPlus -> lyricsPlus
+        LyricsSource.Paxsenix -> paxsenix
+        LyricsSource.Kugou -> kugou
         LyricsSource.LrcLib -> lrcLib
     }
 
     override suspend fun getLyrics(track: Track, durationSec: Int?, forceRefresh: Boolean): LyricsResult {
         val key = cacheKey(track, durationSec)
 
-        // 1) Try cache — stored value may be TTML or Lyricsfile; try TTML first then Lyricsfile
+        // 1) Try cache — payload may be TTML, Lyricsfile YAML, LRC or
+        //    LyricsPlus JSON depending on which provider won previously.
         if (!forceRefresh) {
             cache.get(key)?.let { cached ->
                 if (cached.isNotBlank()) {
-                    // Heuristic: TTML contains "<tt" or "<p ", Lyricsfile starts with "version:"
-                    val parsed: LyricTrack = if (cached.trimStart().startsWith("version:") || cached.contains("start_ms:")) {
-                        com.teamshryne.mediyo.data.lyrics.LyricsfileParser.parse(cached).let { lf ->
-                            if (!lf.isEmpty) lf else TtmlParser.parse(cached)
-                        }
-                    } else {
-                        TtmlParser.parse(cached).let { ttml ->
-                            if (!ttml.isEmpty) ttml else com.teamshryne.mediyo.data.lyrics.LyricsfileParser.parse(cached)
-                        }
-                    }
+                    val parsed: LyricTrack = CachedLyricsParser.parse(cached)
                     if (!parsed.isEmpty) return LyricsResult.Success(parsed, cached)
                 }
             }

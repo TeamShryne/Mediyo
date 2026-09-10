@@ -14,11 +14,14 @@ private val Context.lyricsPrefs by preferencesDataStore("lyrics_prefs")
 
 enum class LyricsSource(val id: String, val label: String, val subtitle: String) {
     BetterLyrics("betterLyrics", "Better Lyrics", "Word-by-word sync • best for karaoke glow"),
+    LyricsPlus("lyricsPlus", "Lyrics Plus", "Apple word-sync cache • fast multi-source"),
+    Paxsenix("paxsenix", "Paxsenix", "Apple syllable-sync • iTunes ID lookup"),
+    Kugou("kugou", "Kugou", "Huge catalog • line-by-line LRC"),
     LrcLib("lrcLib", "LRCLIB", "Huge catalog • line-by-line, great fallback");
 
     companion object {
         fun fromId(id: String): LyricsSource? = entries.find { it.id == id }
-        val defaultOrder: List<LyricsSource> = listOf(BetterLyrics, LrcLib)
+        val defaultOrder: List<LyricsSource> = listOf(BetterLyrics, LyricsPlus, Paxsenix, Kugou, LrcLib)
     }
 }
 
@@ -33,9 +36,22 @@ class LyricsPrefs @Inject constructor(@ApplicationContext private val ctx: Conte
         } else {
             val ids = raw.split(",").map { it.trim() }.filter { it.isNotEmpty() }
             val mapped = ids.mapNotNull { LyricsSource.fromId(it) }
-            // Ensure all sources present (migration when adding new source)
+            // Ensure all sources present (migration when adding new source).
+            // Newcomers slot in before the LRCLIB fallback so existing users
+            // actually benefit from them.
             val missing = LyricsSource.entries.filter { it !in mapped }
-            (mapped + missing).distinctBy { it.id }
+            if (missing.isEmpty()) {
+                mapped.distinctBy { it.id }
+            } else {
+                val mutable = mapped.toMutableList()
+                val lrcIdx = mutable.indexOf(LyricsSource.LrcLib)
+                val (wordLevel, rest) = missing.partition {
+                    it == LyricsSource.LyricsPlus || it == LyricsSource.Paxsenix || it == LyricsSource.Kugou
+                }
+                if (lrcIdx >= 0) mutable.addAll(lrcIdx, wordLevel + rest)
+                else mutable.addAll(wordLevel + rest)
+                mutable.distinctBy { it.id }
+            }
         }
     }
 

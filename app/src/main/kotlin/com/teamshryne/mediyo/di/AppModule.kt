@@ -17,7 +17,10 @@ import com.teamshryne.mediyo.data.local.LikedTrackDao
 import com.teamshryne.mediyo.data.local.LocalPlaylistDao
 import com.teamshryne.mediyo.data.local.LocalPlaylistEntryDao
 import com.teamshryne.mediyo.data.lyrics.BetterLyricsApi
+import com.teamshryne.mediyo.data.lyrics.KugouApi
 import com.teamshryne.mediyo.data.lyrics.LrcLibApi
+import com.teamshryne.mediyo.data.lyrics.LyricsPlusApi
+import com.teamshryne.mediyo.data.lyrics.PaxsenixApi
 import com.teamshryne.mediyo.data.playback.NewPipeResolver
 import dagger.Module
 import dagger.Provides
@@ -46,6 +49,9 @@ object AppModule {
     @Provides fun provideSavedCollectionDao(db: MediyoDb): com.teamshryne.mediyo.data.local.SavedCollectionDao = db.savedCollectionDao()
 
     @Provides @Singleton fun provideBetterLyricsApi(): BetterLyricsApi = BetterLyricsApi()
+    @Provides @Singleton fun provideLyricsPlusApi(): LyricsPlusApi = LyricsPlusApi()
+    @Provides @Singleton fun providePaxsenixApi(): PaxsenixApi = PaxsenixApi()
+    @Provides @Singleton fun provideKugouApi(): KugouApi = KugouApi()
     @Provides @Singleton fun provideLrcLibApi(): LrcLibApi = LrcLibApi()
 
     @OptIn(UnstableApi::class)
