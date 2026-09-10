@@ -36,6 +36,29 @@ class AppUpdater @Inject constructor(
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
+    companion object {
+        /** Subdirectory of [Context.getCacheDir] holding downloaded updater APKs. */
+        const val UPDATES_SUBDIR = "updates"
+    }
+
+    /**
+     * Deletes leftover updater APKs from previous runs. Called on app startup:
+     * [com.teamshryne.mediyo.feature.update.UpdateViewModel] state is in-memory,
+     * so any APK on disk at startup is either already installed or an abandoned
+     * download — safe to drop. Only `*.apk` files are touched.
+     * @return number of files deleted.
+     */
+    fun cleanupStaleApks(): Int {
+        return try {
+            val dir = File(ctx.cacheDir, UPDATES_SUBDIR)
+            if (!dir.isDirectory) return 0
+            dir.listFiles { file -> file.isFile && file.extension.equals("apk", ignoreCase = true) }
+                ?.count { it.delete() } ?: 0
+        } catch (ignored: Exception) {
+            0
+        }
+    }
+
     suspend fun check(): UpdateCheck = withContext(Dispatchers.IO) {
         // Updater is release-only: never hit the network from debug builds
         // (different applicationId/versioning, side-by-side installs).
@@ -69,7 +92,7 @@ class AppUpdater @Inject constructor(
     suspend fun download(info: UpdateInfo, onProgress: (Float?) -> Unit): File =
         withContext(Dispatchers.IO) {
             if (BuildConfig.DEBUG) throw IllegalStateException("App updates are disabled in debug builds")
-            val dir = File(ctx.cacheDir, "updates").apply { mkdirs() }
+            val dir = File(ctx.cacheDir, UPDATES_SUBDIR).apply { mkdirs() }
             val out = File(dir, info.apkName.ifBlank { "mediyo-update.apk" })
             val conn = openGet(info.apkUrl, readTimeoutMs = 30_000)
             conn.connect()
