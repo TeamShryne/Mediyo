@@ -136,6 +136,12 @@ class MediyoWidgetManager @Inject constructor(
             R.id.widget_btn_like,
             if (state.liked) R.drawable.ic_widget_heart else R.drawable.ic_widget_heart_outline
         )
+        // Liked heart glows Mediyo pink; unliked stays muted grey.
+        views.setInt(
+            R.id.widget_btn_like,
+            "setColorFilter",
+            if (state.liked) 0xFFE91E63.toInt() else 0xFFCFC3D6.toInt()
+        )
         val level = (state.progress.coerceIn(0f, 1f) * 1000).toInt()
         views.setProgressBar(R.id.widget_progress, 1000, level, false)
         views.setOnClickPendingIntent(R.id.widget_art, WidgetIntents.openApp(ctx))
