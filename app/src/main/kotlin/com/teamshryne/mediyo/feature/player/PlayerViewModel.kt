@@ -20,6 +20,8 @@ import com.teamshryne.mediyo.domain.repository.LikeRepository
 import com.teamshryne.mediyo.playback.PlaybackService
 import com.teamshryne.mediyo.playback.PlaybackQueueManager
 import com.teamshryne.mediyo.playback.PlaybackSessionHub
+import com.teamshryne.mediyo.widget.WidgetNowPlaying
+import com.teamshryne.mediyo.widget.WidgetSync
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
@@ -70,6 +72,7 @@ class PlayerViewModel @Inject constructor(
     private val hub: PlaybackSessionHub,
     private val player: ExoPlayer,
     private val sleepManager: SleepTimerManager,
+    private val widgetSync: WidgetSync,
     @ApplicationContext private val ctx: Context
 ) : ViewModel() {
 
@@ -158,6 +161,41 @@ class PlayerViewModel @Inject constructor(
                 canSkipPrevious = hasTrack
             )
         }
+        pushWidgetSnapshot(force = false)
+    }
+
+    @Volatile private var lastWidgetKey = ""
+    @Volatile private var lastWidgetPushMs = 0L
+
+    /**
+     * Mirrors player state to the home widgets.
+     * Instant on track / play / like change, throttled (6s) for progress-only
+     * ticks while playing — [WidgetSync] enforces the same throttle as backup.
+     */
+    private fun pushWidgetSnapshot(force: Boolean) {
+        try {
+            val s = _state.value
+            val key = "${s.videoId}|${s.isPlaying}|${s.isBuffering}|${s.liked}|${s.title}"
+            val now = System.currentTimeMillis()
+            val structural = key != lastWidgetKey
+            if (!force && !structural && now - lastWidgetPushMs < 6_000L) return
+            lastWidgetKey = key
+            lastWidgetPushMs = now
+            widgetSync.pushAsync(
+                WidgetNowPlaying(
+                    videoId = s.videoId,
+                    title = s.title,
+                    artist = s.artist,
+                    artworkUrl = s.artwork,
+                    isPlaying = s.isPlaying,
+                    isBuffering = s.isBuffering,
+                    liked = s.liked,
+                    progress = s.progress,
+                    positionMs = s.positionMs,
+                    durationMs = s.durationMs
+                )
+            )
+        } catch (_: Throwable) {}
     }
 
     /** The MediaSession lives in [PlaybackService] — make sure it's running before audio starts. */
