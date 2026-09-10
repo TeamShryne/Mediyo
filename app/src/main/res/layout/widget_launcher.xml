@@ -49,7 +49,7 @@
             android:layout_width="34dp"
             android:layout_height="34dp"
             android:background="@drawable/widget_play_circle"
-            android:padding="7dp"
+            android:padding="9dp"
             android:src="@drawable/ic_widget_heart" />
 
         <LinearLayout
@@ -92,7 +92,7 @@
             android:layout_width="34dp"
             android:layout_height="34dp"
             android:background="@drawable/widget_play_circle"
-            android:padding="7dp"
+            android:padding="9dp"
             android:src="@drawable/ic_widget_play" />
 
         <LinearLayout
@@ -136,7 +136,7 @@
             android:layout_width="34dp"
             android:layout_height="34dp"
             android:background="@drawable/widget_play_circle"
-            android:padding="7dp"
+            android:padding="9dp"
             android:src="@drawable/ic_widget_play" />
 
         <LinearLayout
@@ -180,7 +180,7 @@
             android:layout_width="34dp"
             android:layout_height="34dp"
             android:background="@drawable/widget_play_circle"
-            android:padding="7dp"
+            android:padding="9dp"
             android:src="@drawable/ic_widget_play" />
 
         <LinearLayout
@@ -224,7 +224,7 @@
             android:layout_width="34dp"
             android:layout_height="34dp"
             android:background="@drawable/widget_play_circle"
-            android:padding="7dp"
+            android:padding="9dp"
             android:src="@drawable/ic_widget_play" />
 
         <LinearLayout
@@ -268,7 +268,7 @@
             android:layout_width="34dp"
             android:layout_height="34dp"
             android:background="@drawable/widget_play_circle"
-            android:padding="7dp"
+            android:padding="9dp"
             android:src="@drawable/ic_widget_play" />
 
         <LinearLayout

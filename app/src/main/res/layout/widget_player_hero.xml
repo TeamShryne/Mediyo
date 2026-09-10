@@ -55,7 +55,8 @@
             android:layout_height="44dp"
             android:background="@drawable/widget_circle"
             android:contentDescription="@string/music_player"
-            android:scaleType="centerInside"
+            android:padding="12dp"
+            android:scaleType="fitCenter"
             android:src="@drawable/ic_widget_heart_outline" />
     </LinearLayout>
 
@@ -82,7 +83,8 @@
             android:layout_height="44dp"
             android:background="@drawable/widget_circle"
             android:contentDescription="@string/music_player"
-            android:scaleType="centerInside"
+            android:padding="12dp"
+            android:scaleType="fitCenter"
             android:src="@drawable/ic_widget_prev" />
 
         <ImageButton
@@ -93,7 +95,8 @@
             android:layout_marginEnd="10dp"
             android:background="@drawable/widget_play_circle"
             android:contentDescription="@string/music_player"
-            android:scaleType="centerInside"
+            android:padding="16dp"
+            android:scaleType="fitCenter"
             android:src="@drawable/ic_widget_play" />
 
         <ImageButton
@@ -102,7 +105,8 @@
             android:layout_height="44dp"
             android:background="@drawable/widget_circle"
             android:contentDescription="@string/music_player"
-            android:scaleType="centerInside"
+            android:padding="12dp"
+            android:scaleType="fitCenter"
             android:src="@drawable/ic_widget_next" />
     </LinearLayout>
 </LinearLayout>
