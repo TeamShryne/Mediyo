@@ -55,6 +55,21 @@ jobs:
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/27.0.12077973
 
+      - name: Verify debug identity (side-by-side with release)
+        run: |
+          set -euo pipefail
+          BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/*/ | sort -V | tail -1)
+          APK=$(ls app/build/outputs/apk/debug/*.apk | head -1)
+          echo "APK=$APK"
+          # NB: aapt exits 1 on the pre-existing sym_def_app_icon reference,
+          # so capture output and assert on what matters instead.
+          BADGING=$("$BT/aapt" dump badging "$APK" 2>/dev/null || true)
+          echo "$BADGING" | grep -E "^package:|application-label:" | head -3
+          echo "$BADGING" | grep -q "package: name='com.teamshryne.mediyo.debug'" \
+            || { echo "::error::debug APK must use .debug applicationId"; exit 1; }
+          echo "$BADGING" | grep -q "application-label:'Mediyo Debug'" \
+            || { echo "::error::debug APK must be labeled 'Mediyo Debug'"; exit 1; }
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
