@@ -1,6 +1,19 @@
 name: Native
 
 on:
+  # Rust changes build first: the job commits fresh jniLibs + bindings,
+  # and Android runs after via `workflow_run` (a GITHUB_TOKEN push would
+  # not retrigger workflows on its own).
+  push:
+    branches: [main]
+    paths:
+      - "rust/**"
+      - ".github/workflows/native.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "rust/**"
+      - ".github/workflows/native.yml"
   workflow_dispatch:
 
 permissions:

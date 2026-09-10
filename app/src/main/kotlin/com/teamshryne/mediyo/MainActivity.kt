@@ -261,6 +261,7 @@ private fun AppShell() {
                 onShowComments = { playerState.videoId?.let { showCommentsId = it } },
                 onShowSleepTimer = { showSleepSheet = true },
                 onGoToArtist = { showFullPlayer = false; nav.navigate("artist/$it") },
+                onOpenChannel = { showFullPlayer = false; nav.navigate("list/$it") },
                 playerVm = playerVm
             )
         }

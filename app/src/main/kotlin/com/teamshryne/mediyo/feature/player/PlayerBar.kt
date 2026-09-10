@@ -152,6 +152,7 @@ fun FullPlayer(
     onShowComments: () -> Unit = {},
     onShowSleepTimer: () -> Unit = {},
     onGoToArtist: (String) -> Unit = {},
+    onOpenChannel: (String) -> Unit = {},
     playerVm: PlayerViewModel? = null
 ) {
     val dominant: DominantColors = rememberDominantColors(state.artwork)
@@ -162,12 +163,14 @@ fun FullPlayer(
     // lyrics mode: toggles between player and synced lyrics experience
     var isLyricsMode by remember { mutableStateOf(false) }
 
-    val trackForMenu = remember(state.videoId, state.title, state.artist, state.artwork, state.artistIds, state.artistNames) {
+    val trackForMenu = remember(state.videoId, state.title, state.artist, state.artwork, state.artistIds, state.artistNames, state.channelName, state.channelId) {
         com.teamshryne.mediyo.domain.model.Track(
             videoId = state.videoId, title = state.title,
             artists = state.artistNames.takeIf { it.isNotEmpty() }
                 ?: if (state.artist.isBlank()) emptyList() else state.artist.split(",").map { it.trim() }.filter { it.isNotEmpty() },
             artistIds = state.artistIds,
+            channelName = state.channelName,
+            channelId = state.channelId,
             artworkUrl = state.artwork
         )
     }
@@ -553,6 +556,7 @@ fun FullPlayer(
                 onShowArtist = { name, id ->
                     menuScope.launch { (id?.takeIf { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name))?.let { onGoToArtist(it) } }
                 },
+                onOpenChannel = { trackForMenu.channelId?.takeIf { it.isNotBlank() }?.let { onOpenChannel(it) } },
                 onComments = { onShowComments() },
                 onRefetchLyrics = if (isLyricsMode) {
                     { lyricsVm.refetch(trackForMenu, state.durationMs.takeIf { it > 0 }) }

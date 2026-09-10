@@ -17,5 +17,5 @@ pub use library::{
     parse_account_info, parse_library_albums, parse_library_artists, parse_library_history,
     parse_library_playlists, parse_library_songs, AccountInfo, LibraryPage,
 };
-pub use search::{AlbumRef, ArtistRef, Category, SearchFilter, SearchResponse, SearchResult};
+pub use search::{AlbumRef, ArtistRef, Category, ChannelRef, SearchFilter, SearchResponse, SearchResult};
 pub use watch::{parse_queue, parse_song, Queue, QueueItem, Song};

@@ -64,12 +64,23 @@ pub struct AlbumRef {
     pub id: Option<String>,
 }
 
+/// Uploader channel behind a video (subtitle run with
+/// `MUSIC_PAGE_TYPE_USER_CHANNEL`). Kept separate from [`ArtistRef`]:
+/// the UC id opens a channel page, not an artist page.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChannelRef {
+    pub name: String,
+    pub id: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchResult {
     pub category: Category,
     pub title: String,
     pub artists: Vec<ArtistRef>,
     pub album: Option<AlbumRef>,
+    /// Uploader channel (videos): display name + raw UC browseId.
+    pub channel: Option<ChannelRef>,
     /// videoId (songs, videos, episodes).
     pub video_id: Option<String>,
     /// browseId (albums, artists, playlists, profiles, podcasts).
@@ -163,10 +174,11 @@ pub fn parse_search_result(v: &Value) -> Result<SearchResult> {
 
     let mut artists = Vec::new();
     let mut album = None;
+    let mut channel = None;
     let mut year = None;
     let mut info = None;
     if let Some(sub) = subtitle_node {
-        parse_subtitle(sub, &mut artists, &mut album, &mut year, &mut info);
+        parse_subtitle(sub, &mut artists, &mut album, &mut channel, &mut year, &mut info);
     }
 
     let track_number = payload
@@ -182,6 +194,7 @@ pub fn parse_search_result(v: &Value) -> Result<SearchResult> {
         title,
         artists,
         album,
+        channel,
         video_id: video_id.map(String::from),
         browse_id: browse_id.map(String::from),
         browse_params: None,
@@ -231,10 +244,11 @@ pub fn parse_two_row_item(v: &Value) -> Result<SearchResult> {
 
     let mut artists = Vec::new();
     let mut album = None;
+    let mut channel = None;
     let mut year = None;
     let mut info = None;
     if let Some(sub) = subtitle_node {
-        parse_subtitle(sub, &mut artists, &mut album, &mut year, &mut info);
+        parse_subtitle(sub, &mut artists, &mut album, &mut channel, &mut year, &mut info);
     }
 
     Ok(SearchResult {
@@ -242,6 +256,7 @@ pub fn parse_two_row_item(v: &Value) -> Result<SearchResult> {
         title,
         artists,
         album,
+        channel,
         video_id: video_id.map(String::from),
         browse_id: browse_id.map(String::from),
         browse_params: None,
@@ -316,6 +331,7 @@ pub fn parse_multi_row_item(v: &Value) -> Result<SearchResult> {
         title,
         artists: Vec::new(),
         album,
+        channel: None,
         video_id,
         browse_id,
         browse_params: None,
@@ -357,11 +373,12 @@ fn resolve_category(
     Category::Unknown
 }
 
-/// Parse the subtitle `runs` into artists / album / year / trailing info.
+/// Parse the subtitle `runs` into artists / album / channel / year / trailing info.
 pub(crate) fn parse_subtitle(
     node: &Value,
     artists: &mut Vec<ArtistRef>,
     album: &mut Option<AlbumRef>,
+    channel: &mut Option<ChannelRef>,
     year: &mut Option<String>,
     info: &mut Option<String>,
 ) {
@@ -383,7 +400,7 @@ pub(crate) fn parse_subtitle(
             continue;
         }
         if text == " • " || text == " •" || text == "• " {
-            classify_segment(&current, current_ep, artists, album, year, info);
+            classify_segment(&current, current_ep, artists, album, channel, year, info);
             current.clear();
             current_ep = None;
             continue;
@@ -393,7 +410,7 @@ pub(crate) fn parse_subtitle(
         // Flush a pending artist before the separator so each linked name
         // becomes its own entry instead of one merged "Drake & 21 Savage".
         if ep.is_none() && is_artist_separator(text) && current_ep_is_artist(current_ep) {
-            classify_segment(&current, current_ep, artists, album, year, info);
+            classify_segment(&current, current_ep, artists, album, channel, year, info);
             current.clear();
             current_ep = None;
             continue;
@@ -405,7 +422,7 @@ pub(crate) fn parse_subtitle(
                 (ep.and_then(artist_endpoint_id), current_ep.and_then(artist_endpoint_id))
             {
                 if new_id != cur_id {
-                    classify_segment(&current, current_ep, artists, album, year, info);
+                    classify_segment(&current, current_ep, artists, album, channel, year, info);
                     current.clear();
                     current_ep = None;
                 }
@@ -416,7 +433,7 @@ pub(crate) fn parse_subtitle(
         }
         current.push_str(text);
     }
-    classify_segment(&current, current_ep, artists, album, year, info);
+    classify_segment(&current, current_ep, artists, album, channel, year, info);
 }
 
 /// BrowseId when `ep` links to an artist page (UC id, not an upload channel).
@@ -463,6 +480,7 @@ fn classify_segment(
     ep: Option<&Value>,
     artists: &mut Vec<ArtistRef>,
     album: &mut Option<AlbumRef>,
+    channel: &mut Option<ChannelRef>,
     year: &mut Option<String>,
     info: &mut Option<String>,
 ) {
@@ -474,8 +492,22 @@ fn classify_segment(
         if let Some(parser::Endpoint::Browse { id }) = parser::endpoint(ep) {
             if id.starts_with("UC") {
                 // Upload channels (MUSIC_PAGE_TYPE_USER_CHANNEL) are not
-                // artists — linking them would open a dead artist page.
+                // linkable artist pages — but the channel name is still the
+                // display artist for videos. Keep the name with no artist id
+                // (so the UI shows "Channel • Video" and resolves artist by
+                // name on tap) and preserve the raw UC id on `channel` for
+                // "Open channel".
                 if parser::page_type(ep) == Some("MUSIC_PAGE_TYPE_USER_CHANNEL") {
+                    artists.push(ArtistRef {
+                        name: text.to_string(),
+                        id: None,
+                    });
+                    if channel.is_none() {
+                        *channel = Some(ChannelRef {
+                            name: text.to_string(),
+                            id: Some(id.to_string()),
+                        });
+                    }
                     return;
                 }
                 artists.push(ArtistRef {
@@ -629,10 +661,11 @@ mod tests {
     }
 
     #[test]
-    fn user_channel_run_is_not_an_artist() {
+    fn user_channel_run_is_display_artist_without_id() {
         // A subtitle run linking to a plain upload channel
-        // (MUSIC_PAGE_TYPE_USER_CHANNEL) must not be recorded as an artist —
-        // it would open a dead artist page.
+        // (MUSIC_PAGE_TYPE_USER_CHANNEL) must be kept as a display-only
+        // artist (no id, so no dead artist page) — otherwise videos render
+        // as "12K views • Video" with an empty artist on playback.
         let v = json!({
             "musicResponsiveListItemRenderer": {
                 "flexColumns": [
@@ -645,7 +678,9 @@ mod tests {
                             "browseEndpointContextSupportedConfigs": {
                                 "browseEndpointContextMusicConfig": { "pageType": "MUSIC_PAGE_TYPE_USER_CHANNEL" }
                             }
-                        } } }
+                        } } },
+                        { "text": " • " },
+                        { "text": "12K views" }
                     ] } } }
                 ],
                 "playlistItemData": { "videoId": "abc123_-DEF" },
@@ -669,7 +704,14 @@ mod tests {
         });
         let r = parse_search_result(&v).unwrap();
         assert_eq!(r.category, Category::Video);
-        assert!(r.artists.is_empty());
+        assert_eq!(r.artists.len(), 1);
+        assert_eq!(r.artists[0].name, "Cover Channel");
+        assert!(r.artists[0].id.is_none());
+        // The raw UC id is preserved separately for "Open channel".
+        let ch = r.channel.as_ref().expect("channel missing");
+        assert_eq!(ch.name, "Cover Channel");
+        assert_eq!(ch.id.as_deref(), Some("UCh5zlvB1pZyU3KYjEPC38KQ"));
+        assert_eq!(r.info.as_deref(), Some("12K views"));
         assert!(!r.top_result);
     }
 

@@ -42,6 +42,9 @@ data class PlayerState(
     val artistIds: List<String> = emptyList(),
     /** Ordered artist names, parallel to [artistIds] — no string splitting. */
     val artistNames: List<String> = emptyList(),
+    /** Uploader channel (videos); raw UC browseId, never an artist page. */
+    val channelName: String? = null,
+    val channelId: String? = null,
     val artwork: String? = null,
     val isPlaying: Boolean = false,
     val isBuffering: Boolean = false,
@@ -97,6 +100,8 @@ class PlayerViewModel @Inject constructor(
                         artist = cur.artists.joinToString(", "),
                         artistIds = cur.artistIds,
                         artistNames = cur.artists,
+                        channelName = cur.channelName,
+                        channelId = cur.channelId,
                         artwork = cur.artworkUrl,
                         queueSize = qs.entries.size,
                         queueIndex = qs.index,
@@ -104,7 +109,7 @@ class PlayerViewModel @Inject constructor(
                     )
                 } else {
                     _state.value = _state.value.copy(
-                        videoId = null, title = "", artist = "", artistIds = emptyList(), artistNames = emptyList(), artwork = null,
+                        videoId = null, title = "", artist = "", artistIds = emptyList(), artistNames = emptyList(), channelName = null, channelId = null, artwork = null,
                         isPlaying = false, isBuffering = false,
                         queueSize = 0, queueIndex = -1, originLabel = qs.origin.label()
                     )
@@ -257,6 +262,10 @@ class PlayerViewModel @Inject constructor(
             videoId = vid,
             title = cur.title,
             artist = cur.artists.joinToString(", "),
+            artistIds = cur.artistIds,
+            artistNames = cur.artists,
+            channelName = cur.channelName,
+            channelId = cur.channelId,
             artwork = cur.artworkUrl,
             isPlaying = false,
             isBuffering = true,

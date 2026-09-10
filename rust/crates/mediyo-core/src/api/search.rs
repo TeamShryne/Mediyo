@@ -235,6 +235,7 @@ fn parse_card_hero(card: &Value) -> Option<SearchResult> {
             title: name,
             artists: Vec::new(),
             album: None,
+            channel: None,
             video_id: None,
             browse_id: Some(browse_id),
             browse_params: None,
@@ -322,10 +323,11 @@ fn parse_card_chrome_top(card: &Value) -> Option<SearchResult> {
 
     let mut artists = Vec::new();
     let mut album = None;
+    let mut channel = None;
     let mut year = None;
     let mut info = None;
     if let Some(sub) = subtitle_node {
-        crate::model::search::parse_subtitle(sub, &mut artists, &mut album, &mut year, &mut info);
+        crate::model::search::parse_subtitle(sub, &mut artists, &mut album, &mut channel, &mut year, &mut info);
     }
     // Card subtitles sometimes carry the duration ("4:09") as a trailing
     // segment — surface it as duration instead of loose info text.
@@ -349,6 +351,7 @@ fn parse_card_chrome_top(card: &Value) -> Option<SearchResult> {
         title: title.trim().to_string(),
         artists,
         album,
+        channel,
         video_id,
         browse_id,
         browse_params: None,
