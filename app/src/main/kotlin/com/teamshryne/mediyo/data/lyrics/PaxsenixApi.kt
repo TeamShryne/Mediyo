@@ -48,7 +48,7 @@ class PaxsenixApi : LyricsProvider {
         var conn: HttpURLConnection? = null
         return try {
             val term = enc("$artist $title")
-            conn = (URL("$ITUNES_BASE?term=$term&entity=song&limit=10") as HttpURLConnection).apply {
+            conn = (URL("$ITUNES_BASE?term=$term&entity=song&limit=10").openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 connectTimeout = 8000
                 readTimeout = 8000
@@ -140,7 +140,7 @@ class PaxsenixApi : LyricsProvider {
     private fun fetchAppleLyrics(trackId: Long): LyricsResult {
         var conn: HttpURLConnection? = null
         return try {
-            conn = (URL("$PAX_BASE?id=$trackId&ttml=true&v=2") as HttpURLConnection).apply {
+            conn = (URL("$PAX_BASE?id=$trackId&ttml=true&v=2").openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 connectTimeout = 10000
                 readTimeout = 10000

@@ -72,7 +72,7 @@ class KugouApi : LyricsProvider {
         }
         var conn: HttpURLConnection? = null
         return try {
-            conn = (URL(SEARCH_BASE + qs) as HttpURLConnection).apply {
+            conn = (URL(SEARCH_BASE + qs).openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 connectTimeout = 8000
                 readTimeout = 8000
@@ -132,7 +132,7 @@ class KugouApi : LyricsProvider {
         var conn: HttpURLConnection? = null
         return try {
             val qs = "?ver=1&client=pc&id=${enc(id)}&accesskey=${enc(accessKey)}&fmt=lrc&charset=utf8"
-            conn = (URL(DOWNLOAD_BASE + qs) as HttpURLConnection).apply {
+            conn = (URL(DOWNLOAD_BASE + qs).openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 connectTimeout = 8000
                 readTimeout = 8000

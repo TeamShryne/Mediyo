@@ -101,7 +101,7 @@ class LyricsPlusApi : LyricsProvider {
     private fun get(urlStr: String): MirrorOut {
         var conn: HttpURLConnection? = null
         return try {
-            conn = (URL(urlStr) as HttpURLConnection).apply {
+            conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 connectTimeout = 9000
                 readTimeout = 9000
