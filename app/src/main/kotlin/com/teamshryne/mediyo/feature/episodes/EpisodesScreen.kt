@@ -64,7 +64,7 @@ fun EpisodesScreen(
         else -> {
             val playingId = player?.state?.collectAsState()?.value?.videoId
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-            LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp)) {
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp)) {
                 item(key = "episodes_header") { SectionHeader("Episodes", Modifier.padding(bottom = 8.dp)) }
                 items(vm.items.size) { i ->
                     val r = vm.items[i]

@@ -52,7 +52,8 @@ fun SettingsScreen(
     }
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp),
+        // Outer Scaffold padding already clears the status bar — 4dp only.
+        contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         item {

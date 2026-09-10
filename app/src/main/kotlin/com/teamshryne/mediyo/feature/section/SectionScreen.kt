@@ -1,6 +1,7 @@
 package com.teamshryne.mediyo.feature.section
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -33,6 +34,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
+import com.teamshryne.mediyo.core.design.EaseIn
+import com.teamshryne.mediyo.core.design.EaseOutExpo
 import com.teamshryne.mediyo.core.design.EmptyState
 import com.teamshryne.mediyo.core.design.ErrorState
 import com.teamshryne.mediyo.core.design.TrackOverflowIcon
@@ -237,7 +240,7 @@ fun SectionScreen(
                         state = gridState,
                         columns = GridCells.Adaptive(minSize = 140.dp),
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 76.dp, bottom = 24.dp),
+                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 72.dp, bottom = 24.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
@@ -272,6 +275,10 @@ fun SectionScreen(
                 }
 
                 TopAppBar(
+                    // Zero insets: the outer Scaffold padding already clears the
+                    // status bar. Default TopAppBar insets would add it a second
+                    // time (dead gap above the bar + content hiding behind it).
+                    windowInsets = WindowInsets(0, 0, 0, 0),
                     title = {
                         Text(
                             heading,
@@ -287,8 +294,12 @@ fun SectionScreen(
 
                 AnimatedVisibility(
                     visible = fabVisible && playable,
-                    enter = scaleIn() + fadeIn(),
-                    exit = scaleOut() + fadeOut(),
+                    // Fast expo pop (150ms) instead of the default spring, which
+                    // bounces and reads as slow. Matches the app Motion tokens.
+                    enter = scaleIn(tween(150, easing = EaseOutExpo), initialScale = 0.8f) +
+                        fadeIn(tween(120, easing = EaseOutExpo)),
+                    exit = scaleOut(tween(120, easing = EaseIn), targetScale = 0.8f) +
+                        fadeOut(tween(100, easing = EaseIn)),
                     modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
                 ) {
                     FloatingActionButton(onClick = { playAll(shuffle = true) }) {

@@ -342,9 +342,11 @@ fun LibraryScreen(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 24.dp)
     ) {
-        // Header — title + summary + actions (YTM: compact top bar)
+        // Header — title + summary + actions (YTM: compact top bar).
+        // Outer Scaffold padding already clears the status bar, so only 4dp
+        // here — the old 12dp stacked into a dead gap under the status bar.
         item(key = "header") {
-            Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+            Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                     verticalAlignment = Alignment.CenterVertically

@@ -106,7 +106,7 @@ fun PodcastScreen(
         else -> {
             val playingId = player?.state?.collectAsState()?.value?.videoId
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-            LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp)) {
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp)) {
                 item(key = "podcast_header") {
                     Row(
                         Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp),
