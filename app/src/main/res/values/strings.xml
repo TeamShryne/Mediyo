@@ -2,4 +2,6 @@
 <resources>
     <string name="app_name">Mediyo</string>
     <string name="music_player">Mediyo</string>
+    <string name="widget_player_desc">Mediyo Now Playing — artwork, progress and controls. Resizes from mini to hero.</string>
+    <string name="widget_launcher_desc">Mediyo Launcher — one-tap play for Liked shuffle and your playlists.</string>
 </resources>
