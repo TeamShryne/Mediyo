@@ -28,7 +28,7 @@ import javax.inject.Singleton
  * from the cached widget state / Room, promotes [PlaybackService] to
  * foreground, then drives the shared singleton [ExoPlayer] directly.
  *
- * Widget tap -> ActionCallback -> this controller -> [WidgetSync.refreshAll].
+ * Widget tap -> service intent -> this controller -> [WidgetSync] repaint.
  */
 @Singleton
 class WidgetPlaybackController @Inject constructor(
@@ -111,7 +111,7 @@ class WidgetPlaybackController @Inject constructor(
                 runCatching { c?.videoId?.let { likeRepo.isLiked(it) } }.getOrNull() == true
             }
         }
-        artCache.prefetch(c?.artworkUrl)
+        artCache.prefetch(c?.artworkUrl) { sync.refreshAllAsync() }
         sync.push(
             WidgetNowPlaying(
                 videoId = c?.videoId ?: cached?.videoId,
@@ -263,7 +263,7 @@ class WidgetPlaybackController @Inject constructor(
                 runCatching { track.videoId?.let { likeRepo.isLiked(it) } }.getOrNull() == true
             }
         }
-        artCache.prefetch(track.artworkUrl)
+        artCache.prefetch(track.artworkUrl) { sync.refreshAllAsync() }
         sync.push(
             WidgetNowPlaying(
                 videoId = track.videoId,

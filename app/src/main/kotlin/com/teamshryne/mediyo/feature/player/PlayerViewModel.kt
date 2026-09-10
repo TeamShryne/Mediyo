@@ -186,7 +186,7 @@ class PlayerViewModel @Inject constructor(
             // Warm the widget art cache ahead of the redraw so the widget
             // paints instantly instead of waiting on a network fetch.
             if (structural) {
-                try { widgetArtCache.prefetch(s.artwork) } catch (_: Throwable) {}
+                try { widgetArtCache.prefetch(s.artwork) { widgetSync.refreshAllAsync() } } catch (_: Throwable) {}
             }
             widgetSync.pushAsync(
                 WidgetNowPlaying(

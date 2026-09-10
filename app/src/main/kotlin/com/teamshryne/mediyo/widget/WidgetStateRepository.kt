@@ -19,8 +19,8 @@ private val Context.widgetDataStore by preferencesDataStore(name = "mediyo_widge
 /**
  * Persists the last-known now-playing snapshot.
  *
- * Widgets read this synchronously-ish in [androidx.glance.appwidget.GlanceAppWidget.provideGlance]
- * (suspend) so they never render blank, even when the app process is dead.
+ * [MediyoWidgetManager] reads this on every render so widgets paint instantly,
+ * even when the app process is dead.
  */
 @Singleton
 class WidgetStateRepository @Inject constructor(

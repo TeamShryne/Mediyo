@@ -13,7 +13,6 @@ coil = "2.5.0"
 palette = "1.0.0"
 media3 = "1.2.1"
 coroutines = "1.7.3"
-glance = "1.1.1"
 serialization = "1.6.2"
 newpipe = "v0.26.5"
 jna = "5.14.0"
@@ -35,7 +34,6 @@ hilt-compiler = { module = "com.google.dagger:hilt-android-compiler", version.re
 hilt-navigation-compose = { module = "androidx.hilt:hilt-navigation-compose", version = "1.1.0" }
 coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil" }
 androidx-palette-ktx = { module = "androidx.palette:palette-ktx", version.ref = "palette" }
-glance-appwidget = { module = "androidx.glance:glance-appwidget", version.ref = "glance" }
 media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3" }
 media3-session = { module = "androidx.media3:media3-session", version.ref = "media3" }
 media3-common = { module = "androidx.media3:media3-common", version.ref = "media3" }
