@@ -72,6 +72,9 @@ import com.teamshryne.mediyo.feature.queue.QueueScreen
 import com.teamshryne.mediyo.feature.search.SearchScreen
 import com.teamshryne.mediyo.feature.settings.LyricsSettingsScreen
 import com.teamshryne.mediyo.feature.settings.SettingsScreen
+import com.teamshryne.mediyo.feature.update.UpdateDialog
+import com.teamshryne.mediyo.feature.update.UpdateViewModel
+import com.teamshryne.mediyo.feature.update.UpdatesSettingsScreen
 import dagger.hilt.android.AndroidEntryPoint
 
 sealed class Tab(val route: String, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
@@ -113,7 +116,10 @@ private fun AppShell() {
 
     val playerVm: PlayerViewModel = hiltViewModel()
     val playerState by playerVm.state.collectAsState()
-    val sleepState by playerVm.sleepState.collectAsState()
+    // Silent update check once per launch — dialog appears only if Available.
+    val updateVm: UpdateViewModel = hiltViewModel()
+    val updateState by updateVm.state.collectAsState()
+    LaunchedEffect(Unit) { updateVm.silentCheck() }    val sleepState by playerVm.sleepState.collectAsState()
     var showFullPlayer by remember { mutableStateOf(false) }
     var showQueueOverlay by remember { mutableStateOf(false) }
     var showCommentsId by remember { mutableStateOf<String?>(null) }
@@ -198,6 +204,7 @@ private fun AppShell() {
                 composable(Tab.Library.route) { LibraryScreen(nav, playerVm) }
                 composable(Tab.Settings.route) { SettingsScreen(nav) }
                 composable("settings/lyrics") { LyricsSettingsScreen(nav) }
+                composable("settings/updates") { UpdatesSettingsScreen(nav) }
                 composable("playlist/{id}") { PlaylistScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
                 composable("album/{id}") { AlbumScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
                 composable("artist/{id}") { ArtistScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
@@ -279,6 +286,10 @@ private fun AppShell() {
 
         showCommentsId?.let { vid ->
             CommentsBottomSheet(videoId = vid, onDismiss = { showCommentsId = null })
+        }
+
+        if (updateState is UpdateViewModel.State.Available) {
+            UpdateDialog(updateVm)
         }
 
         if (showSleepSheet) {

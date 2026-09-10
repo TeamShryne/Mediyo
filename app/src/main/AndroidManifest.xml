@@ -35,5 +35,16 @@
             android:foregroundServiceType="mediaPlayback"/>
 
         <receiver android:name=".playback.SleepTimerReceiver" android:exported="false"/>
+
+        <!-- Serves updater APKs from cacheDir/updates to the system installer. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/filepaths" />
+        </provider>
     </application>
 </manifest>
