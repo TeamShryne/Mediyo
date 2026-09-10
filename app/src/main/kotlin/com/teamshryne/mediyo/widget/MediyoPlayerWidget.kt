@@ -1,22 +1,27 @@
 package com.teamshryne.mediyo.widget
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
+import androidx.glance.GlanceModifier
 import androidx.glance.Image
-import androidx.glance.LocalSize
-import androidx.glance.material3.GlanceTheme
 import androidx.glance.ImageProvider
-import androidx.glance.action.actionRunCallback
-import androidx.glance.action.actionStartActivity
+import androidx.glance.LocalSize
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
+import androidx.glance.appwidget.LinearProgressIndicator
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.appWidgetBackground
 import androidx.glance.appwidget.cornerRadius
+import androidx.glance.appwidget.provideContent
+import androidx.glance.appwidget.action.actionRunCallback
+import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.background
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
@@ -24,7 +29,6 @@ import androidx.glance.layout.Column
 import androidx.glance.layout.ContentScale
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
-import androidx.glance.layout.defaultWeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
@@ -34,12 +38,24 @@ import androidx.glance.layout.width
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
-import com.teamshryne.mediyo.R
 import dagger.hilt.android.EntryPointAccessors
+
+// Fixed dark card palette (no material3 dependency — always looks right
+// behind album art, on light and dark home screens alike).
+private val WidgetSurface = ColorProvider(Color(0xFF231E2B))
+private val WidgetOnSurface = ColorProvider(Color(0xFFF2EDF4))
+private val WidgetVariant = ColorProvider(Color(0xFFCFC3D6))
+private val WidgetPrimary = ColorProvider(Color(0xFFE91E63))
+private val WidgetOnPrimary = ColorProvider(Color.White)
+private val WidgetContainer = ColorProvider(Color(0xFF3A3340))
+private val WidgetOnContainer = ColorProvider(Color.White)
+
+private val MiniMaxWidth = 220.dp
+private val LargeMinHeight = 220.dp
 
 /**
  * One responsive widget that covers your picks:
- * - Small cell  -> Mini Controls (artwork + play/next)
+ * - Narrow cell  -> Mini Controls (artwork + play/next)
  * - Medium+ cell -> Now Playing Hero (artwork + meta + progress + prev/play/next/like)
  *
  * Reads the cached [WidgetNowPlaying] so it renders instantly even when the
@@ -48,7 +64,12 @@ import dagger.hilt.android.EntryPointAccessors
 class MediyoPlayerWidget : GlanceAppWidget() {
 
     override val sizeMode: SizeMode = SizeMode.Responsive(
-        setOf(SmallSize, MediumSize, LargeSize)
+        setOf(
+            SizeMode.SmallRectangle,
+            SizeMode.MediumRectangle,
+            SizeMode.LargeRectangle,
+            SizeMode.LargeSquare
+        )
     )
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
@@ -66,79 +87,64 @@ class MediyoPlayerWidget : GlanceAppWidget() {
             null
         }
         provideContent {
-            GlanceTheme {
-                val size = LocalSize.current
-                when {
-                    size.width <= SmallSize.width -> MiniContent(context, state, art, openApp)
-                    size.height >= LargeSize.height && size.width >= LargeSize.width ->
-                        HeroContent(context, state, art, openApp, large = true)
-                    else -> HeroContent(context, state, art, openApp, large = false)
-                }
+            val size = LocalSize.current
+            when {
+                size.width <= MiniMaxWidth -> MiniContent(state, art)
+                size.height >= LargeMinHeight -> HeroContent(state, art, openApp, large = true)
+                else -> HeroContent(state, art, openApp, large = false)
             }
         }
-    }
-
-    companion object {
-        val SmallSize = androidx.glance.unit.DpSize(180.dp, 110.dp)
-        val MediumSize = androidx.glance.unit.DpSize(300.dp, 160.dp)
-        val LargeSize = androidx.glance.unit.DpSize(300.dp, 250.dp)
     }
 }
 
 @Composable
-private fun MiniContent(
-    context: Context,
-    state: WidgetNowPlaying,
-    art: Bitmap?,
-    openApp: android.content.Intent?
-) {
+private fun MiniContent(state: WidgetNowPlaying, art: Bitmap?) {
     Row(
-        modifier = androidx.glance.GlanceModifier
+        modifier = GlanceModifier
             .fillMaxSize()
             .appWidgetBackground()
-            .background(GlanceTheme.colors.surface)
+            .background(WidgetSurface)
             .cornerRadius(20.dp)
             .padding(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        WidgetArt(state, art, 52.dp, openApp)
-        Spacer(androidx.glance.GlanceModifier.width(10.dp))
+        WidgetArt(state, art, 52.dp, null)
+        Spacer(GlanceModifier.width(10.dp))
         Column(
-            modifier = androidx.glance.GlanceModifier.defaultWeight(),
+            modifier = GlanceModifier.defaultWeight(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             MiniText(state.title.ifBlank { "Mediyo" }, true)
             if (state.artist.isNotBlank()) MiniText(state.artist, false)
         }
         CircleBtn(if (state.isPlaying) "❚❚" else "▶", actionRunCallback<TogglePlayCallback>())
-        Spacer(androidx.glance.GlanceModifier.width(4.dp))
+        Spacer(GlanceModifier.width(4.dp))
         CircleBtn("⏭", actionRunCallback<NextCallback>())
     }
 }
 
 @Composable
 private fun HeroContent(
-    context: Context,
     state: WidgetNowPlaying,
     art: Bitmap?,
-    openApp: android.content.Intent?,
+    openApp: Intent?,
     large: Boolean
 ) {
     Column(
-        modifier = androidx.glance.GlanceModifier
+        modifier = GlanceModifier
             .fillMaxSize()
             .appWidgetBackground()
-            .background(GlanceTheme.colors.surface)
+            .background(WidgetSurface)
             .cornerRadius(24.dp)
             .padding(14.dp)
     ) {
         Row(
-            modifier = androidx.glance.GlanceModifier.fillMaxWidth(),
+            modifier = GlanceModifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             WidgetArt(state, art, if (large) 84.dp else 64.dp, openApp)
-            Spacer(androidx.glance.GlanceModifier.width(12.dp))
-            Column(modifier = androidx.glance.GlanceModifier.defaultWeight()) {
+            Spacer(GlanceModifier.width(12.dp))
+            Column(modifier = GlanceModifier.defaultWeight()) {
                 if (!state.hasTrack) {
                     MiniText("Nothing playing", true)
                     MiniText("Tap ♥ to shuffle liked", false)
@@ -146,7 +152,7 @@ private fun HeroContent(
                     MiniText(state.title, true)
                     if (state.artist.isNotBlank()) MiniText(state.artist, false)
                     if (large) {
-                        Spacer(androidx.glance.GlanceModifier.height(2.dp))
+                        Spacer(GlanceModifier.height(2.dp))
                         MiniText(
                             if (state.isBuffering) "Buffering…"
                             else if (state.isPlaying) "Now playing"
@@ -161,28 +167,28 @@ private fun HeroContent(
             }
         }
         if (state.hasTrack && state.durationMs > 0) {
-            Spacer(androidx.glance.GlanceModifier.height(10.dp))
-            androidx.glance.appwidget.LinearProgressIndicator(
+            Spacer(GlanceModifier.height(10.dp))
+            LinearProgressIndicator(
                 progress = state.progress.coerceIn(0f, 1f),
-                modifier = androidx.glance.GlanceModifier.fillMaxWidth().height(4.dp),
-                color = GlanceTheme.colors.primary
+                modifier = GlanceModifier.fillMaxWidth().height(4.dp),
+                color = WidgetPrimary
             )
         } else {
-            Spacer(androidx.glance.GlanceModifier.height(10.dp))
+            Spacer(GlanceModifier.height(10.dp))
         }
-        Spacer(androidx.glance.GlanceModifier.height(8.dp))
+        Spacer(GlanceModifier.height(8.dp))
         Row(
-            modifier = androidx.glance.GlanceModifier.fillMaxWidth(),
+            modifier = GlanceModifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalAlignment = Alignment.CenterVertically
         ) {
             CircleBtn("⏮", actionRunCallback<PrevCallback>())
-            Spacer(androidx.glance.GlanceModifier.width(10.dp))
+            Spacer(GlanceModifier.width(10.dp))
             HeroPlayBtn(state)
-            Spacer(androidx.glance.GlanceModifier.width(10.dp))
+            Spacer(GlanceModifier.width(10.dp))
             CircleBtn("⏭", actionRunCallback<NextCallback>())
             if (large) {
-                Spacer(androidx.glance.GlanceModifier.width(10.dp))
+                Spacer(GlanceModifier.width(10.dp))
                 CircleBtn("♥▶", actionRunCallback<PlayLikedShuffleCallback>())
             }
         }
@@ -190,30 +196,25 @@ private fun HeroContent(
 }
 
 @Composable
-private fun WidgetArt(
-    state: WidgetNowPlaying,
-    art: Bitmap?,
-    size: androidx.compose.ui.unit.Dp,
-    openApp: android.content.Intent?
-) {
-    val mod = androidx.glance.GlanceModifier.size(size).cornerRadius(14.dp)
-    val clickableMod = if (openApp != null) mod.clickable(actionStartActivity(openApp)) else mod
+private fun WidgetArt(state: WidgetNowPlaying, art: Bitmap?, size: Dp, openApp: Intent?) {
+    val mod = GlanceModifier.size(size).cornerRadius(14.dp)
     if (art != null) {
         Image(
             provider = ImageProvider(art),
             contentDescription = state.title.ifBlank { "Mediyo" },
-            modifier = clickableMod,
+            modifier = if (openApp != null) mod.clickable(actionStartActivity(openApp)) else mod,
             contentScale = ContentScale.Crop
         )
     } else {
         Box(
-            modifier = clickableMod.background(GlanceTheme.colors.primaryContainer),
+            modifier = if (openApp != null) {
+                mod.background(WidgetPrimary).clickable(actionStartActivity(openApp))
+            } else {
+                mod.background(WidgetPrimary)
+            },
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                "♪",
-                style = TextStyle(fontSize = 22.sp, color = ColorProvider(GlanceTheme.colors.onPrimaryContainer))
-            )
+            Text("♪", style = TextStyle(fontSize = 22.sp, color = WidgetOnPrimary))
         }
     }
 }
@@ -224,7 +225,7 @@ private fun MiniText(text: String, bold: Boolean) {
         text = text.ifBlank { "—" },
         style = TextStyle(
             fontSize = if (bold) 14.sp else 12.sp,
-            color = ColorProvider(if (bold) GlanceTheme.colors.onSurface else GlanceTheme.colors.onSurfaceVariant)
+            color = if (bold) WidgetOnSurface else WidgetVariant
         ),
         maxLines = 1
     )
@@ -233,14 +234,14 @@ private fun MiniText(text: String, bold: Boolean) {
 @Composable
 private fun CircleBtn(label: String, action: androidx.glance.action.Action) {
     Box(
-        modifier = androidx.glance.GlanceModifier
+        modifier = GlanceModifier
             .size(44.dp)
             .cornerRadius(22.dp)
-            .background(GlanceTheme.colors.secondaryContainer)
+            .background(WidgetContainer)
             .clickable(action),
         contentAlignment = Alignment.Center
     ) {
-        Text(label, style = TextStyle(fontSize = 16.sp, color = ColorProvider(GlanceTheme.colors.onSecondaryContainer)))
+        Text(label, style = TextStyle(fontSize = 16.sp, color = WidgetOnContainer))
     }
 }
 
@@ -252,14 +253,14 @@ private fun HeroPlayBtn(state: WidgetNowPlaying) {
         else -> "▶"
     }
     Box(
-        modifier = androidx.glance.GlanceModifier
+        modifier = GlanceModifier
             .size(56.dp)
             .cornerRadius(28.dp)
-            .background(GlanceTheme.colors.primary)
+            .background(WidgetPrimary)
             .clickable(actionRunCallback<TogglePlayCallback>()),
         contentAlignment = Alignment.Center
     ) {
-        Text(label, style = TextStyle(fontSize = 20.sp, color = ColorProvider(GlanceTheme.colors.onPrimary)))
+        Text(label, style = TextStyle(fontSize = 20.sp, color = WidgetOnPrimary))
     }
 }
 
@@ -267,6 +268,3 @@ private fun HeroPlayBtn(state: WidgetNowPlaying) {
 class MediyoPlayerReceiver : androidx.glance.appwidget.GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = MediyoPlayerWidget()
 }
-
-// Keep R referenced so release shrinking never strips widget drawables.
-private fun keepR() = R.drawable.ic_notification_small
