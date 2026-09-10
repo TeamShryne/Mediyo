@@ -37,6 +37,9 @@ class AppUpdater @Inject constructor(
     private val json = Json { ignoreUnknownKeys = true }
 
     suspend fun check(): UpdateCheck = withContext(Dispatchers.IO) {
+        // Updater is release-only: never hit the network from debug builds
+        // (different applicationId/versioning, side-by-side installs).
+        if (BuildConfig.DEBUG) return@withContext UpdateCheck.UpToDate
         try {
             val conn = openGet(UpdateUrls.LATEST_META, readTimeoutMs = 15_000)
             conn.connect()
@@ -65,6 +68,7 @@ class AppUpdater @Inject constructor(
      */
     suspend fun download(info: UpdateInfo, onProgress: (Float?) -> Unit): File =
         withContext(Dispatchers.IO) {
+            if (BuildConfig.DEBUG) throw IllegalStateException("App updates are disabled in debug builds")
             val dir = File(ctx.cacheDir, "updates").apply { mkdirs() }
             val out = File(dir, info.apkName.ifBlank { "mediyo-update.apk" })
             val conn = openGet(info.apkUrl, readTimeoutMs = 30_000)

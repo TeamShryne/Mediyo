@@ -2,6 +2,7 @@ package com.teamshryne.mediyo.feature.update
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.teamshryne.mediyo.BuildConfig
 import com.teamshryne.mediyo.data.update.AppUpdater
 import com.teamshryne.mediyo.data.update.UpdateCheck
 import com.teamshryne.mediyo.data.update.UpdateInfo
@@ -37,8 +38,9 @@ class UpdateViewModel @Inject constructor(
 
     private var autoChecked = false
 
-    /** Silent startup check: surfaces nothing unless an update is Available. */
+    /** Silent startup check: surfaces nothing unless an update is Available. No-op in debug. */
     fun silentCheck() {
+        if (BuildConfig.DEBUG) return
         if (autoChecked) return
         autoChecked = true
         viewModelScope.launch {
@@ -51,6 +53,10 @@ class UpdateViewModel @Inject constructor(
     }
 
     fun manualCheck() {
+        if (BuildConfig.DEBUG) {
+            _state.value = State.Error("App updates are disabled in debug builds")
+            return
+        }
         viewModelScope.launch {
             _state.value = State.Checking
             _state.value = when (val r = updater.check()) {
@@ -62,6 +68,7 @@ class UpdateViewModel @Inject constructor(
     }
 
     fun download() {
+        if (BuildConfig.DEBUG) return
         val cur = _state.value as? State.Available ?: return
         if (cur.downloading) return
         viewModelScope.launch {
