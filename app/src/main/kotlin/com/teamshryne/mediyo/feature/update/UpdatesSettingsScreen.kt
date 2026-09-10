@@ -77,7 +77,11 @@ fun UpdatesSettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            "Updates come from GitHub releases and are verified before installing.",
+                            if (BuildConfig.DEBUG) {
+                                "App updates are disabled in debug builds."
+                            } else {
+                                "Updates come from GitHub releases and are verified before installing."
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -92,10 +96,10 @@ fun UpdatesSettingsScreen(
                 ) {
                     Button(
                         onClick = { vm.manualCheck() },
-                        enabled = state !is UpdateViewModel.State.Checking,
+                        enabled = !BuildConfig.DEBUG && state !is UpdateViewModel.State.Checking,
                     ) {
                         Icon(Icons.Filled.Refresh, null, modifier = Modifier.padding(end = 8.dp))
-                        Text("Check for updates")
+                        Text(if (BuildConfig.DEBUG) "Updates disabled in debug" else "Check for updates")
                     }
                     when (val s = state) {
                         is UpdateViewModel.State.Checking -> CircularProgressIndicator()
@@ -114,7 +118,7 @@ fun UpdatesSettingsScreen(
         }
     }
 
-    if (state is UpdateViewModel.State.Available) {
+    if (!BuildConfig.DEBUG && state is UpdateViewModel.State.Available) {
         UpdateDialog(vm)
     }
 }

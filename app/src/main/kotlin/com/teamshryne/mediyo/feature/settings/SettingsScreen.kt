@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.teamshryne.mediyo.BuildConfig
 import com.teamshryne.mediyo.core.design.SectionHeader
 
 /**
@@ -45,6 +46,10 @@ private val hubEntries = listOf(
 fun SettingsScreen(
     nav: NavController? = null,
 ) {
+    // Updater is release-only — hide its entry in debug builds.
+    val visibleEntries = remember {
+        hubEntries.filterNot { it.id == "updates" && BuildConfig.DEBUG }
+    }
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp),
@@ -69,7 +74,7 @@ fun SettingsScreen(
 
         item { SectionHeader("General") }
 
-        items(hubEntries, key = { it.id }) { entry ->
+        items(visibleEntries, key = { it.id }) { entry ->
             SettingsHubRow(entry = entry, onClick = { nav?.navigate(entry.route) })
         }
 

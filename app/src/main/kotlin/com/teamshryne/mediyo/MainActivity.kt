@@ -51,6 +51,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.teamshryne.mediyo.BuildConfig
 import com.teamshryne.mediyo.core.design.MediyoTheme
 import com.teamshryne.mediyo.feature.album.AlbumScreen
 import com.teamshryne.mediyo.feature.artist.ArtistScreen
@@ -121,9 +122,10 @@ private fun AppShell() {
     val playerVm: PlayerViewModel = hiltViewModel()
     val playerState by playerVm.state.collectAsState()
     // Silent update check once per launch — dialog appears only if Available.
+    // Disabled entirely in debug builds.
     val updateVm: UpdateViewModel = hiltViewModel()
     val updateState by updateVm.state.collectAsState()
-    LaunchedEffect(Unit) { updateVm.silentCheck() }
+    LaunchedEffect(Unit) { if (!BuildConfig.DEBUG) updateVm.silentCheck() }
     val sleepState by playerVm.sleepState.collectAsState()
     var showFullPlayer by remember { mutableStateOf(false) }
     var showQueueOverlay by remember { mutableStateOf(false) }
@@ -300,7 +302,7 @@ private fun AppShell() {
             CommentsBottomSheet(videoId = vid, onDismiss = { showCommentsId = null })
         }
 
-        if (updateState is UpdateViewModel.State.Available) {
+        if (!BuildConfig.DEBUG && updateState is UpdateViewModel.State.Available) {
             UpdateDialog(updateVm)
         }
 
