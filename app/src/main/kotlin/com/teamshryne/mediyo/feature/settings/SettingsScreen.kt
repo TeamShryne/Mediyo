@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,6 +31,13 @@ private val hubEntries = listOf(
         subtitle = "Provider priority • Better Lyrics + LRCLIB",
         icon = Icons.Filled.MusicNote,
         route = "settings/lyrics"
+    ),
+    SettingsEntry(
+        id = "updates",
+        title = "App updates",
+        subtitle = "Check for new versions from GitHub",
+        icon = Icons.Filled.SystemUpdate,
+        route = "settings/updates"
     ),
 )
 
