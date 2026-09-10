@@ -73,14 +73,17 @@ class MediyoPlayerWidget : GlanceAppWidget() {
     )
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val repo: WidgetStateRepository? = try {
-            EntryPointAccessors.fromApplication(context, WidgetEntryPoint::class.java).widgetRepo()
+        val ep = try {
+            EntryPointAccessors.fromApplication(context, WidgetEntryPoint::class.java)
         } catch (_: Throwable) {
             null
         }
-        if (repo == null) return
-        val state = try { repo.read() } catch (_: Throwable) { WidgetNowPlaying() }
-        val art = loadWidgetArtwork(context, state.artworkUrl)
+        if (ep == null) return
+        val state = try { ep.widgetRepo().read() } catch (_: Throwable) { WidgetNowPlaying() }
+        // Instant paint: memory/disk art only. New art warms in the background
+        // and refreshes the widget the moment it lands.
+        val art = try { ep.artworkCache().get(state.artworkUrl) } catch (_: Throwable) { null }
+        try { ep.artworkCache().prefetch(state.artworkUrl) } catch (_: Throwable) {}
         val openApp = try {
             context.packageManager.getLaunchIntentForPackage(context.packageName)
         } catch (_: Throwable) {

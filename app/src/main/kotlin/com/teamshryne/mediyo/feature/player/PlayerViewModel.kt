@@ -20,6 +20,7 @@ import com.teamshryne.mediyo.domain.repository.LikeRepository
 import com.teamshryne.mediyo.playback.PlaybackService
 import com.teamshryne.mediyo.playback.PlaybackQueueManager
 import com.teamshryne.mediyo.playback.PlaybackSessionHub
+import com.teamshryne.mediyo.widget.WidgetArtworkCache
 import com.teamshryne.mediyo.widget.WidgetNowPlaying
 import com.teamshryne.mediyo.widget.WidgetSync
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -73,6 +74,7 @@ class PlayerViewModel @Inject constructor(
     private val player: ExoPlayer,
     private val sleepManager: SleepTimerManager,
     private val widgetSync: WidgetSync,
+    private val widgetArtCache: WidgetArtworkCache,
     @ApplicationContext private val ctx: Context
 ) : ViewModel() {
 
@@ -181,6 +183,11 @@ class PlayerViewModel @Inject constructor(
             if (!force && !structural && now - lastWidgetPushMs < 6_000L) return
             lastWidgetKey = key
             lastWidgetPushMs = now
+            // Warm the widget art cache ahead of the redraw so the widget
+            // paints instantly instead of waiting on a network fetch.
+            if (structural) {
+                try { widgetArtCache.prefetch(s.artwork) } catch (_: Throwable) {}
+            }
             widgetSync.pushAsync(
                 WidgetNowPlaying(
                     videoId = s.videoId,
