@@ -49,6 +49,10 @@ impl MediyoSession {
     /// Loose trailing info (subscriber counts, view counts, ...).
     pub info: Option<String>,
     pub is_top_result: bool,
+    /// Uploader channel behind a video (USER_CHANNEL run); None for songs.
+    pub channel_name: Option<String>,
+    /// Raw UC browseId for "Open channel" (opens a channel/list page, never an artist page).
+    pub channel_id: Option<String>,
 }
 #[derive(Debug, Clone, uniffi::Record)] pub struct FfiSearchFilter { pub label: String, pub query: String, pub params: Option<String> }
 #[derive(Debug, Clone, uniffi::Record)] pub struct FfiSearchResponse { pub results: Vec<FfiSearchResult>, pub filters: Vec<FfiSearchFilter>, pub continuation: Option<String> }
@@ -66,6 +70,8 @@ fn to_ffi_search(r: mediyo_core::model::SearchResult) -> FfiSearchResult {
         album_id: r.album.and_then(|a| a.id),
         info: r.info.clone(),
         is_top_result: r.top_result,
+        channel_name: r.channel.clone().map(|c| c.name),
+        channel_id: r.channel.and_then(|c| c.id),
     }
 }
 fn to_ffi_thumb(t: mediyo_core::parser::thumbnails::Thumbnail) -> FfiThumbnail { FfiThumbnail { url: t.url, width: t.width, height: t.height } }

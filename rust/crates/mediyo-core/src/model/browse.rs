@@ -770,6 +770,7 @@ fn parse_carousel(payload: &Value) -> Result<Carousel> {
                             title,
                             artists: Vec::new(),
                             album: None,
+                            channel: None,
                             video_id: None,
                             browse_id,
                             browse_params,

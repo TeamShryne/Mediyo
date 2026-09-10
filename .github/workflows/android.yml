@@ -10,6 +10,13 @@ on:
     branches: [main]
     paths-ignore:
       - "rust/**"
+  # Run after Native completes so rust changes land as fresh jniLibs +
+  # bindings before the APK builds (the native bot commit itself cannot
+  # retrigger workflows, hence this explicit chain).
+  workflow_run:
+    workflows: ["Native"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -23,6 +30,8 @@ permissions:
 jobs:
   apk:
     name: APK
+    # workflow_run fires on completed (incl. failure) — only build on success.
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read

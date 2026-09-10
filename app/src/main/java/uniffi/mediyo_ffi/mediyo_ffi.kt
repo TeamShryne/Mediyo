@@ -2458,7 +2458,15 @@ data class FfiSearchResult (
      * Loose trailing info (subscriber counts, view counts, ...).
      */
     var `info`: kotlin.String?, 
-    var `isTopResult`: kotlin.Boolean
+    var `isTopResult`: kotlin.Boolean, 
+    /**
+     * Uploader channel behind a video (USER_CHANNEL run); null for songs.
+     */
+    var `channelName`: kotlin.String?, 
+    /**
+     * Raw UC browseId for "Open channel" (opens a channel/list page, never an artist page).
+     */
+    var `channelId`: kotlin.String?
 ) {
     
     companion object
@@ -2486,6 +2494,8 @@ public object FfiConverterTypeFfiSearchResult: FfiConverterRustBuffer<FfiSearchR
             FfiConverterOptionalString.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterBoolean.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
         )
     }
 
@@ -2505,7 +2515,9 @@ public object FfiConverterTypeFfiSearchResult: FfiConverterRustBuffer<FfiSearchR
             FfiConverterOptionalString.allocationSize(value.`album`) +
             FfiConverterOptionalString.allocationSize(value.`albumId`) +
             FfiConverterOptionalString.allocationSize(value.`info`) +
-            FfiConverterBoolean.allocationSize(value.`isTopResult`)
+            FfiConverterBoolean.allocationSize(value.`isTopResult`) +
+            FfiConverterOptionalString.allocationSize(value.`channelName`) +
+            FfiConverterOptionalString.allocationSize(value.`channelId`)
     )
 
     override fun write(value: FfiSearchResult, buf: ByteBuffer) {
@@ -2525,6 +2537,8 @@ public object FfiConverterTypeFfiSearchResult: FfiConverterRustBuffer<FfiSearchR
             FfiConverterOptionalString.write(value.`albumId`, buf)
             FfiConverterOptionalString.write(value.`info`, buf)
             FfiConverterBoolean.write(value.`isTopResult`, buf)
+            FfiConverterOptionalString.write(value.`channelName`, buf)
+            FfiConverterOptionalString.write(value.`channelId`, buf)
     }
 }
 

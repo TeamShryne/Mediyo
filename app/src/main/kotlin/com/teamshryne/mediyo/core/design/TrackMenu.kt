@@ -37,6 +37,7 @@ fun TrackMenuSheet(
     onAddToQueue: () -> Unit = {},
     onGoToAlbum: (() -> Unit)? = null,
     onShowArtist: ((name: String, id: String?) -> Unit)? = null,
+    onOpenChannel: (() -> Unit)? = null,
     onComments: (() -> Unit)? = null,
     onRemove: (() -> Unit)? = null,
     onShare: (() -> Unit)? = null,
@@ -93,6 +94,7 @@ fun TrackMenuSheet(
             MenuItem(icon = Icons.Filled.QueueMusic, label = "Play next", onClick = { onDismiss(); onPlayNext() })
             MenuItem(icon = Icons.Filled.PlaylistPlay, label = "Add to queue", onClick = { onDismiss(); onAddToQueue() })
             if (onGoToAlbum != null) MenuItem(icon = Icons.Filled.Album, label = "Go to album", onClick = { onDismiss(); onGoToAlbum() })
+            if (onOpenChannel != null && !track.channelId.isNullOrBlank()) MenuItem(icon = Icons.Filled.OpenInNew, label = "Open channel${track.channelName?.takeIf { it.isNotBlank() }?.let { " • $it" } ?: ""}", onClick = { onDismiss(); onOpenChannel() })
             if (onShowArtist != null && artistEntries.isNotEmpty()) {
                 if (artistEntries.size == 1) {
                     val (name, id) = artistEntries[0]
@@ -132,6 +134,7 @@ fun FfiTrackMenuSheet(
     onAddToQueue: () -> Unit = {},
     onGoToAlbum: (() -> Unit)? = null,
     onShowArtist: ((name: String, id: String?) -> Unit)? = null,
+    onOpenChannel: (() -> Unit)? = null,
     onComments: (() -> Unit)? = null,
     onRemove: (() -> Unit)? = null,
     onRefetchLyrics: (() -> Unit)? = null,
@@ -142,9 +145,10 @@ fun FfiTrackMenuSheet(
             videoId = item.videoId, browseId = item.browseId, playlistId = item.playlistId,
             title = item.title, artists = item.artists, artistIds = item.artistIds,
             album = item.album, albumId = item.albumId,
+            channelName = item.channelName, channelId = item.channelId,
             artworkUrl = item.thumbnails.bestThumbUrl(), duration = item.duration,
             category = item.category, year = item.year
         )
     }
-    TrackMenuSheet(track, show, onDismiss, isLiked, onLike, onAddToPlaylist, onPlayNext, onAddToQueue, onGoToAlbum, onShowArtist, onComments, onRemove, onRefetchLyrics, onLyricsSettings)
+    TrackMenuSheet(track, show, onDismiss, isLiked, onLike, onAddToPlaylist, onPlayNext, onAddToQueue, onGoToAlbum, onShowArtist, onOpenChannel, onComments, onRemove, onRefetchLyrics, onLyricsSettings)
 }

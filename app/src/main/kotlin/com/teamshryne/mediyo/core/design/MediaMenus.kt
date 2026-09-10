@@ -410,6 +410,14 @@ private fun SongActions(
         } else if (artistEntries.isNotEmpty()) {
             MenuItem(icon = Icons.Filled.Person, label = "Show artists", onClick = { showArtists = true })
         }
+        val channelId = item.channelId?.takeIf { it.isNotBlank() }
+        if (channelId != null) {
+            MenuItem(
+                icon = Icons.Filled.OpenInNew,
+                label = "Open channel${item.channelName?.takeIf { it.isNotBlank() }?.let { " • $it" } ?: ""}",
+                onClick = { onDismiss(); nav?.navigate("list/$channelId") }
+            )
+        }
     if (canResolveAlbum) {
         MenuItem(
             icon = { BusyIcon(vm.busy, "album", Icons.Filled.Album) },

@@ -15,6 +15,9 @@ data class Track(
     val artistIds: List<String> = emptyList(),
     val album: String? = null,
     val albumId: String? = null,
+    /** Uploader channel (videos); raw UC browseId, never an artist page. */
+    val channelName: String? = null,
+    val channelId: String? = null,
     val artworkUrl: String? = null,
     val duration: String? = null,
     val category: String = "Song",
@@ -34,6 +37,8 @@ fun FfiSearchResult.toDomainTrack(): Track = Track(
     artistIds = artistIds,
     album = album,
     albumId = albumId,
+    channelName = channelName,
+    channelId = channelId,
     artworkUrl = thumbnails.bestThumbUrl(),
     duration = duration,
     category = category,
@@ -74,7 +79,9 @@ fun Track.toFfiSearchResult(): FfiSearchResult = FfiSearchResult(
     album = album,
     albumId = albumId,
     info = null,
-    isTopResult = false
+    isTopResult = false,
+    channelName = channelName,
+    channelId = channelId
 )
 
 fun newLocalId(): String = UUID.randomUUID().toString()
