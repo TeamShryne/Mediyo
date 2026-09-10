@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
@@ -65,10 +66,9 @@ class MediyoPlayerWidget : GlanceAppWidget() {
 
     override val sizeMode: SizeMode = SizeMode.Responsive(
         setOf(
-            SizeMode.SmallRectangle,
-            SizeMode.MediumRectangle,
-            SizeMode.LargeRectangle,
-            SizeMode.LargeSquare
+            DpSize(180.dp, 110.dp), // mini
+            DpSize(300.dp, 160.dp), // hero
+            DpSize(300.dp, 250.dp) // large hero
         )
     )
 
