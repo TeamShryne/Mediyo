@@ -87,6 +87,9 @@ sealed class Tab(val route: String, val label: String, val icon: androidx.compos
     data object Settings : Tab("settings", "Settings", Icons.Filled.Settings)
 }
 
+/** Height of the bottom tab-bar overlay (~NavigationBar height). */
+private val TAB_BAR_HEIGHT = 80.dp
+
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -176,14 +179,21 @@ private fun AppShell() {
                     onToggle = playerVm::toggle,
                     onNext = playerVm::next,
                     onExpand = { if (playerState.title.isNotEmpty()) showFullPlayer = true },
-                    sleepBadge = sleepBadge
+                    sleepBadge = sleepBadge,
+                    // Tab bar is a bottom overlay — lift the player above it
+                    // (instant swap, same as the content inset below).
+                    modifier = Modifier.padding(
+                        bottom = if (showTabBar && playerState.title.isNotEmpty()) TAB_BAR_HEIGHT else 0.dp
+                    )
                 )
             }
         ) { pad ->
             // Instant padding swap (no animation): the entering screen lays out
             // correctly on its FIRST frame instead of resizing over 220ms.
-            // 80.dp ~= NavigationBar height; keeps tab content above the overlay.
-            val tabInset = if (showTabBar) 80.dp else 0.dp
+            // Reserve tab-bar space only when the player isn't already holding
+            // it: bottomBar height (player + its tab lift) is in `pad`, so an
+            // extra inset here would double-count and leave a dead gap.
+            val tabInset = if (showTabBar && playerState.title.isEmpty()) TAB_BAR_HEIGHT else 0.dp
             Box(
                 Modifier
                     .fillMaxSize()

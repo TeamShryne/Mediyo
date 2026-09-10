@@ -70,14 +70,14 @@ import kotlinx.coroutines.launch
 // Mini player — floating pill above the nav bar (Spotify style)
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
-fun MiniPlayer(state: PlayerState, onToggle: () -> Unit, onNext: () -> Unit, onExpand: () -> Unit, sleepBadge: String? = null) {
+fun MiniPlayer(state: PlayerState, onToggle: () -> Unit, onNext: () -> Unit, onExpand: () -> Unit, sleepBadge: String? = null, modifier: Modifier = Modifier) {
     if (state.title.isEmpty()) return
     Card(
         onClick = onExpand,
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
         elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp)
             .shadow(elevation = 12.dp, shape = RoundedCornerShape(12.dp), ambientColor = Color.Black, spotColor = Color.Black)
