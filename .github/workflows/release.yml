@@ -186,7 +186,7 @@ jobs:
               git log "$PREV..$TAG" --pretty=format:'- %s (%h)' --reverse
             else
               echo "First release."
-              git log "$TAG" --pretty=format:'- %s (%h)' --reverse | head -30
+              git log -30 "$TAG" --pretty=format:'- %s (%h)' --reverse
             fi
             echo ""
             echo "EOF"
