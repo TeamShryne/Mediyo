@@ -248,41 +248,44 @@ private fun AppShell() {
                     CommentsBottomSheet(videoId = vid, onDismiss = { nav.popBackStack() })
                 }
                 }
-                // Tab bar overlay — zero layout effect on NavHost, so hiding it
-                // never resizes content. Short rise + fade = GPU-only, fast.
-                AnimatedVisibility(
-                    visible = showTabBar,
-                    enter = tabBarEnter(),
-                    exit = tabBarExit(),
-                    modifier = Modifier.align(Alignment.BottomCenter)
-                ) {
-                    NavigationBar(
-                        containerColor = MaterialTheme.colorScheme.background,
-                        tonalElevation = 0.dp
-                    ) {
-                        tabs.forEach { t ->
-                            NavigationBarItem(
-                                selected = currentRoute == t.route,
-                                onClick = {
-                                    android.util.Log.d("MediyoNav", "tab ${t.route} from $currentRoute")
-                                    nav.navigate(t.route) {
-                                        launchSingleTop = true
-                                        popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                                        restoreState = true
-                                    }
-                                },
-                                icon = { Icon(t.icon, contentDescription = t.label) },
-                                label = { Text(t.label) },
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = MaterialTheme.colorScheme.onSurface,
-                                    selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    indicatorColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                                )
-                            )
-                        }
-                    }
+            }
+        }
+
+        // Tab bar overlay at the very screen bottom — zero layout effect on
+        // NavHost, so hiding it never resizes content. Short rise + fade =
+        // GPU-only, fast. It lives in the outer Box (not the padded content)
+        // so the MiniPlayer in bottomBar stacks ABOVE it, as before.
+        AnimatedVisibility(
+            visible = showTabBar,
+            enter = tabBarEnter(),
+            exit = tabBarExit(),
+            modifier = Modifier.align(Alignment.BottomCenter)
+        ) {
+            NavigationBar(
+                containerColor = MaterialTheme.colorScheme.background,
+                tonalElevation = 0.dp
+            ) {
+                tabs.forEach { t ->
+                    NavigationBarItem(
+                        selected = currentRoute == t.route,
+                        onClick = {
+                            android.util.Log.d("MediyoNav", "tab ${t.route} from $currentRoute")
+                            nav.navigate(t.route) {
+                                launchSingleTop = true
+                                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                                restoreState = true
+                            }
+                        },
+                        icon = { Icon(t.icon, contentDescription = t.label) },
+                        label = { Text(t.label) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.onSurface,
+                            selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            indicatorColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                        )
+                    )
                 }
             }
         }
