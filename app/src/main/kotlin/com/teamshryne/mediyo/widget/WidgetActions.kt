@@ -18,6 +18,7 @@ interface WidgetEntryPoint {
     fun sync(): WidgetSync
     fun widgetRepo(): WidgetStateRepository
     fun playlistRepo(): PlaylistRepository
+    fun artworkCache(): WidgetArtworkCache
 }
 
 private fun entryPoint(context: Context): WidgetEntryPoint =
