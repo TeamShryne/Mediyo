@@ -119,7 +119,8 @@ private fun AppShell() {
     // Silent update check once per launch — dialog appears only if Available.
     val updateVm: UpdateViewModel = hiltViewModel()
     val updateState by updateVm.state.collectAsState()
-    LaunchedEffect(Unit) { updateVm.silentCheck() }    val sleepState by playerVm.sleepState.collectAsState()
+    LaunchedEffect(Unit) { updateVm.silentCheck() }
+    val sleepState by playerVm.sleepState.collectAsState()
     var showFullPlayer by remember { mutableStateOf(false) }
     var showQueueOverlay by remember { mutableStateOf(false) }
     var showCommentsId by remember { mutableStateOf<String?>(null) }
