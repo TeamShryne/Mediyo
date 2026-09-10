@@ -442,6 +442,15 @@ private fun MetrolistLine(
     val inactiveColor = Color.White.copy(alpha = animatedAlpha * 0.42f)
     val activeColor = Color.White
 
+    // Line-level lyrics (LRC / Lyricsfile fallback) carry no per-word timings —
+    // exactly 1 word per line, or all words sharing identical timings.
+    // Highlight the whole ongoing line at once instead of a gradual word sweep.
+    val isLineLevel = remember(line) {
+        if (line.words.size <= 1) true
+        else line.words.map { it.beginMs }.toSet().size <= 1 &&
+            line.words.map { it.endMs }.toSet().size <= 1
+    }
+
     // Unified rendering — Canvas for both active/inactive to keep exact center alignment (no Text vs Canvas jump)
     // fixes short single lines snapping to left when becoming active
     // Wrapped lines (>1 visual line) are left-aligned for readability; single lines stay centered.
@@ -472,6 +481,10 @@ private fun MetrolistLine(
             // dim base — all lines draw same centered layout, no alignment switch
             drawText(layout, color = inactiveColor)
             if (isActive) {
+                if (isLineLevel) {
+                    // line-level: no word timings → full-line highlight at once, no gradual fill
+                    drawText(layout, color = activeColor)
+                } else {
                 var charCursor = 0
                 wordsForCanvas.forEach { (wordTriple, hasSpace) ->
                     val (wText, wBegin, wEnd) = wordTriple
@@ -529,6 +542,7 @@ private fun MetrolistLine(
                         }
                     }
                     charCursor = wEndIdx + if (hasSpace) 1 else 0
+                }
                 }
             }
         }
