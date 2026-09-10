@@ -160,7 +160,7 @@ class PaxsenixApi : LyricsProvider {
                     } else {
                         val track = TtmlParser.parse(content)
                         if (track.isEmpty) LyricsResult.NotFound
-                        else LyricsResult.Success(track, content)
+                        else LyricsResult.Success(track, content, LyricsSource.Paxsenix)
                     }
                 }
                 404 -> LyricsResult.NotFound // Apple simply has no lyrics for this id

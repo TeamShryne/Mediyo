@@ -64,7 +64,7 @@ class BetterLyricsApi : LyricsProvider {
                             if (track.isEmpty) {
                                 LyricsResult.NotFound
                             } else {
-                                LyricsResult.Success(track, ttml)
+                                LyricsResult.Success(track, ttml, LyricsSource.BetterLyrics)
                             }
                         } else {
                             // Fallback: some providers return lyrics string (Kugou legacy shape)

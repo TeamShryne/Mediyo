@@ -46,6 +46,8 @@ class LyricsRepositoryImpl @Inject constructor(
 
     private fun cacheKey(track: Track, durationSec: Int?): String = keyFor(track, durationSec)
 
+    private fun providerKey(key: String): String = "$key:provider"
+
     private suspend fun providerFor(source: LyricsSource) = when (source) {
         LyricsSource.BetterLyrics -> betterLyrics
         LyricsSource.LyricsPlus -> lyricsPlus
@@ -59,11 +61,15 @@ class LyricsRepositoryImpl @Inject constructor(
 
         // 1) Try cache — payload may be TTML, Lyricsfile YAML, LRC or
         //    LyricsPlus JSON depending on which provider won previously.
+        //    The winning provider id is stored under "$key:provider".
         if (!forceRefresh) {
             cache.get(key)?.let { cached ->
                 if (cached.isNotBlank()) {
                     val parsed: LyricTrack = CachedLyricsParser.parse(cached)
-                    if (!parsed.isEmpty) return LyricsResult.Success(parsed, cached)
+                    if (!parsed.isEmpty) {
+                        val provider = cache.get(providerKey(key))?.let { LyricsSource.fromId(it.trim()) }
+                        return LyricsResult.Success(parsed, cached, provider)
+                    }
                 }
             }
         }
@@ -83,7 +89,10 @@ class LyricsRepositoryImpl @Inject constructor(
             )
             when (result) {
                 is LyricsResult.Success -> {
-                    runCatching { cache.put(key, "lyrics", result.rawTtml) }
+                    runCatching {
+                        cache.put(key, "lyrics", result.rawTtml)
+                        result.provider?.let { cache.put(providerKey(key), "lyrics", it.id) }
+                    }
                     return result
                 }
                 LyricsResult.NotFound -> lastNotFound = result
@@ -110,6 +119,7 @@ class LyricsRepositoryImpl @Inject constructor(
     override suspend fun refreshLyrics(track: Track, durationSec: Int?): LyricsResult {
         val key = cacheKey(track, durationSec)
         runCatching { cache.remove(key) }
+        runCatching { cache.remove(providerKey(key)) }
         return getLyrics(track, durationSec, forceRefresh = true)
     }
 

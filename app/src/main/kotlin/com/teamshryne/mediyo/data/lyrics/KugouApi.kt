@@ -43,7 +43,7 @@ class KugouApi : LyricsProvider {
                 is DlOut.Success -> {
                     val track = LrcParser.parse(dl.lrc)
                     if (track.isEmpty) LyricsResult.NotFound
-                    else LyricsResult.Success(track, dl.lrc)
+                    else LyricsResult.Success(track, dl.lrc, LyricsSource.Kugou)
                 }
                 is DlOut.Missing -> LyricsResult.NotFound
                 is DlOut.Failure -> LyricsResult.Error(dl.message, dl.code)

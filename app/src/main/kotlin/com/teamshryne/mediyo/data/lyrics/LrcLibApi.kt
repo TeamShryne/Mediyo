@@ -57,23 +57,23 @@ class LrcLibApi : LyricsProvider {
                                 val synced = json.optString("syncedLyrics", "")
                                 if (synced.isNotBlank()) {
                                     val lrcTrack = LrcParser.parse(synced)
-                                    if (!lrcTrack.isEmpty) return@withContext LyricsResult.Success(lrcTrack, synced)
+                                    if (!lrcTrack.isEmpty) return@withContext LyricsResult.Success(lrcTrack, synced, LyricsSource.LrcLib)
                                 }
                                 LyricsResult.NotFound
                             } else {
-                                LyricsResult.Success(track, lyricsfile)
+                                LyricsResult.Success(track, lyricsfile, LyricsSource.LrcLib)
                             }
                         } else {
                             // Fallback: syncedLyrics (LRC)
                             val synced = json.optString("syncedLyrics", "")
                             if (synced.isNotBlank()) {
                                 val lrcTrack = LrcParser.parse(synced)
-                                if (!lrcTrack.isEmpty) return@withContext LyricsResult.Success(lrcTrack, synced)
+                                if (!lrcTrack.isEmpty) return@withContext LyricsResult.Success(lrcTrack, synced, LyricsSource.LrcLib)
                             }
                             val plain = json.optString("plainLyrics", "")
                             if (plain.isNotBlank()) {
                                 val plainTrack = PlainLyricsParser.parse(plain)
-                                if (!plainTrack.isEmpty) return@withContext LyricsResult.Success(plainTrack, plain)
+                                if (!plainTrack.isEmpty) return@withContext LyricsResult.Success(plainTrack, plain, LyricsSource.LrcLib)
                             }
                             LyricsResult.NotFound
                         }
