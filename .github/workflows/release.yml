@@ -130,7 +130,19 @@ jobs:
           APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
           echo "APK=$APK"
           "$BT/apksigner" verify --print-certs "$APK" | head -5
-          "$BT/aapt" dump badging "$APK" | grep -E "^package:|launchable-activity|application-label:" | head -5
+          "$BT/apksigner" verify "$APK" # strict: fails if not properly signed
+          # NB: aapt exits 1 on the pre-existing @android:drawable/sym_def_app_icon
+          # reference, so capture output and assert on what matters instead.
+          BADGING=$("$BT/aapt" dump badging "$APK" 2>/dev/null || true)
+          echo "$BADGING" | grep -E "^package:|launchable-activity|application-label:" | head -5
+          echo "$BADGING" | grep -q "package: name='com.teamshryne.mediyo'" \
+            || { echo "::error::unexpected package name"; exit 1; }
+          echo "$BADGING" | grep -q "versionCode='${{ steps.version.outputs.code }}'" \
+            || { echo "::error::unexpected versionCode"; exit 1; }
+          echo "$BADGING" | grep -q "versionName='${{ steps.version.outputs.version }}'" \
+            || { echo "::error::unexpected versionName"; exit 1; }
+          echo "$BADGING" | grep -q "application-label:'Mediyo'" \
+            || { echo "::error::unexpected app label"; exit 1; }
 
       - name: Stage assets + update.json (updater contract)
         id: assets
