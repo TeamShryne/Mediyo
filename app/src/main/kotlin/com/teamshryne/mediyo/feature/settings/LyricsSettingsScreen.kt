@@ -59,8 +59,13 @@ fun LyricsSettingsScreen(
     val order by vm.orderFlow.collectAsState(initial = LyricsSource.defaultOrder)
 
     Scaffold(
+        // Zero insets: this Scaffold is nested inside the outer app Scaffold,
+        // whose padding already clears the status bar. Defaults would stack a
+        // second status-bar height above the TopAppBar (the visible gap).
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 title = { Text("Lyrics") },
                 navigationIcon = {
                     IconButton(onClick = { nav?.popBackStack() }) {

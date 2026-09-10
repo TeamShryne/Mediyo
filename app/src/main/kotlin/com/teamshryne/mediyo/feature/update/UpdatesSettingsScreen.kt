@@ -3,6 +3,7 @@ package com.teamshryne.mediyo.feature.update
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -44,8 +45,12 @@ fun UpdatesSettingsScreen(
     val state by vm.state.collectAsState()
 
     Scaffold(
+        // Zero insets: nested inside the outer app Scaffold, whose padding
+        // already clears the status bar (same fix as LyricsSettingsScreen).
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 title = { Text("App updates") },
                 navigationIcon = {
                     IconButton(onClick = { nav?.popBackStack() }) {

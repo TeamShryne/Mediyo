@@ -121,7 +121,9 @@ fun HomeScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
+        // Outer Scaffold padding already clears the status bar — keep only 4dp
+        // breathing room so the header sits tight under it, no dead gap.
+        contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(26.dp)
     ) {
         item {
