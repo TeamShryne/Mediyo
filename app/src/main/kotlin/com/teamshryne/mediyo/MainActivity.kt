@@ -102,6 +102,10 @@ private fun AppShell() {
     val tabs = listOf(Tab.Home, Tab.Search, Tab.Library, Tab.Settings)
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
+    // Tab bar is only visible on the 4 top-level destinations.
+    // All detail/sub pages (artist, playlist, album, view-all/list, liked,
+    // history, settings sub-screens, profile, etc.) hide it.
+    val showTabBar = currentRoute in tabs.map { it.route }
 
     // Media notifications need the notification permission on Android 13+
     val context = LocalContext.current
@@ -165,6 +169,11 @@ private fun AppShell() {
                         onExpand = { if (playerState.title.isNotEmpty()) showFullPlayer = true },
                         sleepBadge = sleepBadge
                     )
+                    AnimatedVisibility(
+                        visible = showTabBar,
+                        enter = slideInVertically(tween(220)) { it } + fadeIn(tween(180)),
+                        exit = slideOutVertically(tween(220)) { it } + fadeOut(tween(180))
+                    ) {
                     NavigationBar(
                         containerColor = Color.Transparent,
                         tonalElevation = 0.dp
@@ -191,6 +200,7 @@ private fun AppShell() {
                                 )
                             )
                         }
+                    }
                     }
                 }
             }
