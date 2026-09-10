@@ -55,7 +55,7 @@ class LyricsPlusApi : LyricsProvider {
                 when (val ttml = get("$base/v1/ttml/get$qs")) {
                     is MirrorOut.Success -> {
                         val track = TtmlParser.parse(ttml.body)
-                        if (!track.isEmpty) return@withContext LyricsResult.Success(track, ttml.body)
+                        if (!track.isEmpty) return@withContext LyricsResult.Success(track, ttml.body, LyricsSource.LyricsPlus)
                         // Empty TTML parse → try v2 JSON on same mirror before moving on
                     }
                     is MirrorOut.NotFound -> sawNotFound = true
@@ -65,7 +65,7 @@ class LyricsPlusApi : LyricsProvider {
                 when (val v2 = get("$base/v2/lyrics/get$qs")) {
                     is MirrorOut.Success -> {
                         val track = LyricsPlusParser.parse(v2.body)
-                        if (!track.isEmpty) return@withContext LyricsResult.Success(track, v2.body)
+                        if (!track.isEmpty) return@withContext LyricsResult.Success(track, v2.body, LyricsSource.LyricsPlus)
                         // Empty parse with 200 → treat as miss on this mirror
                         sawNotFound = true
                     }

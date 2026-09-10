@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.teamshryne.mediyo.data.lyrics.LyricTrack
 import com.teamshryne.mediyo.data.lyrics.LyricsResult
+import com.teamshryne.mediyo.data.lyrics.LyricsSource
 import com.teamshryne.mediyo.domain.model.Track
 import com.teamshryne.mediyo.domain.repository.LyricsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -16,7 +17,7 @@ import javax.inject.Inject
 sealed interface LyricsUiState {
     data object Idle : LyricsUiState
     data object Loading : LyricsUiState
-    data class Ready(val track: LyricTrack) : LyricsUiState
+    data class Ready(val track: LyricTrack, val provider: LyricsSource? = null) : LyricsUiState
     data object NotFound : LyricsUiState
     data object NeedsApiKey : LyricsUiState
     data class Error(val message: String) : LyricsUiState
@@ -48,7 +49,7 @@ class LyricsViewModel @Inject constructor(
             val durSec = durationMs?.let { (it / 1000).toInt().takeIf { v -> v in 30..600 } }
                 ?: track.duration?.let { parseDurationToSec(it) }
             when (val res = repo.getLyrics(track, durSec)) {
-                is LyricsResult.Success -> _state.value = LyricsUiState.Ready(res.track)
+                is LyricsResult.Success -> _state.value = LyricsUiState.Ready(res.track, res.provider)
                 LyricsResult.NotFound -> _state.value = LyricsUiState.NotFound
                 LyricsResult.NeedsApiKey -> _state.value = LyricsUiState.NeedsApiKey
                 LyricsResult.RateLimited -> _state.value = LyricsUiState.RateLimited
@@ -77,7 +78,7 @@ class LyricsViewModel @Inject constructor(
             when (val res = repo.refreshLyrics(track, durSec)) {
                 is LyricsResult.Success -> {
                     lastKey = key
-                    _state.value = LyricsUiState.Ready(res.track)
+                    _state.value = LyricsUiState.Ready(res.track, res.provider)
                 }
                 LyricsResult.NotFound -> _state.value = LyricsUiState.NotFound
                 LyricsResult.NeedsApiKey -> _state.value = LyricsUiState.NeedsApiKey

@@ -44,7 +44,11 @@ data class LyricTrack(
 }
 
 sealed interface LyricsResult {
-    data class Success(val track: LyricTrack, val rawTtml: String) : LyricsResult
+    data class Success(
+        val track: LyricTrack,
+        val rawTtml: String,
+        val provider: LyricsSource? = null
+    ) : LyricsResult
     data object NotFound : LyricsResult
     data object RateLimited : LyricsResult
     data object NeedsApiKey : LyricsResult

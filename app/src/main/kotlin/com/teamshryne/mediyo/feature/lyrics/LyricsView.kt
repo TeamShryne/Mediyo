@@ -70,6 +70,7 @@ import androidx.compose.ui.unit.sp
 import com.teamshryne.mediyo.core.design.fadingEdge
 import com.teamshryne.mediyo.data.lyrics.LyricLine
 import com.teamshryne.mediyo.data.lyrics.LyricTrack
+import com.teamshryne.mediyo.data.lyrics.LyricsSource
 import com.teamshryne.mediyo.feature.lyrics.animation.LyricsAnimationConfig
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -109,6 +110,7 @@ fun SyncedLyricsView(
         LyricsUiState.Idle, LyricsUiState.Loading -> LyricsLoading(modifier)
         is LyricsUiState.Ready -> SyncedLyricsContent(
             track = state.track,
+            provider = state.provider,
             positionMs = positionMs,
             isPlaying = isPlaying,
             onSeek = onSeek,
@@ -157,6 +159,7 @@ private val FADE_BOTTOM_DP = 120.dp
 @Composable
 private fun SyncedLyricsContent(
     track: LyricTrack,
+    provider: LyricsSource?,
     positionMs: Long,
     isPlaying: Boolean,
     onSeek: (Long) -> Unit,
@@ -164,6 +167,10 @@ private fun SyncedLyricsContent(
     modifier: Modifier = Modifier
 ) {
     val lines = track.lines
+    // Provider credit renders as a trailing footer item after the last line.
+    val hasCredit = provider != null
+    val creditIdx = lines.size
+    val itemCount = lines.size + if (hasCredit) 1 else 0
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
 
@@ -239,8 +246,8 @@ private fun SyncedLyricsContent(
         val fallbackH = with(density) { FALLBACK_H_DP.toPx() }
         val gapPx = with(density) { GAP_DP.toPx() }
 
-        // positions map relative to active index
-        val positions = remember(itemHeights.toMap(), currentIdx, lines) {
+        // positions map relative to active index (credit footer counts as last item)
+        val positions = remember(itemHeights.toMap(), currentIdx, lines, hasCredit) {
             val map = mutableMapOf<Int, Float>()
             if (currentIdx == -1 || lines.isEmpty()) return@remember map
             map[currentIdx] = 0f
@@ -251,7 +258,7 @@ private fun SyncedLyricsContent(
                 map[i] = y
             }
             y = 0f
-            for (i in currentIdx until lines.size - 1) {
+            for (i in currentIdx until itemCount - 1) {
                 val h = itemHeights[i]?.toFloat() ?: fallbackH
                 y += (h + gapPx)
                 map[i + 1] = y
@@ -259,14 +266,14 @@ private fun SyncedLyricsContent(
             map
         }
 
-        val minOffset = remember(itemHeights.toMap(), lines, currentIdx, anchorY) {
+        val minOffset = remember(itemHeights.toMap(), lines, currentIdx, anchorY, hasCredit) {
             if (lines.isEmpty() || currentIdx == -1) return@remember 0f
             var totalBelow = 0f
-            for (i in currentIdx until lines.size - 1) {
+            for (i in currentIdx until itemCount - 1) {
                 val h = itemHeights[i]?.toFloat() ?: fallbackH
                 totalBelow += h + gapPx
             }
-            val lastH = itemHeights[lines.size - 1]?.toFloat() ?: fallbackH
+            val lastH = itemHeights[itemCount - 1]?.toFloat() ?: fallbackH
             with(density) { 80.dp.toPx() } - anchorY - totalBelow - lastH
         }
         val maxOffset = remember(itemHeights.toMap(), lines, currentIdx, maxHeightPx, anchorY) {
@@ -375,6 +382,32 @@ private fun SyncedLyricsContent(
             LaunchedEffect(lines.size, itemHeights.size) {
                 if (itemHeights.size >= minOf(6, lines.size) && isInitialLayout) {
                     isInitialLayout = false
+                }
+            }
+            // Provider credit footer — scrolls with the lyrics, sits after the last line
+            if (hasCredit && provider != null) {
+                val distance = abs(creditIdx - currentIdx)
+                val targetOffset = anchorY + (positions[creditIdx] ?: ((creditIdx - currentIdx) * (fallbackH + gapPx)))
+                val animatedOffset by animateFloatAsState(
+                    targetValue = targetOffset,
+                    animationSpec = if (isInitialLayout) tween(0) else tween(680, (distance * 28).coerceAtMost(200), FastOutSlowInEasing),
+                    label = "staggerCredit"
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onSizeChanged { itemHeights[creditIdx] = it.height }
+                        .offset { IntOffset(0, (animatedOffset + userManualOffset).roundToInt()) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Lyrics from ${provider.label}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontSize = 12.sp,
+                        color = Color.White.copy(alpha = 0.6f),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
+                    )
                 }
             }
         }
