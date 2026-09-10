@@ -10,9 +10,17 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
@@ -32,7 +40,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -53,8 +60,6 @@ import com.teamshryne.mediyo.core.design.pushEnter
 import com.teamshryne.mediyo.core.design.pushExit
 import com.teamshryne.mediyo.core.design.sheetEnter
 import com.teamshryne.mediyo.core.design.sheetExit
-import com.teamshryne.mediyo.core.design.tabBarEnter
-import com.teamshryne.mediyo.core.design.tabBarExit
 import com.teamshryne.mediyo.feature.album.AlbumScreen
 import com.teamshryne.mediyo.feature.artist.ArtistScreen
 import com.teamshryne.mediyo.feature.comments.CommentsBottomSheet
@@ -87,8 +92,11 @@ sealed class Tab(val route: String, val label: String, val icon: androidx.compos
     data object Settings : Tab("settings", "Settings", Icons.Filled.Settings)
 }
 
-/** Height of the bottom tab-bar overlay (~NavigationBar height). */
-private val TAB_BAR_HEIGHT = 80.dp
+/** Tab bar + mini-player live in Scaffold's bottomBar as a Column, so the
+ *  player is *laid out* above the tab bar — never overlapped, on any device.
+ *  (A hardcoded dp lift can't work everywhere: NavigationBar height shifts
+ *  with font scale, and the system gesture/3-button inset varies per device.) */
+
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -156,44 +164,81 @@ private fun AppShell() {
     Box(Modifier.fillMaxSize()) {
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
-            // NOTE: bottomBar holds ONLY the MiniPlayer now (stable height).
-            // The tab bar used to live here inside AnimatedVisibility — every
-            // show/hide animated Scaffold's inner padding over ~220ms, so the
-            // NavHost resized frame-by-frame while the new screen entered.
-            // That animated remeasure is the "jump before opening" you saw.
-            // Tab bar is now a bottom overlay (below) with zero layout effect.
+            // bottomBar stacks MiniPlayer ABOVE the tab bar in one Column, so
+            // placement is derived from layout — never a hardcoded dp lift.
+            // Both show/hide instantly (plain `if`, no AnimatedVisibility size
+            // animation): the entering screen lays out correctly on its FIRST
+            // frame instead of resizing over ~220ms ("jump before opening").
+            // Scaffold's `pad` then always equals the real combined height, so
+            // content never slides under the player/tab bar on any device.
             bottomBar = {
-                val sleepBadge = when {
-                    !sleepState.isActive -> null
-                    sleepState.mode.name == "TIMER" -> {
-                        val s = sleepState.remainingMs / 1000
-                        val txt = if (s >= 3600) "%d:%02d:%02d".format(s/3600, (s%3600)/60, s%60) else "%02d:%02d".format(s/60, s%60)
-                        "Sleep • $txt"
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.background)
+                        // Edge-to-edge (decorFitsSystemWindows=false): keep the
+                        // bar/player above the system gesture/3-button nav area
+                        // on every device, whatever its inset height is.
+                        .windowInsetsPadding(
+                            WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)
+                        )
+                ) {
+                    val sleepBadge = when {
+                        !sleepState.isActive -> null
+                        sleepState.mode.name == "TIMER" -> {
+                            val s = sleepState.remainingMs / 1000
+                            val txt = if (s >= 3600) "%d:%02d:%02d".format(s/3600, (s%3600)/60, s%60) else "%02d:%02d".format(s/60, s%60)
+                            "Sleep • $txt"
+                        }
+                        sleepState.mode.name == "END_OF_TRACK" -> "Sleep after track"
+                        sleepState.mode.name == "END_OF_QUEUE" -> "Sleep after queue"
+                        else -> null
                     }
-                    sleepState.mode.name == "END_OF_TRACK" -> "Sleep after track"
-                    sleepState.mode.name == "END_OF_QUEUE" -> "Sleep after queue"
-                    else -> null
-                }
-                MiniPlayer(
-                    state = playerState,
-                    onToggle = playerVm::toggle,
-                    onNext = playerVm::next,
-                    onExpand = { if (playerState.title.isNotEmpty()) showFullPlayer = true },
-                    sleepBadge = sleepBadge,
-                    // Tab bar is a bottom overlay — lift the player above it
-                    // (instant swap, same as the content inset below).
-                    modifier = Modifier.padding(
-                        bottom = if (showTabBar && playerState.title.isNotEmpty()) TAB_BAR_HEIGHT else 0.dp
+                    MiniPlayer(
+                        state = playerState,
+                        onToggle = playerVm::toggle,
+                        onNext = playerVm::next,
+                        onExpand = { if (playerState.title.isNotEmpty()) showFullPlayer = true },
+                        sleepBadge = sleepBadge,
+                        // 8dp visual gap between the floating pill and the tab
+                        // bar; 0 when the bar is hidden (system inset above
+                        // already separates the pill from the screen edge).
+                        modifier = Modifier.padding(
+                            bottom = if (showTabBar && playerState.title.isNotEmpty()) 8.dp else 0.dp
+                        )
                     )
-                )
+                    if (showTabBar) {
+                        NavigationBar(
+                            containerColor = MaterialTheme.colorScheme.background,
+                            tonalElevation = 0.dp
+                        ) {
+                            tabs.forEach { t ->
+                                NavigationBarItem(
+                                    selected = currentRoute == t.route,
+                                    onClick = {
+                                        android.util.Log.d("MediyoNav", "tab ${t.route} from $currentRoute")
+                                        nav.navigate(t.route) {
+                                            launchSingleTop = true
+                                            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                                            restoreState = true
+                                        }
+                                    },
+                                    icon = { Icon(t.icon, contentDescription = t.label) },
+                                    label = { Text(t.label) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = MaterialTheme.colorScheme.onSurface,
+                                        selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        indicatorColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
             }
         ) { pad ->
-            // Instant padding swap (no animation): the entering screen lays out
-            // correctly on its FIRST frame instead of resizing over 220ms.
-            // Reserve tab-bar space only when the player isn't already holding
-            // it: bottomBar height (player + its tab lift) is in `pad`, so an
-            // extra inset here would double-count and leave a dead gap.
-            val tabInset = if (showTabBar && playerState.title.isEmpty()) TAB_BAR_HEIGHT else 0.dp
             Box(
                 Modifier
                     .fillMaxSize()
@@ -202,9 +247,7 @@ private fun AppShell() {
                 NavHost(
                     navController = nav,
                     startDestination = Tab.Home.route,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(bottom = tabInset),
+                    modifier = Modifier.fillMaxSize(),
                     // Fast dynamic slide + fade (expo/keyframe curve — see Motion.kt).
                     // Short ~32dp travel: reads as a snappy push, stays GPU-only.
                     enterTransition = { pushEnter() },
@@ -247,45 +290,6 @@ private fun AppShell() {
                     val vid = back.arguments?.getString("videoId") ?: ""
                     CommentsBottomSheet(videoId = vid, onDismiss = { nav.popBackStack() })
                 }
-                }
-            }
-        }
-
-        // Tab bar overlay at the very screen bottom — zero layout effect on
-        // NavHost, so hiding it never resizes content. Short rise + fade =
-        // GPU-only, fast. It lives in the outer Box (not the padded content)
-        // so the MiniPlayer in bottomBar stacks ABOVE it, as before.
-        AnimatedVisibility(
-            visible = showTabBar,
-            enter = tabBarEnter(),
-            exit = tabBarExit(),
-            modifier = Modifier.align(Alignment.BottomCenter)
-        ) {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.background,
-                tonalElevation = 0.dp
-            ) {
-                tabs.forEach { t ->
-                    NavigationBarItem(
-                        selected = currentRoute == t.route,
-                        onClick = {
-                            android.util.Log.d("MediyoNav", "tab ${t.route} from $currentRoute")
-                            nav.navigate(t.route) {
-                                launchSingleTop = true
-                                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                                restoreState = true
-                            }
-                        },
-                        icon = { Icon(t.icon, contentDescription = t.label) },
-                        label = { Text(t.label) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.onSurface,
-                            selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            indicatorColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                        )
-                    )
                 }
             }
         }
