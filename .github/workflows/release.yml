@@ -204,6 +204,8 @@ jobs:
           SHA="${{ steps.assets.outputs.sha }}"
           # Re-run safe: delete existing release for this tag if present.
           gh release delete "$TAG" --cleanup-tag -y 2>/dev/null || true
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git push origin ":refs/tags/$TAG" 2>/dev/null || true
           git tag -f -a "$TAG" -m "Mediyo $TAG"
           git push origin "$TAG"
