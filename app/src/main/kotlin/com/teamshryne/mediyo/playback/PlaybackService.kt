@@ -28,6 +28,8 @@ import com.teamshryne.mediyo.MainActivity
 import com.teamshryne.mediyo.R
 import com.teamshryne.mediyo.data.sleeptimer.SleepMode
 import com.teamshryne.mediyo.data.sleeptimer.SleepTimerManager
+import com.teamshryne.mediyo.widget.WidgetIntents
+import com.teamshryne.mediyo.widget.WidgetPlaybackController
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -67,6 +69,7 @@ class PlaybackService : MediaSessionService() {
     @Inject lateinit var player: ExoPlayer
     @Inject lateinit var hub: PlaybackSessionHub
     @Inject lateinit var sleepTimerManager: SleepTimerManager
+    @Inject lateinit var widgetController: WidgetPlaybackController
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var session: MediaSession? = null
@@ -289,7 +292,39 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Home widget taps address the service directly (Metrolist-style):
+        // act via the headless controller, which repaints the widget itself.
         when (intent?.action) {
+            WidgetIntents.ACTION_TOGGLE -> {
+                scope.launch { runCatching { widgetController.toggle() } }
+                ensureForeground(latestMediaNotification ?: createPlaceholderNotification())
+                return START_STICKY
+            }
+            WidgetIntents.ACTION_NEXT -> {
+                scope.launch { runCatching { widgetController.next() } }
+                ensureForeground(latestMediaNotification ?: createPlaceholderNotification())
+                return START_STICKY
+            }
+            WidgetIntents.ACTION_PREV -> {
+                scope.launch { runCatching { widgetController.previous() } }
+                ensureForeground(latestMediaNotification ?: createPlaceholderNotification())
+                return START_STICKY
+            }
+            WidgetIntents.ACTION_LIKE -> {
+                scope.launch { runCatching { widgetController.toggleLike() } }
+                return START_STICKY
+            }
+            WidgetIntents.ACTION_PLAY_LIKED -> {
+                scope.launch { runCatching { widgetController.playLikedShuffle() } }
+                ensureForeground(latestMediaNotification ?: createPlaceholderNotification())
+                return START_STICKY
+            }
+            WidgetIntents.ACTION_PLAY_PLAYLIST -> {
+                val id = intent.getStringExtra(WidgetIntents.EXTRA_PLAYLIST_ID)
+                scope.launch { runCatching { if (id != null) widgetController.playPlaylist(id) } }
+                ensureForeground(latestMediaNotification ?: createPlaceholderNotification())
+                return START_STICKY
+            }
             ACTION_CANCEL_SLEEP -> {
                 sleepTimerManager.cancel()
                 // also dismiss sleep notification immediately
