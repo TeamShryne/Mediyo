@@ -52,7 +52,7 @@ class LyricsPlusApi : LyricsProvider {
 
             for (base in MIRRORS) {
                 // 1) TTML — preferred, word-accurate
-                when (val ttml in get("$base/v1/ttml/get$qs")) {
+                when (val ttml = get("$base/v1/ttml/get$qs")) {
                     is MirrorOut.Success -> {
                         val track = TtmlParser.parse(ttml.body)
                         if (!track.isEmpty) return@withContext LyricsResult.Success(track, ttml.body)
@@ -62,7 +62,7 @@ class LyricsPlusApi : LyricsProvider {
                     is MirrorOut.Error -> lastError = LyricsResult.Error(ttml.message, ttml.code)
                 }
                 // 2) v2 JSON — backup (LINE sync, non-Apple sources)
-                when (val v2 in get("$base/v2/lyrics/get$qs")) {
+                when (val v2 = get("$base/v2/lyrics/get$qs")) {
                     is MirrorOut.Success -> {
                         val track = LyricsPlusParser.parse(v2.body)
                         if (!track.isEmpty) return@withContext LyricsResult.Success(track, v2.body)
