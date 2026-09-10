@@ -21,6 +21,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -39,6 +40,7 @@ class LyricsSettingsVm @Inject constructor(
     private val prefs: LyricsPrefs
 ) : ViewModel() {
     val orderFlow = prefs.orderFlow
+    val enabledFlow = prefs.enabledFlow
 
     fun move(order: List<LyricsSource>, from: Int, to: Int) {
         if (from !in order.indices || to !in order.indices) return
@@ -48,8 +50,15 @@ class LyricsSettingsVm @Inject constructor(
         viewModelScope.launch { prefs.setOrder(mutable) }
     }
 
+    fun setEnabled(source: LyricsSource, enabled: Boolean) {
+        viewModelScope.launch { prefs.setEnabled(source, enabled) }
+    }
+
     fun reset() {
-        viewModelScope.launch { prefs.setOrder(LyricsSource.defaultOrder) }
+        viewModelScope.launch {
+            prefs.setOrder(LyricsSource.defaultOrder)
+            prefs.resetEnabled()
+        }
     }
 }
 
@@ -60,6 +69,7 @@ fun LyricsSettingsScreen(
     vm: LyricsSettingsVm = hiltViewModel()
 ) {
     val order by vm.orderFlow.collectAsState(initial = LyricsSource.defaultOrder)
+    val enabled by vm.enabledFlow.collectAsState(initial = LyricsSource.defaultEnabled)
 
     Scaffold(
         // Zero insets: this Scaffold is nested inside the outer app Scaffold,
@@ -92,7 +102,7 @@ fun LyricsSettingsScreen(
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Provider priority", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Text(
-                            "Use the arrows to reorder. The app tries providers top-to-bottom until one returns synced lyrics. First success is cached.",
+                            "Use the arrows to reorder. The app tries enabled providers top-to-bottom until one returns synced lyrics. Use the switches to turn providers on or off. First success is cached.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -106,10 +116,12 @@ fun LyricsSettingsScreen(
                 LyricsSourceRow(
                     source = source,
                     rank = idx + 1,
+                    enabled = source in enabled,
                     canUp = idx > 0,
                     canDown = idx < order.lastIndex,
                     onUp = { vm.move(order, idx, idx - 1) },
-                    onDown = { vm.move(order, idx, idx + 1) }
+                    onDown = { vm.move(order, idx, idx + 1) },
+                    onToggle = { vm.setEnabled(source, it) }
                 )
             }
 
@@ -159,10 +171,12 @@ fun LyricsSettingsScreen(
 private fun LyricsSourceRow(
     source: LyricsSource,
     rank: Int,
+    enabled: Boolean,
     canUp: Boolean,
     canDown: Boolean,
     onUp: () -> Unit,
-    onDown: () -> Unit
+    onDown: () -> Unit,
+    onToggle: (Boolean) -> Unit
 ) {
     val icon = when (source) {
         LyricsSource.BetterLyrics -> Icons.Filled.MusicNote
@@ -175,7 +189,8 @@ private fun LyricsSourceRow(
     val onContainer = if (rank == 1) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
 
     Card(
-        modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
+        modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth()
+            .graphicsLayer { alpha = if (enabled) 1f else 0.55f },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
     ) {
@@ -189,7 +204,7 @@ private fun LyricsSourceRow(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "$rank",
+                    if (enabled) "$rank" else "–",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = onContainer
@@ -211,6 +226,10 @@ private fun LyricsSourceRow(
                     overflow = TextOverflow.Ellipsis
                 )
             }
+            Switch(
+                checked = enabled,
+                onCheckedChange = onToggle
+            )
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 IconButton(onClick = onUp, enabled = canUp, modifier = Modifier.size(28.dp)) {
                     Icon(Icons.Filled.KeyboardArrowUp, null, Modifier.size(18.dp))

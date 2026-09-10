@@ -74,12 +74,15 @@ class LyricsRepositoryImpl @Inject constructor(
             }
         }
 
-        // 2) Fetch in priority order (data-driven)
+        // 2) Fetch in priority order (data-driven), skipping disabled providers
         val order = try { lyricsPrefs.orderFlow.first() } catch (_: Exception) { LyricsSource.defaultOrder }
+        val enabled = try { lyricsPrefs.enabledFlow.first() } catch (_: Exception) { LyricsSource.defaultEnabled }
+        val active = order.filter { it in enabled }
+        if (active.isEmpty()) return LyricsResult.NotFound
         var lastNotFound: LyricsResult = LyricsResult.NotFound
         var lastError: LyricsResult? = null
 
-        for (source in order) {
+        for (source in active) {
             val provider = providerFor(source)
             val result = provider.fetch(
                 title = track.title,
