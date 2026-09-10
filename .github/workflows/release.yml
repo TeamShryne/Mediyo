@@ -126,10 +126,11 @@ jobs:
       - name: Verify signature + package
         run: |
           set -euo pipefail
+          BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/*/ | sort -V | tail -1)
           APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
           echo "APK=$APK"
-          apksigner verify --print-certs "$APK" | head -5
-          aapt dump badging "$APK" | grep -E "^package:|launchable-activity|application-label:" | head -5
+          "$BT/apksigner" verify --print-certs "$APK" | head -5
+          "$BT/aapt" dump badging "$APK" | grep -E "^package:|launchable-activity|application-label:" | head -5
 
       - name: Stage assets + update.json (updater contract)
         id: assets
