@@ -2460,7 +2460,7 @@ data class FfiSearchResult (
     var `info`: kotlin.String?, 
     var `isTopResult`: kotlin.Boolean, 
     /**
-     * Uploader channel behind a video (USER_CHANNEL run); null for songs.
+     * Uploader channel behind a video (USER_CHANNEL run); None for songs.
      */
     var `channelName`: kotlin.String?, 
     /**
