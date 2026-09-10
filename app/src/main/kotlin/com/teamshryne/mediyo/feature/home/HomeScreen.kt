@@ -26,7 +26,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.teamshryne.mediyo.core.design.*
-import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import com.teamshryne.mediyo.domain.model.PlayOrigin
 import com.teamshryne.mediyo.domain.model.bestThumbUrl
 import com.teamshryne.mediyo.domain.model.toDomainTrack
@@ -45,45 +44,75 @@ data class HomeState(
 )
 
 @HiltViewModel
-class HomeVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel() {
-    var state by mutableStateOf(HomeState())
+class HomeVm @Inject constructor(private val repo: HomeRepository) : ViewModel() {
+    var state by mutableStateOf(
+        repo.peek()?.let { cached ->
+            HomeState(
+                loading = false,
+                charts = cached.charts,
+                newAlbums = cached.newAlbums,
+                newVideos = cached.newVideos,
+            )
+        } ?: HomeState()
+    )
         private set
 
-    fun load(isRefresh: Boolean = false) {
-        if (state.loading || state.refreshing) {
-            // allow initial load when empty (loading=true but no data yet)
-            if (state.charts.isNotEmpty() || state.newAlbums.isNotEmpty()) return
+    private var loadJob: kotlinx.coroutines.Job? = null
+
+    init {
+        ensureLoaded()
+    }
+
+    /** No-op when cached rows are already showing — this is what stops the
+     *  reload-every-time-you-come-back behavior. */
+    fun ensureLoaded() {
+        if (state.charts.isNotEmpty() || state.newAlbums.isNotEmpty() || state.newVideos.isNotEmpty()) {
+            // Data is on screen: only revalidate in the background when stale,
+            // without flipping back to the shimmer.
+            if (repo.isStale()) refreshQuietly()
+            return
         }
+        load(isRefresh = false)
+    }
+
+    fun load(isRefresh: Boolean = false) {
+        // Never wipe visible rows to show the shimmer again on navigation.
+        // Only the very first load (empty + not loaded yet) uses `loading`.
+        if (!isRefresh && (state.charts.isNotEmpty() || state.newAlbums.isNotEmpty() || state.newVideos.isNotEmpty())) return
+        if (loadJob?.isActive == true) return
         if (isRefresh) state = state.copy(refreshing = true, error = null)
-        else state = state.copy(loading = true, error = null)
+        else state = state.copy(loading = state.charts.isEmpty() && state.newAlbums.isEmpty(), error = null)
 
-        viewModelScope.launch {
-            // Each source isolated so partial success still renders
-            val exploreResult = runCatching { bridge.explore() }
-            val chartsResult = runCatching { bridge.listPage("FEmusic_charts", null) }
-
-            val explore = exploreResult.getOrNull()
-            val chartsPage = chartsResult.getOrNull()
-
-            if (explore == null && chartsPage == null) {
-                val msg = exploreResult.exceptionOrNull()?.message
-                    ?: chartsResult.exceptionOrNull()?.message
-                    ?: "Failed to load"
-                state = state.copy(loading = false, refreshing = false, error = msg)
-                return@launch
+        loadJob = viewModelScope.launch {
+            try {
+                val data = repo.load(force = isRefresh)
+                state = HomeState(
+                    loading = false,
+                    refreshing = false,
+                    charts = data.charts,
+                    newAlbums = data.newAlbums,
+                    newVideos = data.newVideos,
+                )
+            } catch (e: Throwable) {
+                // Keep existing rows on failure; only go full-error when empty.
+                if (state.charts.isEmpty() && state.newAlbums.isEmpty() && state.newVideos.isEmpty()) {
+                    state = state.copy(loading = false, refreshing = false, error = e.message ?: "Failed to load")
+                } else {
+                    state = state.copy(loading = false, refreshing = false, error = e.message ?: "Failed to load")
+                }
             }
+        }
+    }
 
-            val newAlbums = explore?.carousels?.find { it.title == "New albums & singles" }?.items.orEmpty()
-            val newVideos = explore?.carousels?.find { it.title == "New music videos" }?.items.orEmpty()
-            val trending = explore?.carousels?.find { it.title == "Trending" }?.items.orEmpty()
-            val chartsItems = chartsPage?.items?.takeIf { it.isNotEmpty() } ?: trending
-
-            state = HomeState(
-                loading = false,
-                refreshing = false,
-                charts = chartsItems,
-                newAlbums = newAlbums,
-                newVideos = newVideos,
+    /** Stale-cache revalidation that never touches loading/shimmer state. */
+    private fun refreshQuietly() {
+        if (loadJob?.isActive == true) return
+        loadJob = viewModelScope.launch {
+            val data = repo.refreshIfStale() ?: return@launch
+            state = state.copy(
+                charts = data.charts,
+                newAlbums = data.newAlbums,
+                newVideos = data.newVideos,
             )
         }
     }
@@ -97,7 +126,11 @@ fun HomeScreen(
     player: com.teamshryne.mediyo.feature.player.PlayerViewModel,
     vm: HomeVm = hiltViewModel()
 ) {
-    LaunchedEffect(Unit) { vm.load() }
+    // ViewModel loads in init from the singleton cache; this only covers the
+    // case where the entry was recreated with an empty state. It is a no-op
+    // when rows are already visible, so returning from another screen never
+    // triggers the shimmer/reload again.
+    LaunchedEffect(Unit) { vm.ensureLoaded() }
     val greeting = rememberGreeting()
     val s = vm.state
 
