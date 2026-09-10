@@ -10,12 +10,36 @@ android {
     namespace = "com.teamshryne.mediyo"
     compileSdk = 34
 
+    // Version comes from the release workflow (-PversionCode/-PversionName from
+    // the git tag, e.g. v1.2.3). Falls back to local defaults for dev builds.
+    val appVersionCode =
+        (project.findProperty("versionCode") as String?
+            ?: System.getenv("VERSION_CODE") ?: "1").toInt()
+    val appVersionName =
+        (project.findProperty("versionName") as String?
+            ?: System.getenv("VERSION_NAME") ?: "0.1.0") as String
+
+    // Release signing comes from env (CI decodes the keystore from secrets).
+    // When absent (local dev), release builds stay unsigned.
+    val keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
+
+    signingConfigs {
+        create("release") {
+            if (!keystorePath.isNullOrBlank() && file(keystorePath).exists()) {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
+
     defaultConfig {
         applicationId = "com.teamshryne.mediyo"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
@@ -26,8 +50,18 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            manifestPlaceholders["appName"] = "Mediyo"
+            if (!keystorePath.isNullOrBlank()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
-        debug { isDebuggable = true }
+        debug {
+            isDebuggable = true
+            // Installable side-by-side with the release APK.
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+            manifestPlaceholders["appName"] = "Mediyo Debug"
+        }
     }
 
     compileOptions {

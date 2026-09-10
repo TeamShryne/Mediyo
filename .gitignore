@@ -3,6 +3,8 @@ build
 app/build
 rust/target
 local.properties
+*.jks
+*.keystore
 *.iml
 .idea
 .DS_Store
