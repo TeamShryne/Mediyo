@@ -1,8 +1,7 @@
 name: Mediyo v0.5.0 Release
 
-# Production release workflow for v0.5.0.
-# Builds the same signed APK validated by release-v050-dry-run.yml,
-# generates the updater manifest + user-facing notes, then creates the GitHub Release.
+# Publishes the already-validated artifacts from the completed v0.5.0 dry run.
+# This workflow deliberately does NOT rebuild the APK.
 
 on:
   workflow_dispatch:
@@ -14,6 +13,7 @@ on:
         required: false
 
 permissions:
+  actions: read
   contents: write
 
 concurrency:
@@ -22,137 +22,62 @@ concurrency:
 
 env:
   VERSION: 0.5.0
-  VERSION_CODE: 5000
   TAG: v0.5.0
+  DRY_RUN_ID: "34693744527"
 
 jobs:
-  release:
+  publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Android SDK
-        uses: android-actions/setup-android@v4
-
-      - name: Install platform + build-tools
-        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
-
-      - name: Gradle cache
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 8.6
-          gradle-home-cache-cleanup: true
-
-      - name: Decode release keystore
+      - name: Download completed dry-run artifact
         env:
-          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          test -n "$KEYSTORE_B64" || { echo "::error::missing ANDROID_KEYSTORE_BASE64"; exit 1; }
-          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/mediyo-release.jks"
-          keytool -list -keystore "$RUNNER_TEMP/mediyo-release.jks" \
-            -storepass "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" 2>&1 | head -3
+          mkdir -p release
+          gh run download "$DRY_RUN_ID" \
+            --repo "${{ github.repository }}" \
+            --name mediyo-v0.5.0-release-dry-run \
+            --dir release
+          test -s release/mediyo-v0.5.0.apk
+          test -s release/mediyo-v0.5.0.apk.sha256
+          test -s release/update.json
+          test -s release/release-notes-v0.5.0.md
+          ls -lh release/
 
-      - name: Build signed release APK
+      - name: Validate artifact identity and updater URL
         run: |
           set -euo pipefail
-          chmod +x gradlew
-          ./gradlew --no-daemon assembleRelease --stacktrace \
-            -PversionCode="$VERSION_CODE" \
-            -PversionName="$VERSION"
-        env:
-          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/mediyo-release.jks
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-
-      - name: Verify signed APK and version
-        run: |
-          set -euo pipefail
-          BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/*/ | sort -V | tail -1)
-          APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
-          echo "APK=$APK"
-          "$BT/apksigner" verify --print-certs "$APK" | head -5
-          "$BT/apksigner" verify "$APK"
-          BADGING=$("$BT/aapt" dump badging "$APK" 2>/dev/null || true)
-          echo "$BADGING" | grep -E "^package:|launchable-activity|application-label:" | head -5
-          echo "$BADGING" | grep -q "package: name='com.teamshryne.mediyo'" \
-            || { echo "::error::unexpected package name"; exit 1; }
-          echo "$BADGING" | grep -q "versionCode='$VERSION_CODE'" \
-            || { echo "::error::unexpected versionCode"; exit 1; }
-          echo "$BADGING" | grep -q "versionName='$VERSION'" \
-            || { echo "::error::unexpected versionName"; exit 1; }
-          echo "$BADGING" | grep -q "application-label:'Mediyo'" \
-            || { echo "::error::unexpected app label"; exit 1; }
-
-      - name: Prepare release assets
-        id: assets
-        run: |
-          set -euo pipefail
-          APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
-          APK_NAME="mediyo-$TAG.apk"
-          cp "$APK" "$APK_NAME"
-          SHA=$(sha256sum "$APK_NAME" | cut -d' ' -f1)
-          echo "$SHA  $APK_NAME" > "$APK_NAME.sha256"
-          cat > update.json <<EOF
-          {
-            "package": "com.teamshryne.mediyo",
-            "version": "$VERSION",
-            "versionCode": $VERSION_CODE,
-            "apkName": "$APK_NAME",
-            "apkUrl": "https://github.com/${{ github.repository }}/releases/download/$TAG/$APK_NAME",
-            "sha256": "$SHA"
-          }
-          EOF
-          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
-          cat update.json
-          ls -lh "$APK_NAME" "$APK_NAME.sha256" update.json
-
-      - name: Generate user-friendly release notes
-        run: |
-          cat > release-notes-v0.5.0.md <<'EOF'
-          ## Mediyo 0.5.0
-
-          ### What's new
-          - **Home screen widgets:** Added player, mini-player, and playlist launcher widgets.
-          - **Faster widget controls:** Artwork caching and optimistic updates make play/pause, navigation, and like actions feel more immediate.
-          - **Responsive sizing:** Improved widget layouts across different home-screen sizes.
-          - **Service-driven updates:** Added the classic RemoteViews path for reliable player-state updates.
-          - **Widget polish:** Refined playback controls, icon geometry, and liked-heart rendering.
-
-          ### Upgrade
-          This release focuses on a new, more useful home-screen experience while keeping the existing in-app updater contract intact.
-
-          ### Release details
-          - Version: `0.5.0`
-          - Version code: `5000`
-          - Package: `com.teamshryne.mediyo`
-          EOF
-          cat release-notes-v0.5.0.md
+          APK_SHA=$(cut -d' ' -f1 release/mediyo-v0.5.0.apk.sha256)
+          ACTUAL_SHA=$(sha256sum release/mediyo-v0.5.0.apk | cut -d' ' -f1)
+          test "$APK_SHA" = "$ACTUAL_SHA"
+          grep -q '"package": "com.teamshryne.mediyo"' release/update.json
+          grep -q '"version": "0.5.0"' release/update.json
+          grep -q '"versionCode": 5000' release/update.json
+          grep -q 'mediyo-v0.5.0.apk' release/update.json
+          grep -q 'releases/download/v0.5.0/' release/update.json
+          echo "Validated SHA-256: $ACTUAL_SHA"
 
       - name: Create v0.5.0 tag
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+          if git ls-remote --exit-code --tags "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" "refs/tags/$TAG" >/dev/null 2>&1; then
             echo "::error::tag $TAG already exists; refusing to overwrite it"
             exit 1
           fi
+          git init release-repo
+          cd release-repo
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          git fetch --depth=1 origin main
+          git checkout --detach FETCH_HEAD
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -a "$TAG" -m "Mediyo $TAG"
           git push origin "$TAG"
 
-      - name: Create GitHub Release
+      - name: Create GitHub Release from validated artifacts
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -162,20 +87,21 @@ jobs:
             PRERELEASE_FLAG="--prerelease"
           fi
           gh release create "$TAG" \
+            --repo "${{ github.repository }}" \
             --title "Mediyo $TAG" \
-            --notes-file release-notes-v0.5.0.md \
+            --notes-file release/release-notes-v0.5.0.md \
             $PRERELEASE_FLAG \
-            "mediyo-$TAG.apk" \
-            "mediyo-$TAG.apk.sha256" \
-            update.json
+            release/mediyo-v0.5.0.apk \
+            release/mediyo-v0.5.0.apk.sha256 \
+            release/update.json
 
-      - name: Upload release artifacts to workflow run
+      - name: Upload published release bundle as CI artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mediyo-v0.5.0-release
+          name: mediyo-v0.5.0-release-published
           path: |
-            mediyo-v0.5.0.apk
-            mediyo-v0.5.0.apk.sha256
-            update.json
-            release-notes-v0.5.0.md
+            release/mediyo-v0.5.0.apk
+            release/mediyo-v0.5.0.apk.sha256
+            release/update.json
+            release/release-notes-v0.5.0.md
           if-no-files-found: error
