@@ -54,6 +54,8 @@ import javax.inject.Inject
 class SearchVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel() {
     var query by mutableStateOf("")
     var selectedLabel by mutableStateOf("All")
+    /** Active scope chip, identified by its params. Null = All (unscoped). */
+    var selectedFilter by mutableStateOf<FfiSearchFilter?>(null)
     var loading by mutableStateOf(false)
     var loadingMore by mutableStateOf(false)
     var results by mutableStateOf<List<FfiSearchResult>>(emptyList())
@@ -70,6 +72,9 @@ class SearchVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel
         val q = query.trim()
         if (q.isEmpty()) return
         lastQueryInternal = q
+        // A chip without params behaves exactly like All — normalize it so
+        // the All chip stays selected instead of showing nothing selected.
+        selectedFilter = filter?.takeIf { !it.params.isNullOrBlank() }
         selectedLabel = filter?.label ?: "All"
         loading = true; loadingMore = false; hasSearched = true; error = null; continuation = null
         viewModelScope.launch {
@@ -80,7 +85,9 @@ class SearchVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel
                     bridge.search(q)
                 }
                 results = res.results
-                filters = res.filters
+                // Filtered responses don't always echo the chip cloud — never
+                // let an empty chip list wipe the chips the user just tapped.
+                if (res.filters.isNotEmpty()) filters = res.filters
                 continuation = res.continuation.takeIf { res.results.isNotEmpty() }
             } catch (e: Throwable) {
                 error = e.message ?: "Search failed"
@@ -184,16 +191,17 @@ fun SearchScreen(
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     item {
                         FilterChip(
-                            selected = vm.selectedLabel == "All",
-                            onClick = { if (vm.selectedLabel != "All") scope.launch { vm.runSearch(null) } },
+                            selected = vm.selectedFilter == null,
+                            onClick = { if (vm.selectedFilter != null) scope.launch { vm.runSearch(null) } },
                             label = { Text("All") },
                             shape = RoundedCornerShape(20.dp)
                         )
                     }
                     items(vm.filters, key = { it.label }) { f ->
+                        val isSel = vm.selectedFilter?.let { it.label == f.label && it.params == f.params } == true
                         FilterChip(
-                            selected = vm.selectedLabel == f.label,
-                            onClick = { if (vm.selectedLabel != f.label) scope.launch { vm.runSearch(f) } },
+                            selected = isSel,
+                            onClick = { if (!isSel) scope.launch { vm.runSearch(f) } },
                             label = { Text(f.label.replaceFirstChar { it.uppercase() }) },
                             shape = RoundedCornerShape(20.dp)
                         )

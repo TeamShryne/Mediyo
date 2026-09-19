@@ -3,6 +3,7 @@ package com.teamshryne.mediyo.data.repository
 import com.teamshryne.mediyo.data.local.HistoryDao
 import com.teamshryne.mediyo.data.local.HistoryEntryEntity
 import com.teamshryne.mediyo.domain.model.Track
+import com.teamshryne.mediyo.domain.model.dbArtistIds
 import com.teamshryne.mediyo.domain.repository.HistoryRepository
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
@@ -22,8 +23,12 @@ class HistoryRepositoryImpl @Inject constructor(
                 existing.copy(
                     title = track.title,
                     artist = track.artists.joinToString(", "),
+                    artistIds = track.dbArtistIds() ?: existing.artistIds,
                     artworkUrl = track.artworkUrl ?: existing.artworkUrl,
                     album = track.album ?: existing.album,
+                    albumId = track.albumId?.takeIf { it.isNotBlank() } ?: existing.albumId,
+                    channelName = track.channelName?.takeIf { it.isNotBlank() } ?: existing.channelName,
+                    channelId = track.channelId?.takeIf { it.isNotBlank() } ?: existing.channelId,
                     duration = track.duration ?: existing.duration,
                     lastPlayedAt = System.currentTimeMillis(),
                     playCount = existing.playCount + 1
@@ -35,8 +40,12 @@ class HistoryRepositoryImpl @Inject constructor(
                     videoId = vid,
                     title = track.title,
                     artist = track.artists.joinToString(", "),
+                    artistIds = track.dbArtistIds(),
                     artworkUrl = track.artworkUrl,
                     album = track.album,
+                    albumId = track.albumId?.takeIf { it.isNotBlank() },
+                    channelName = track.channelName?.takeIf { it.isNotBlank() },
+                    channelId = track.channelId?.takeIf { it.isNotBlank() },
                     duration = track.duration,
                     category = track.category,
                     lastPlayedAt = System.currentTimeMillis(),

@@ -5,6 +5,7 @@ import com.teamshryne.mediyo.data.local.LocalPlaylistEntryDao
 import com.teamshryne.mediyo.data.local.LocalPlaylistEntity
 import com.teamshryne.mediyo.data.local.LocalPlaylistEntryEntity
 import com.teamshryne.mediyo.domain.model.Track
+import com.teamshryne.mediyo.domain.model.dbArtistIds
 import com.teamshryne.mediyo.domain.model.newLocalId
 import com.teamshryne.mediyo.domain.repository.PlaylistRepository
 import kotlinx.coroutines.flow.Flow
@@ -50,8 +51,12 @@ class LocalPlaylistRepositoryImpl @Inject constructor(
             trackVideoId = vid,
             title = track.title,
             artist = track.artists.joinToString(", "),
+            artistIds = track.dbArtistIds(),
             artworkUrl = track.artworkUrl,
             album = track.album,
+            albumId = track.albumId?.takeIf { it.isNotBlank() },
+            channelName = track.channelName?.takeIf { it.isNotBlank() },
+            channelId = track.channelId?.takeIf { it.isNotBlank() },
             duration = track.duration,
             category = track.category,
             position = pos

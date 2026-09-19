@@ -9,6 +9,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.exoplayer.ExoPlayer
 import com.teamshryne.mediyo.domain.model.PlayOrigin
 import com.teamshryne.mediyo.domain.model.Track
+import com.teamshryne.mediyo.domain.model.dbIdList
 import com.teamshryne.mediyo.domain.model.upscaledThumbUrl
 import com.teamshryne.mediyo.domain.repository.LikeRepository
 import com.teamshryne.mediyo.domain.repository.PlaylistRepository
@@ -202,7 +203,9 @@ class WidgetPlaybackController @Inject constructor(
                 Track(
                     videoId = it.trackVideoId, title = it.title,
                     artists = if (it.artist.isBlank()) emptyList() else it.artist.split(",").map { a -> a.trim() },
-                    artworkUrl = it.artworkUrl.upscaledThumbUrl(), album = it.album,
+                    artistIds = it.artistIds.dbIdList(),
+                    artworkUrl = it.artworkUrl.upscaledThumbUrl(), album = it.album, albumId = it.albumId,
+                    channelName = it.channelName, channelId = it.channelId,
                     duration = it.duration, category = it.category
                 )
             }.filter { it.videoId != null }
@@ -233,7 +236,9 @@ class WidgetPlaybackController @Inject constructor(
                 Track(
                     videoId = it.videoId, title = it.title,
                     artists = if (it.artist.isBlank()) emptyList() else it.artist.split(",").map { a -> a.trim() },
-                    artworkUrl = it.artworkUrl.upscaledThumbUrl(), album = it.album,
+                    artistIds = it.artistIds.dbIdList(),
+                    artworkUrl = it.artworkUrl.upscaledThumbUrl(), album = it.album, albumId = it.albumId,
+                    channelName = it.channelName, channelId = it.channelId,
                     duration = it.duration, category = it.category
                 )
             }.filter { it.videoId != null }.shuffled()

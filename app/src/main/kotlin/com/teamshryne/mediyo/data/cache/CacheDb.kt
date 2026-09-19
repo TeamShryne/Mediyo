@@ -39,7 +39,8 @@ data class CacheStatRow(val type: String, val cnt: Long, val bytes: Long?)
 
 @Database(
     entities = [KvCache::class, LocalPlaylistEntity::class, LocalPlaylistEntryEntity::class, LikedTrackEntity::class, HistoryEntryEntity::class, FollowedArtistEntity::class, SavedCollectionEntity::class],
-    version = 4,
+    version = 5,
+    autoMigrations = [AutoMigration(from = 4, to = 5)],
     exportSchema = false
 )
 abstract class MediyoDb : RoomDatabase() {
