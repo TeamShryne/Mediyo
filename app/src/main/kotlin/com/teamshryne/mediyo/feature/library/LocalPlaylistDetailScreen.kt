@@ -1,26 +1,21 @@
 package com.teamshryne.mediyo.feature.library
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import coil.compose.AsyncImage
+import com.teamshryne.mediyo.core.design.CollectionHero
+import com.teamshryne.mediyo.core.design.LocalTrackRow
 import com.teamshryne.mediyo.core.design.TrackOverflowIcon
 import com.teamshryne.mediyo.core.design.TrackMenuSheet
 import com.teamshryne.mediyo.data.local.LocalPlaylistEntryEntity
@@ -79,58 +74,60 @@ fun LocalPlaylistDetailScreen(
     val menuScope = rememberCoroutineScope()
     val menuVm: com.teamshryne.mediyo.core.design.MediaMenuVm = hiltViewModel()
 
-    Column(Modifier.fillMaxSize()) {
-        // header
-        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { nav?.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
-            Text(playlist?.title ?: vm.title.ifEmpty { "Playlist" }, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-            IconButton(onClick = { showDeleteConfirm = true }) { Icon(Icons.Filled.Delete, null) }
+    val title = playlist?.title ?: vm.title.ifEmpty { "Playlist" }
+    val description = playlist?.description
+    val tracks = remember(entries) { entries.map { it.toTrack() } }
+    val heroThumb = remember(entries) { entries.firstOrNull()?.artworkUrl?.upscaledThumbUrl() }
+    val listState = rememberLazyListState()
+
+    fun playAll(shuffled: Boolean) {
+        if (tracks.isEmpty()) return
+        val ordered = if (shuffled) tracks.shuffled() else tracks
+        player?.playTracks(ordered, 0, PlayOrigin.LocalPlaylist(playlistId, title))
+    }
+
+    LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+        item(key = "local_hero") {
+            CollectionHero(
+                title = title,
+                subtitle = description?.takeIf { it.isNotBlank() } ?: "Local playlist",
+                thumbUrl = heroThumb,
+                countText = "${entries.size} songs",
+                fallbackIcon = Icons.Filled.PlaylistPlay,
+                onBack = { nav?.popBackStack() },
+                topEnd = {
+                    IconButton(onClick = { showDeleteConfirm = true }) {
+                        Icon(Icons.Filled.Delete, contentDescription = "Delete playlist", tint = MaterialTheme.colorScheme.onSurface)
+                    }
+                },
+                onPlay = { playAll(false) },
+                onShuffle = { playAll(true) }
+            )
         }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("${entries.size} songs", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledIconButton(onClick = {
-                    val tracks = entries.map { it.toTrack() }
-                    if (tracks.isNotEmpty()) player?.playTracks(tracks, 0, PlayOrigin.LocalPlaylist(playlistId, playlist?.title ?: "Playlist"))
-                }, shape = CircleShape, modifier = Modifier.size(48.dp)) { Icon(Icons.Filled.PlayArrow, null) }
-                FilledTonalIconButton(onClick = {
-                    val tracks = entries.map { it.toTrack() }.shuffled()
-                    if (tracks.isNotEmpty()) player?.playTracks(tracks, 0, PlayOrigin.LocalPlaylist(playlistId, playlist?.title ?: ""))
-                }, shape = CircleShape, modifier = Modifier.size(48.dp)) { Icon(Icons.Filled.Shuffle, null) }
-            }
-        }
-        HorizontalDivider()
         if (entries.isEmpty()) {
-            Box(Modifier.fillMaxWidth().weight(1f).padding(32.dp), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Icon(Icons.Filled.PlaylistPlay, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("No songs yet", style = MaterialTheme.typography.titleMedium)
-                    Text("Add songs from any track's ••• menu", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            item(key = "local_empty") {
+                Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Icon(Icons.Filled.PlaylistPlay, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("No songs yet", style = MaterialTheme.typography.titleMedium)
+                        Text("Add songs from any track's ••• menu", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
         } else {
-            LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(bottom = 24.dp)) {
-                itemsIndexed(entries, key = { _, e -> e.id }) { idx, e ->
-                    val isPlaying = playingId.videoId == e.trackVideoId
-                    Row(
-                        Modifier.fillMaxWidth().clickable {
-                            val tracks = entries.map { it.toTrack() }
-                            player?.playTracks(tracks, idx, PlayOrigin.LocalPlaylist(playlistId, playlist?.title ?: ""))
-                        }.padding(horizontal = 16.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("${idx + 1}", style = MaterialTheme.typography.labelMedium, color = if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(28.dp))
-                        AsyncImage(model = e.artworkUrl.upscaledThumbUrl(), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest))
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(e.title, style = MaterialTheme.typography.bodyMedium, color = if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface, maxLines = 1)
-                            Text(e.artist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                        }
-                        if (isPlaying) Icon(Icons.Filled.GraphicEq, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+            itemsIndexed(tracks, key = { idx, _ -> entries.getOrNull(idx)?.id ?: "track_$idx" }) { idx, t ->
+                LocalTrackRow(
+                    track = t,
+                    isPlaying = playingId.videoId == t.videoId,
+                    number = idx + 1,
+                    showArtwork = true,
+                    trailing = {
                         TrackOverflowIcon(onClick = {
-                            menuTrack = e.toTrack(); menuEntryId = e.id
+                            menuTrack = t; menuEntryId = entries.getOrNull(idx)?.id
                         })
                     }
+                ) {
+                    player?.playTracks(tracks, idx, PlayOrigin.LocalPlaylist(playlistId, title))
                 }
             }
         }
