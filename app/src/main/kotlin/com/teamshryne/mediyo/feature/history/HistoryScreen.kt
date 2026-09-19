@@ -1,25 +1,21 @@
 package com.teamshryne.mediyo.feature.history
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import coil.compose.AsyncImage
+import com.teamshryne.mediyo.core.design.CollectionHero
+import com.teamshryne.mediyo.core.design.LocalTrackRow
 import com.teamshryne.mediyo.core.design.TrackOverflowIcon
 import com.teamshryne.mediyo.core.design.TrackMenuSheet
 import com.teamshryne.mediyo.data.local.HistoryEntryEntity
@@ -63,49 +59,67 @@ fun HistoryScreen(
     val menuScope = rememberCoroutineScope()
     val menuVm: com.teamshryne.mediyo.core.design.MediaMenuVm = hiltViewModel()
 
-    Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { nav?.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
-            Text("History", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-            if (history.isNotEmpty()) TextButton(onClick = { showClear = true }) { Text("Clear") }
+    val grouped = remember(history) { groupByDate(history) }
+    val heroThumb = remember(history) { history.firstOrNull()?.artworkUrl?.upscaledThumbUrl() }
+    val allTracks = remember(history) { history.map { it.toTrack() } }
+    val listState = rememberLazyListState()
+
+    fun playAll(shuffled: Boolean) {
+        if (allTracks.isEmpty()) return
+        val ordered = if (shuffled) allTracks.shuffled() else allTracks
+        player?.playTracks(ordered, 0, PlayOrigin.History("All"))
+    }
+
+    LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+        item(key = "history_hero") {
+            CollectionHero(
+                title = "History",
+                subtitle = "Auto playlist",
+                thumbUrl = heroThumb,
+                countText = "${history.size} plays",
+                fallbackIcon = Icons.Filled.History,
+                onBack = { nav?.popBackStack() },
+                topEnd = {
+                    if (history.isNotEmpty()) {
+                        IconButton(onClick = { showClear = true }) {
+                            Icon(
+                                Icons.Filled.DeleteSweep,
+                                contentDescription = "Clear history",
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                },
+                onPlay = { playAll(false) },
+                onShuffle = { playAll(true) }
+            )
         }
-        Text("${history.size} plays", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp))
-        HorizontalDivider(Modifier.padding(vertical = 8.dp))
         if (history.isEmpty()) {
-            Box(Modifier.fillMaxWidth().weight(1f).padding(32.dp), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Icon(Icons.Filled.History, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("No history yet", style = MaterialTheme.typography.titleMedium)
-                    Text("Songs you play will appear here", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            item(key = "history_empty") {
+                Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Icon(Icons.Filled.History, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("No history yet", style = MaterialTheme.typography.titleMedium)
+                        Text("Songs you play will appear here", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
         } else {
-            // group by date
-            val grouped = remember(history) { groupByDate(history) }
-            LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(bottom = 24.dp)) {
-                grouped.forEach { (label, items) ->
-                    item(key = "header_$label") {
-                        Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-                    }
-                    itemsIndexed(items, key = { _, e -> e.videoId + e.lastPlayedAt }) { idx, e ->
-                        val isPlaying = playingId == e.videoId
-                        Row(
-                            Modifier.fillMaxWidth().clickable {
-                                val tracks = items.map { it.toTrack() }
-                                val pos = items.indexOf(e)
-                                player?.playTracks(tracks, pos, PlayOrigin.History(label))
-                            }.padding(horizontal = 16.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            AsyncImage(model = e.artworkUrl.upscaledThumbUrl(), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest))
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(e.title, style = MaterialTheme.typography.bodyMedium, color = if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface, maxLines = 1)
-                                Text("${e.artist} • ${e.playCount} plays", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                            }
-                            if (isPlaying) Icon(Icons.Filled.GraphicEq, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-                            TrackOverflowIcon(onClick = { menuTrack = e.toTrack() })
-                        }
+            grouped.forEach { (label, items) ->
+                item(key = "header_$label") {
+                    Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+                }
+                itemsIndexed(items, key = { _, e -> e.videoId + e.lastPlayedAt }) { _, e ->
+                    val track = remember(e.videoId, e.lastPlayedAt) { e.toTrack() }
+                    LocalTrackRow(
+                        track = track,
+                        isPlaying = playingId == e.videoId,
+                        showArtwork = true,
+                        trailing = { TrackOverflowIcon(onClick = { menuTrack = track }) }
+                    ) {
+                        val sectionTracks = items.map { it.toTrack() }
+                        val pos = items.indexOf(e).coerceAtLeast(0)
+                        player?.playTracks(sectionTracks, pos, PlayOrigin.History(label))
                     }
                 }
             }
