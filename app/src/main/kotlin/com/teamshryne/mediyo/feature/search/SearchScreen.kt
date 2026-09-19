@@ -1,5 +1,6 @@
 package com.teamshryne.mediyo.feature.search
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -108,6 +109,7 @@ class SearchVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SearchScreen(
     nav: androidx.navigation.NavController,
@@ -141,12 +143,27 @@ fun SearchScreen(
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         item(key = "search_header") {
-            Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text(
-                    "Search",
-                    style = MaterialTheme.typography.displaySmall,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+            Text(
+                "Search",
+                style = MaterialTheme.typography.displaySmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(horizontal = 20.dp)
+            )
+        }
+
+        // Search field + filter chips dock at the top once the big "Search"
+        // title scrolls away (framework stickyHeader — no manual scroll math,
+        // so no flicker or half-stuck states). Scrolling back to the absolute
+        // top re-seats the title above, restoring the original header.
+        stickyHeader(key = "search_bar") {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.background)
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
                 OutlinedTextField(
                     value = vm.query,
                     onValueChange = { vm.query = it },

@@ -1,7 +1,6 @@
 package com.teamshryne.mediyo.core.design
 
 import android.app.Activity
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -29,11 +28,6 @@ object MediyoColors {
     val TextPrimary = Color(0xFFF7F7F8)
     val TextSecondary = Color(0xFFA6A6AE)
     val TextTertiary = Color(0xFF6E6E78)
-
-    val LightBg0 = Color(0xFFFAFAFC)
-    val LightBg1 = Color(0xFFFFFFFF)
-    val LightBg2 = Color(0xFFF0F0F4)
-    val LightBg3 = Color(0xFFE4E4EA)
 }
 
 private val DarkScheme = darkColorScheme(
@@ -60,31 +54,6 @@ private val DarkScheme = darkColorScheme(
     error = Color(0xFFFF5370),
     errorContainer = Color(0xFF3A1019),
     onErrorContainer = Color(0xFFFFC1CB)
-)
-
-private val LightScheme = lightColorScheme(
-    primary = MediyoColors.AccentDim,
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFFFE1E9),
-    onPrimaryContainer = Color(0xFF5C0E28),
-    secondary = Color(0xFF006A93),
-    tertiary = Color(0xFF8A5A00),
-    background = MediyoColors.LightBg0,
-    onBackground = Color(0xFF17171A),
-    surface = MediyoColors.LightBg0,
-    onSurface = Color(0xFF17171A),
-    surfaceVariant = MediyoColors.LightBg2,
-    onSurfaceVariant = Color(0xFF5D5D66),
-    surfaceContainerLowest = Color.White,
-    surfaceContainerLow = MediyoColors.LightBg1,
-    surfaceContainer = MediyoColors.LightBg1,
-    surfaceContainerHigh = MediyoColors.LightBg2,
-    surfaceContainerHighest = MediyoColors.LightBg3,
-    outline = MediyoColors.LightBg3,
-    outlineVariant = MediyoColors.LightBg2,
-    error = Color(0xFFBA1A1A),
-    errorContainer = Color(0xFFFFDAD6),
-    onErrorContainer = Color(0xFF410002)
 )
 
 // ── Typography: big, bold, tightly tracked (Spotify / Apple Music feel) ──────
@@ -151,20 +120,21 @@ private val MediyoShapes = Shapes(
     extraLarge = RoundedCornerShape(28.dp)
 )
 
+// Mediyo is dark-only by design: the dark scheme is always applied,
+// regardless of the system light/dark setting.
 @Composable
-fun MediyoTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
-    val scheme = if (dark) DarkScheme else LightScheme
+fun MediyoTheme(content: @Composable () -> Unit) {
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
             WindowCompat.setDecorFitsSystemWindows(window, false)
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !dark
-            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !dark
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
+            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = false
         }
     }
     MaterialTheme(
-        colorScheme = scheme,
+        colorScheme = DarkScheme,
         typography = MediyoTypography,
         shapes = MediyoShapes,
         content = content
