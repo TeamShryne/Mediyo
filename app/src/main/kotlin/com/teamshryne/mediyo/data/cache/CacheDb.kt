@@ -1,6 +1,8 @@
 package com.teamshryne.mediyo.data.cache
 
 import androidx.room.*
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.teamshryne.mediyo.data.local.FollowedArtistEntity
 import com.teamshryne.mediyo.data.local.HistoryDao
 import com.teamshryne.mediyo.data.local.HistoryEntryEntity
@@ -12,7 +14,6 @@ import com.teamshryne.mediyo.data.local.LocalPlaylistEntity
 import com.teamshryne.mediyo.data.local.LocalPlaylistEntryEntity
 import com.teamshryne.mediyo.data.local.SavedCollectionDao
 import com.teamshryne.mediyo.data.local.SavedCollectionEntity
-
 @Entity(tableName = "kv_cache")
 data class KvCache(
     @PrimaryKey val key: String,
@@ -40,7 +41,6 @@ data class CacheStatRow(val type: String, val cnt: Long, val bytes: Long?)
 @Database(
     entities = [KvCache::class, LocalPlaylistEntity::class, LocalPlaylistEntryEntity::class, LikedTrackEntity::class, HistoryEntryEntity::class, FollowedArtistEntity::class, SavedCollectionEntity::class],
     version = 5,
-    autoMigrations = [AutoMigration(from = 4, to = 5)],
     exportSchema = false
 )
 abstract class MediyoDb : RoomDatabase() {
@@ -54,3 +54,18 @@ abstract class MediyoDb : RoomDatabase() {
 }
 
 data class CacheStats(val totalBytes: Long, val byType: Map<String, Pair<Long,Long>>)
+
+/**
+ * v4 → v5: artist/channel identity columns on the three local track tables.
+ * All nullable, so existing rows read back as NULL (old fallback behavior).
+ */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        for (table in listOf("local_playlist_entries", "liked_tracks", "history_entries")) {
+            db.execSQL("ALTER TABLE $table ADD COLUMN artistIds TEXT")
+            db.execSQL("ALTER TABLE $table ADD COLUMN albumId TEXT")
+            db.execSQL("ALTER TABLE $table ADD COLUMN channelName TEXT")
+            db.execSQL("ALTER TABLE $table ADD COLUMN channelId TEXT")
+        }
+    }
+}

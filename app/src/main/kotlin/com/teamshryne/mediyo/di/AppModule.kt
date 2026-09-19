@@ -12,6 +12,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.room.Room
 import com.teamshryne.mediyo.data.cache.MediyoDb
+import com.teamshryne.mediyo.data.cache.MIGRATION_4_5
 import com.teamshryne.mediyo.data.local.HistoryDao
 import com.teamshryne.mediyo.data.local.LikedTrackDao
 import com.teamshryne.mediyo.data.local.LocalPlaylistDao
@@ -38,6 +39,7 @@ object AppModule {
     @Singleton
     fun provideDb(@ApplicationContext ctx: Context): MediyoDb =
         Room.databaseBuilder(ctx, MediyoDb::class.java, "mediyo.db")
+            .addMigrations(MIGRATION_4_5)
             .fallbackToDestructiveMigration()
             .build()
 
