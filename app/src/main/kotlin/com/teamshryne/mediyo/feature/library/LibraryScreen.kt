@@ -1,5 +1,6 @@
 package com.teamshryne.mediyo.feature.library
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -265,6 +266,7 @@ class LibraryVm @Inject constructor(
 
 // ── Screen: YouTube Music-style, minimal, local-only ─────────────────────────
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LibraryScreen(
     nav: androidx.navigation.NavController? = null,
@@ -342,11 +344,16 @@ fun LibraryScreen(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 24.dp)
     ) {
-        // Header — title + summary + actions (YTM: compact top bar).
-        // Outer Scaffold padding already clears the status bar, so only 4dp
-        // here — the old 12dp stacked into a dead gap under the status bar.
-        item(key = "header") {
-            Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+        // Header — title + summary + actions + filter chips, docked at the top
+        // at all times via stickyHeader (same pattern as Search). Outer
+        // Scaffold padding already clears the status bar, so only 4dp here.
+        stickyHeader(key = "header") {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.background)
+                    .padding(top = 4.dp)
+            ) {
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                     verticalAlignment = Alignment.CenterVertically
