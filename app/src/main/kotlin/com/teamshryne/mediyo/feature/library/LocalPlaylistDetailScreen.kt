@@ -21,6 +21,7 @@ import com.teamshryne.mediyo.core.design.TrackMenuSheet
 import com.teamshryne.mediyo.data.local.LocalPlaylistEntryEntity
 import com.teamshryne.mediyo.domain.model.PlayOrigin
 import com.teamshryne.mediyo.domain.model.Track
+import com.teamshryne.mediyo.domain.model.dbIdList
 import com.teamshryne.mediyo.domain.model.upscaledThumbUrl
 import com.teamshryne.mediyo.domain.repository.LikeRepository
 import com.teamshryne.mediyo.domain.repository.PlaylistRepository
@@ -143,6 +144,8 @@ fun LocalPlaylistDetailScreen(
             onAddToPlaylist = { /* already in playlist, could add to another */ },
             onPlayNext = { player?.addNext(t) },
             onAddToQueue = { player?.addToQueue(t) },
+            onGoToAlbum = t.albumId?.takeIf { it.isNotBlank() }?.let { { nav?.navigate("album/$it") } },
+            onOpenChannel = t.channelId?.takeIf { it.isNotBlank() }?.let { { nav?.navigate("list/$it") } },
             onShowArtist = { name, id ->
                 menuScope.launch { (id?.takeIf { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name))?.let { nav?.navigate("artist/$it") } }
             },
@@ -165,5 +168,8 @@ fun LocalPlaylistDetailScreen(
 private fun LocalPlaylistEntryEntity.toTrack() = Track(
     videoId = trackVideoId, browseId = null, playlistId = null,
     title = title, artists = if (artist.isBlank()) emptyList() else artist.split(",").map { it.trim() },
-    album = album, artworkUrl = artworkUrl.upscaledThumbUrl(), duration = duration, category = category
+    artistIds = artistIds.dbIdList(),
+    album = album, albumId = albumId,
+    channelName = channelName, channelId = channelId,
+    artworkUrl = artworkUrl.upscaledThumbUrl(), duration = duration, category = category
 )

@@ -3,6 +3,7 @@ package com.teamshryne.mediyo.data.repository
 import com.teamshryne.mediyo.data.local.LikedTrackDao
 import com.teamshryne.mediyo.data.local.LikedTrackEntity
 import com.teamshryne.mediyo.domain.model.Track
+import com.teamshryne.mediyo.domain.model.dbArtistIds
 import com.teamshryne.mediyo.domain.repository.LikeRepository
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
@@ -27,8 +28,12 @@ class LikeRepositoryImpl @Inject constructor(
                     videoId = vid,
                     title = track.title,
                     artist = track.artists.joinToString(", "),
+                    artistIds = track.dbArtistIds(),
                     artworkUrl = track.artworkUrl,
                     album = track.album,
+                    albumId = track.albumId?.takeIf { it.isNotBlank() },
+                    channelName = track.channelName?.takeIf { it.isNotBlank() },
+                    channelId = track.channelId?.takeIf { it.isNotBlank() },
                     duration = track.duration,
                     category = track.category
                 )
@@ -41,7 +46,12 @@ class LikeRepositoryImpl @Inject constructor(
         dao.upsert(
             LikedTrackEntity(
                 videoId = vid, title = track.title, artist = track.artists.joinToString(", "),
-                artworkUrl = track.artworkUrl, album = track.album, duration = track.duration, category = track.category
+                artistIds = track.dbArtistIds(),
+                artworkUrl = track.artworkUrl, album = track.album,
+                albumId = track.albumId?.takeIf { it.isNotBlank() },
+                channelName = track.channelName?.takeIf { it.isNotBlank() },
+                channelId = track.channelId?.takeIf { it.isNotBlank() },
+                duration = track.duration, category = track.category
             )
         )
     }

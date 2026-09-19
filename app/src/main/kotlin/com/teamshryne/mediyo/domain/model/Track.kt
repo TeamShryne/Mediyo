@@ -85,3 +85,15 @@ fun Track.toFfiSearchResult(): FfiSearchResult = FfiSearchResult(
 )
 
 fun newLocalId(): String = UUID.randomUUID().toString()
+
+/**
+ * Artist browseIds packed for Room columns (comma-joined; browseIds never
+ * contain commas). Null when the track carries no usable ids, so pre-v5
+ * rows and id-less tracks read back identically.
+ */
+fun Track.dbArtistIds(): String? =
+    artistIds.map { it.trim() }.filter { it.isNotEmpty() }.joinToString(",").ifEmpty { null }
+
+/** Inverse of [Track.dbArtistIds]. */
+fun String?.dbIdList(): List<String> =
+    this?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()

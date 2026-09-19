@@ -21,6 +21,7 @@ import com.teamshryne.mediyo.core.design.TrackMenuSheet
 import com.teamshryne.mediyo.data.local.LikedTrackEntity
 import com.teamshryne.mediyo.domain.model.PlayOrigin
 import com.teamshryne.mediyo.domain.model.Track
+import com.teamshryne.mediyo.domain.model.dbIdList
 import com.teamshryne.mediyo.domain.model.upscaledThumbUrl
 import com.teamshryne.mediyo.domain.repository.LikeRepository
 import com.teamshryne.mediyo.feature.playlist.AddToPlaylistSheet
@@ -118,6 +119,8 @@ fun LikedScreen(
             onAddToPlaylist = { showAddSheet = t; menuTrack = null },
             onPlayNext = { player?.addNext(t) },
             onAddToQueue = { player?.addToQueue(t) },
+            onGoToAlbum = t.albumId?.takeIf { it.isNotBlank() }?.let { { nav?.navigate("album/$it") } },
+            onOpenChannel = t.channelId?.takeIf { it.isNotBlank() }?.let { { nav?.navigate("list/$it") } },
             onShowArtist = { name, id ->
                 menuScope.launch { (id?.takeIf { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name))?.let { nav?.navigate("artist/$it") } }
             },
@@ -132,4 +135,11 @@ fun LikedScreen(
     }
 }
 
-private fun LikedTrackEntity.toTrack() = Track(videoId = videoId, title = title, artists = if (artist.isBlank()) emptyList() else artist.split(",").map { it.trim() }, artworkUrl = artworkUrl.upscaledThumbUrl(), album = album, duration = duration, category = category)
+private fun LikedTrackEntity.toTrack() = Track(
+    videoId = videoId, title = title,
+    artists = if (artist.isBlank()) emptyList() else artist.split(",").map { it.trim() },
+    artistIds = artistIds.dbIdList(),
+    artworkUrl = artworkUrl.upscaledThumbUrl(), album = album, albumId = albumId,
+    channelName = channelName, channelId = channelId,
+    duration = duration, category = category
+)

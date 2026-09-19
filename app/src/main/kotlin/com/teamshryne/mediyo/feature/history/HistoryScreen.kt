@@ -21,6 +21,7 @@ import com.teamshryne.mediyo.core.design.TrackMenuSheet
 import com.teamshryne.mediyo.data.local.HistoryEntryEntity
 import com.teamshryne.mediyo.domain.model.PlayOrigin
 import com.teamshryne.mediyo.domain.model.Track
+import com.teamshryne.mediyo.domain.model.dbIdList
 import com.teamshryne.mediyo.domain.model.upscaledThumbUrl
 import com.teamshryne.mediyo.domain.repository.HistoryRepository
 import com.teamshryne.mediyo.domain.repository.LikeRepository
@@ -136,6 +137,8 @@ fun HistoryScreen(
             onAddToPlaylist = { showAddSheet = t; menuTrack = null },
             onPlayNext = { player?.addNext(t) },
             onAddToQueue = { player?.addToQueue(t) },
+            onGoToAlbum = t.albumId?.takeIf { it.isNotBlank() }?.let { { nav?.navigate("album/$it") } },
+            onOpenChannel = t.channelId?.takeIf { it.isNotBlank() }?.let { { nav?.navigate("list/$it") } },
             onShowArtist = { name, id ->
                 menuScope.launch { (id?.takeIf { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name))?.let { nav?.navigate("artist/$it") } }
             },
@@ -147,7 +150,14 @@ fun HistoryScreen(
     if (showClear) AlertDialog(onDismissRequest = { showClear = false }, title = { Text("Clear history?") }, confirmButton = { Button(onClick = { vm.clearAll(); showClear = false }) { Text("Clear") } }, dismissButton = { TextButton(onClick = { showClear = false }) { Text("Cancel") } })
 }
 
-private fun HistoryEntryEntity.toTrack() = Track(videoId = videoId, title = title, artists = if (artist.isBlank()) emptyList() else artist.split(",").map { it.trim() }, artworkUrl = artworkUrl.upscaledThumbUrl(), album = album, duration = duration, category = category)
+private fun HistoryEntryEntity.toTrack() = Track(
+    videoId = videoId, title = title,
+    artists = if (artist.isBlank()) emptyList() else artist.split(",").map { it.trim() },
+    artistIds = artistIds.dbIdList(),
+    artworkUrl = artworkUrl.upscaledThumbUrl(), album = album, albumId = albumId,
+    channelName = channelName, channelId = channelId,
+    duration = duration, category = category
+)
 
 private fun groupByDate(list: List<HistoryEntryEntity>): List<Pair<String, List<HistoryEntryEntity>>> {
     val now = Calendar.getInstance()
