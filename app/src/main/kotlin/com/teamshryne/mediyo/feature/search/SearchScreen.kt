@@ -87,7 +87,11 @@ class SearchVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel
                 results = res.results
                 // Filtered responses don't always echo the chip cloud — never
                 // let an empty chip list wipe the chips the user just tapped.
-                if (res.filters.isNotEmpty()) filters = res.filters
+                // They also echo a leading param-less "clear filter" chip with
+                // an empty label (acts exactly like All); drop blank labels
+                // so no empty chip is rendered next to the hardcoded All chip.
+                val clean = res.filters.filter { it.label.isNotBlank() }
+                if (clean.isNotEmpty()) filters = clean
                 continuation = res.continuation.takeIf { res.results.isNotEmpty() }
             } catch (e: Throwable) {
                 error = e.message ?: "Search failed"
@@ -197,7 +201,7 @@ fun SearchScreen(
                             shape = RoundedCornerShape(20.dp)
                         )
                     }
-                    items(vm.filters, key = { it.label }) { f ->
+                    items(vm.filters, key = { it.label + "|" + (it.params ?: "") }) { f ->
                         val isSel = vm.selectedFilter?.let { it.label == f.label && it.params == f.params } == true
                         FilterChip(
                             selected = isSel,
