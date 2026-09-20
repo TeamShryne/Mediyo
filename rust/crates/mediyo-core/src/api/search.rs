@@ -402,6 +402,12 @@ fn parse_chips(header: &Value) -> Vec<SearchFilter> {
             .pointer("/chipCloudChipRenderer/text/runs/0/text")
             .and_then(Value::as_str)
             .unwrap_or("");
+        // Filtered searches echo a leading param-less "clear filter" chip
+        // with an empty label. It carries no scope and the UI already
+        // renders its own "All" chip — drop it so no empty chip is shown.
+        if label.trim().is_empty() {
+            continue;
+        }
         let query = chip
             .pointer("/chipCloudChipRenderer/navigationEndpoint/searchEndpoint/query")
             .and_then(Value::as_str)
@@ -423,6 +429,29 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    /// Filtered searches echo a leading param-less "clear filter" chip with
+    /// an empty label — it must be dropped so the UI never renders an
+    /// empty chip (the UI already has its own "All" chip).
+    #[test]
+    fn blank_label_chips_are_dropped() {
+        let header = json!({
+            "chipCloudRenderer": { "chips": [
+                { "chipCloudChipRenderer": {
+                    "text": { "runs": [{ "text": "" }] },
+                    "navigationEndpoint": { "searchEndpoint": { "query": "drake" } }
+                } },
+                { "chipCloudChipRenderer": {
+                    "text": { "runs": [{ "text": "Songs" }] },
+                    "navigationEndpoint": { "searchEndpoint": { "query": "drake", "params": "EgWKAQIIAWoSEAUQCRAD" } }
+                } }
+            ] }
+        });
+        let filters = parse_chips(&header);
+        assert_eq!(filters.len(), 1);
+        assert_eq!(filters[0].label, "Songs");
+        assert_eq!(filters[0].params.as_deref(), Some("EgWKAQIIAWoSEAUQCRAD"));
+    }
 
     /// A song-titled card shelf must yield the chrome song as the first top
     /// result, ahead of the "More from …" rows (which must not duplicate it).
