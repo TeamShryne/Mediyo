@@ -143,6 +143,7 @@ interface LikedTrackDao {
 
 @Dao
 interface HistoryDao {
+    // ── Aggregates (one row per track) ──────────────────────────────
     @Query("SELECT * FROM history_entries ORDER BY lastPlayedAt DESC")
     fun flowAll(): Flow<List<HistoryEntryEntity>>
 
@@ -166,4 +167,52 @@ interface HistoryDao {
 
     @Query("SELECT COUNT(*) FROM history_entries")
     fun countFlow(): Flow<Int>
+
+    // ── Play events (one row per play, for algo + stats) ────────────
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertEvent(event: HistoryPlayEventEntity): Long
+
+    @Query("UPDATE history_play_events SET playDurationMs = :playMs, completionRatio = :ratio, completed = :completed WHERE id = :eventId")
+    suspend fun finalizeEvent(eventId: Long, playMs: Long, ratio: Float, completed: Boolean)
+
+    @Query("SELECT * FROM history_play_events WHERE videoId = :videoId ORDER BY playedAt DESC LIMIT :limit")
+    suspend fun eventsForVideo(videoId: String, limit: Int = 50): List<HistoryPlayEventEntity>
+
+    @Query("SELECT * FROM history_play_events ORDER BY playedAt DESC LIMIT :limit")
+    suspend fun recentEvents(limit: Int): List<HistoryPlayEventEntity>
+
+    @Query("SELECT * FROM history_play_events WHERE playedAt >= :since ORDER BY playedAt DESC")
+    suspend fun eventsSince(since: Long): List<HistoryPlayEventEntity>
+
+    @Query("SELECT * FROM history_play_events ORDER BY playedAt DESC")
+    fun flowRecentEvents(): Flow<List<HistoryPlayEventEntity>>
+
+    /** Hour-of-day histogram since [since]: hour -> play count. For time-of-day affinity. */
+    @Query("SELECT hourOfDay AS hour, COUNT(*) AS cnt FROM history_play_events WHERE playedAt >= :since GROUP BY hourOfDay ORDER BY cnt DESC")
+    suspend fun hourHistogram(since: Long): List<HourHistogramRow>
+
+    /** Most-played tracks since [since]: videoId -> play count. For trending/repeat affinity. */
+    @Query("SELECT videoId, COUNT(*) AS cnt FROM history_play_events WHERE playedAt >= :since GROUP BY videoId ORDER BY cnt DESC LIMIT :limit")
+    suspend fun topTracksSince(since: Long, limit: Int): List<TopTrackRow>
+
+    @Query("DELETE FROM history_play_events WHERE videoId = :videoId")
+    suspend fun removeEventsForVideo(videoId: String)
+
+    @Query("DELETE FROM history_play_events")
+    suspend fun clearEvents()
+
+    @Transaction
+    suspend fun removeWithEvents(videoId: String) {
+        remove(videoId)
+        removeEventsForVideo(videoId)
+    }
+
+    @Transaction
+    suspend fun clearAllWithEvents() {
+        clearAll()
+        clearEvents()
+    }
 }
+
+data class HourHistogramRow(val hour: Int, val cnt: Long)
+data class TopTrackRow(val videoId: String, val cnt: Long)
