@@ -26,7 +26,8 @@ sealed interface LyricsUiState {
 
 @HiltViewModel
 class LyricsViewModel @Inject constructor(
-    private val repo: LyricsRepository
+    private val repo: LyricsRepository,
+    private val events: com.teamshryne.mediyo.domain.repository.UserEventRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<LyricsUiState>(LyricsUiState.Idle)
@@ -46,6 +47,7 @@ class LyricsViewModel @Inject constructor(
         job?.cancel()
         _state.value = LyricsUiState.Loading
         job = viewModelScope.launch {
+            events.log(com.teamshryne.mediyo.domain.repository.UserEventTypes.LYRICS_OPEN, videoId = track.videoId)
             val durSec = durationMs?.let { (it / 1000).toInt().takeIf { v -> v in 30..600 } }
                 ?: track.duration?.let { parseDurationToSec(it) }
             when (val res = repo.getLyrics(track, durSec)) {

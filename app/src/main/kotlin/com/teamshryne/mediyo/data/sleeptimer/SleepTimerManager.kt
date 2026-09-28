@@ -41,7 +41,8 @@ class SleepTimerManager @Inject constructor(
     @ApplicationContext private val ctx: Context,
     private val player: ExoPlayer,
     private val queueManager: PlaybackQueueManager,
-    private val prefs: SleepTimerPrefs
+    private val prefs: SleepTimerPrefs,
+    private val events: com.teamshryne.mediyo.domain.repository.UserEventRepository
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val _state = MutableStateFlow(SleepTimerState())
@@ -111,6 +112,9 @@ class SleepTimerManager @Inject constructor(
         _state.value = st
         applyRadioBlock(true)
         scope.launch { prefs.save(st) }
+        scope.launch {
+            events.log(com.teamshryne.mediyo.domain.repository.UserEventTypes.SLEEP_SET, meta = "mins=${durationMs / 60000}")
+        }
         startTicker()
         scheduleAlarm(durationMs)
         attachEndListenerIfNeeded()
@@ -122,6 +126,7 @@ class SleepTimerManager @Inject constructor(
         _state.value = st
         applyRadioBlock(true)
         scope.launch { prefs.save(st) }
+        scope.launch { events.log(com.teamshryne.mediyo.domain.repository.UserEventTypes.SLEEP_END_OF_TRACK) }
         attachEndListenerIfNeeded()
     }
 
@@ -131,6 +136,7 @@ class SleepTimerManager @Inject constructor(
         _state.value = st
         applyRadioBlock(true)
         scope.launch { prefs.save(st) }
+        scope.launch { events.log(com.teamshryne.mediyo.domain.repository.UserEventTypes.SLEEP_END_OF_QUEUE) }
         attachEndListenerIfNeeded()
     }
 
@@ -149,8 +155,10 @@ class SleepTimerManager @Inject constructor(
     }
 
     fun cancel() {
+        if (!_state.value.isActive) return
         cancelInternal(scheduleCancel = true)
         scope.launch { prefs.clear() }
+        scope.launch { events.log(com.teamshryne.mediyo.domain.repository.UserEventTypes.SLEEP_CANCEL) }
     }
 
     /**

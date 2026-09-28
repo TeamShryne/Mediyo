@@ -7,6 +7,8 @@ import com.teamshryne.mediyo.data.local.FollowedArtistEntity
 import com.teamshryne.mediyo.data.local.HistoryDao
 import com.teamshryne.mediyo.data.local.HistoryEntryEntity
 import com.teamshryne.mediyo.data.local.HistoryPlayEventEntity
+import com.teamshryne.mediyo.data.local.UserEventDao
+import com.teamshryne.mediyo.data.local.UserEventEntity
 import com.teamshryne.mediyo.data.local.LikedTrackDao
 import com.teamshryne.mediyo.data.local.LikedTrackEntity
 import com.teamshryne.mediyo.data.local.LocalPlaylistDao
@@ -40,8 +42,8 @@ interface KvDao {
 data class CacheStatRow(val type: String, val cnt: Long, val bytes: Long?)
 
 @Database(
-    entities = [KvCache::class, LocalPlaylistEntity::class, LocalPlaylistEntryEntity::class, LikedTrackEntity::class, HistoryEntryEntity::class, HistoryPlayEventEntity::class, FollowedArtistEntity::class, SavedCollectionEntity::class],
-    version = 6,
+    entities = [KvCache::class, LocalPlaylistEntity::class, LocalPlaylistEntryEntity::class, LikedTrackEntity::class, HistoryEntryEntity::class, HistoryPlayEventEntity::class, UserEventEntity::class, FollowedArtistEntity::class, SavedCollectionEntity::class],
+    version = 7,
     exportSchema = false
 )
 abstract class MediyoDb : RoomDatabase() {
@@ -50,6 +52,7 @@ abstract class MediyoDb : RoomDatabase() {
     abstract fun localPlaylistEntryDao(): LocalPlaylistEntryDao
     abstract fun likedDao(): LikedTrackDao
     abstract fun historyDao(): HistoryDao
+    abstract fun userEventDao(): UserEventDao
     abstract fun savedCollectionDao(): SavedCollectionDao
     abstract fun followedArtistDao(): com.teamshryne.mediyo.data.local.FollowedArtistDao
 }
@@ -107,5 +110,36 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
         db.execSQL("CREATE INDEX IF NOT EXISTS index_history_play_events_videoId ON history_play_events(videoId)")
         db.execSQL("CREATE INDEX IF NOT EXISTS index_history_play_events_playedAt ON history_play_events(playedAt)")
         db.execSQL("CREATE INDEX IF NOT EXISTS index_history_play_events_videoId_playedAt ON history_play_events(videoId, playedAt)")
+    }
+}
+
+/**
+ * v6 → v7: generic interaction log + play-event context.
+ * - new user_events table (typed key-value events for algo/stats).
+ * - history_play_events gains shuffle state + queue index at play start.
+ */
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS user_events (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "type TEXT NOT NULL, " +
+                "videoId TEXT, " +
+                "browseId TEXT, " +
+                "label TEXT, " +
+                "meta TEXT, " +
+                "createdAt INTEGER NOT NULL, " +
+                "hourOfDay INTEGER NOT NULL, " +
+                "dayOfWeek INTEGER NOT NULL, " +
+                "sessionId TEXT NOT NULL, " +
+                "originType TEXT, " +
+                "originLabel TEXT)"
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_user_events_type ON user_events(type)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_user_events_createdAt ON user_events(createdAt)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_user_events_videoId ON user_events(videoId)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_user_events_type_createdAt ON user_events(type, createdAt)")
+        db.execSQL("ALTER TABLE history_play_events ADD COLUMN shuffled INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE history_play_events ADD COLUMN queueIndex INTEGER NOT NULL DEFAULT -1")
     }
 }

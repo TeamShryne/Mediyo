@@ -5,6 +5,8 @@ import com.teamshryne.mediyo.data.local.SavedCollectionEntity
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import com.teamshryne.mediyo.domain.model.bestThumbUrl
 import com.teamshryne.mediyo.domain.repository.SavedCollectionRepository
+import com.teamshryne.mediyo.domain.repository.UserEventRepository
+import com.teamshryne.mediyo.domain.repository.UserEventTypes
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
@@ -13,7 +15,8 @@ import javax.inject.Singleton
 @Singleton
 class SavedCollectionRepositoryImpl @Inject constructor(
     private val dao: SavedCollectionDao,
-    private val bridge: MediyoBridge
+    private val bridge: MediyoBridge,
+    private val events: UserEventRepository
 ) : SavedCollectionRepository {
     override fun flowAll(): Flow<List<SavedCollectionEntity>> = dao.flowAll()
     override fun flowById(browseId: String): Flow<SavedCollectionEntity?> = dao.flowById(browseId)
@@ -41,9 +44,14 @@ class SavedCollectionRepositoryImpl @Inject constructor(
                 savedAt = existing?.savedAt ?: System.currentTimeMillis()
             )
         )
+        // toggle() routes through here too, so saves are logged once.
+        events.log(UserEventTypes.SAVE, browseId = browseId, label = title.take(120), meta = "kind=$kind")
     }
 
-    override suspend fun remove(browseId: String) { dao.remove(browseId) }
+    override suspend fun remove(browseId: String) {
+        dao.remove(browseId)
+        events.log(UserEventTypes.UNSAVE, browseId = browseId)
+    }
 
     override suspend fun toggle(
         browseId: String,
@@ -55,7 +63,7 @@ class SavedCollectionRepositoryImpl @Inject constructor(
     ): Boolean {
         if (browseId.isBlank()) return false
         return if (dao.isSaved(browseId)) {
-            dao.remove(browseId); false
+            remove(browseId); false
         } else {
             save(browseId, kind, title, subtitle, artworkUrl, trackCountText); true
         }

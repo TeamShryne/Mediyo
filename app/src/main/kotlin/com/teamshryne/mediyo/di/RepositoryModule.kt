@@ -7,6 +7,7 @@ import com.teamshryne.mediyo.data.repository.LikeRepositoryImpl
 import com.teamshryne.mediyo.data.repository.LocalPlaylistRepositoryImpl
 import com.teamshryne.mediyo.data.repository.LyricsRepositoryImpl
 import com.teamshryne.mediyo.data.repository.SavedCollectionRepositoryImpl
+import com.teamshryne.mediyo.data.repository.UserEventRepositoryImpl
 import com.teamshryne.mediyo.domain.repository.ArtistRepository
 import com.teamshryne.mediyo.domain.repository.CommentRepository
 import com.teamshryne.mediyo.domain.repository.HistoryRepository
@@ -14,6 +15,7 @@ import com.teamshryne.mediyo.domain.repository.LikeRepository
 import com.teamshryne.mediyo.domain.repository.LyricsRepository
 import com.teamshryne.mediyo.domain.repository.PlaylistRepository
 import com.teamshryne.mediyo.domain.repository.SavedCollectionRepository
+import com.teamshryne.mediyo.domain.repository.UserEventRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -26,6 +28,7 @@ abstract class RepositoryModule {
     @Binds @Singleton abstract fun bindPlaylist(repo: LocalPlaylistRepositoryImpl): PlaylistRepository
     @Binds @Singleton abstract fun bindLike(repo: LikeRepositoryImpl): LikeRepository
     @Binds @Singleton abstract fun bindHistory(repo: HistoryRepositoryImpl): HistoryRepository
+    @Binds @Singleton abstract fun bindUserEvents(repo: UserEventRepositoryImpl): UserEventRepository
     @Binds @Singleton abstract fun bindComment(repo: CommentRepositoryImpl): CommentRepository
     @Binds @Singleton abstract fun bindLyrics(repo: LyricsRepositoryImpl): LyricsRepository
     @Binds @Singleton abstract fun bindArtist(repo: ArtistRepositoryImpl): ArtistRepository

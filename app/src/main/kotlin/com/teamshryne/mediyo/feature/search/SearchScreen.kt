@@ -44,6 +44,8 @@ import com.teamshryne.mediyo.domain.model.PlayOrigin
 import com.teamshryne.mediyo.domain.model.Track
 import com.teamshryne.mediyo.domain.model.bestThumbUrl
 import com.teamshryne.mediyo.domain.model.toDomainTrack
+import com.teamshryne.mediyo.domain.repository.UserEventRepository
+import com.teamshryne.mediyo.domain.repository.UserEventTypes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import uniffi.mediyo_ffi.FfiSearchFilter
@@ -51,7 +53,10 @@ import uniffi.mediyo_ffi.FfiSearchResult
 import javax.inject.Inject
 
 @HiltViewModel
-class SearchVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel() {
+class SearchVm @Inject constructor(
+    private val bridge: MediyoBridge,
+    private val events: UserEventRepository
+) : ViewModel() {
     var query by mutableStateOf("")
     var selectedLabel by mutableStateOf("All")
     /** Active scope chip, identified by its params. Null = All (unscoped). */
@@ -93,6 +98,7 @@ class SearchVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel
                 val clean = res.filters.filter { it.label.isNotBlank() }
                 if (clean.isNotEmpty()) filters = clean
                 continuation = res.continuation.takeIf { res.results.isNotEmpty() }
+                events.log(UserEventTypes.SEARCH, label = q, meta = "filter=$selectedLabel;count=${res.results.size}")
             } catch (e: Throwable) {
                 error = e.message ?: "Search failed"
                 results = emptyList()
@@ -102,6 +108,17 @@ class SearchVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel
 
     /** Submit from keyboard — resets to the All filter. */
     fun submit() = runSearch(null)
+
+    fun logTap(r: FfiSearchResult) {
+        val rank = results.indexOf(r)
+        viewModelScope.launch {
+            events.log(
+                UserEventTypes.SEARCH_TAP, videoId = r.videoId, browseId = r.browseId ?: r.playlistId,
+                label = lastQueryInternal.ifEmpty { query },
+                meta = "rank=$rank;size=${results.size};filter=$selectedLabel;cat=${r.category}"
+            )
+        }
+    }
 
     fun loadMore() {
         val token = continuation ?: return
@@ -133,6 +150,7 @@ fun SearchScreen(
     var showAddTrack by remember { mutableStateOf<Track?>(null) }
 
     fun open(r: FfiSearchResult) {
+        vm.logTap(r)
         when {
             r.videoId != null -> {
                 val track = r.toDomainTrack()

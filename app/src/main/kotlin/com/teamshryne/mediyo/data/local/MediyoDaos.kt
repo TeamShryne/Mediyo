@@ -216,3 +216,28 @@ interface HistoryDao {
 
 data class HourHistogramRow(val hour: Int, val cnt: Long)
 data class TopTrackRow(val videoId: String, val cnt: Long)
+
+@Dao
+interface UserEventDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(event: com.teamshryne.mediyo.data.local.UserEventEntity)
+
+    @Query("SELECT * FROM user_events ORDER BY createdAt DESC LIMIT :limit")
+    fun flowRecent(limit: Int): Flow<List<com.teamshryne.mediyo.data.local.UserEventEntity>>
+
+    @Query("SELECT * FROM user_events WHERE type = :type ORDER BY createdAt DESC LIMIT :limit")
+    suspend fun byType(type: String, limit: Int): List<com.teamshryne.mediyo.data.local.UserEventEntity>
+
+    @Query("SELECT * FROM user_events WHERE createdAt >= :since ORDER BY createdAt DESC")
+    suspend fun since(since: Long): List<com.teamshryne.mediyo.data.local.UserEventEntity>
+
+    @Query("SELECT COUNT(*) FROM user_events WHERE type = :type AND createdAt >= :since")
+    suspend fun countByTypeSince(type: String, since: Long): Int
+
+    @Query("DELETE FROM user_events")
+    suspend fun clearAll()
+
+    /** Keep only the newest [keep] events. For a future settings retention option. */
+    @Query("DELETE FROM user_events WHERE id NOT IN (SELECT id FROM user_events ORDER BY createdAt DESC LIMIT :keep)")
+    suspend fun prune(keep: Int)
+}

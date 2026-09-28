@@ -29,6 +29,8 @@ import com.teamshryne.mediyo.core.design.*
 import com.teamshryne.mediyo.domain.model.PlayOrigin
 import com.teamshryne.mediyo.domain.model.bestThumbUrl
 import com.teamshryne.mediyo.domain.model.toDomainTrack
+import com.teamshryne.mediyo.domain.repository.UserEventRepository
+import com.teamshryne.mediyo.domain.repository.UserEventTypes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import uniffi.mediyo_ffi.FfiSearchResult
@@ -44,7 +46,10 @@ data class HomeState(
 )
 
 @HiltViewModel
-class HomeVm @Inject constructor(private val repo: HomeRepository) : ViewModel() {
+class HomeVm @Inject constructor(
+    private val repo: HomeRepository,
+    private val events: UserEventRepository
+) : ViewModel() {
     var state by mutableStateOf(
         repo.peek()?.let { cached ->
             HomeState(
@@ -118,6 +123,15 @@ class HomeVm @Inject constructor(private val repo: HomeRepository) : ViewModel()
     }
 
     fun refresh() = load(isRefresh = true)
+
+    fun logTap(r: FfiSearchResult, shelf: String) {
+        viewModelScope.launch {
+            events.log(
+                UserEventTypes.HOME_TAP, videoId = r.videoId, browseId = r.browseId ?: r.playlistId,
+                label = shelf, meta = "cat=${r.category};title=${r.title.take(80)}"
+            )
+        }
+    }
 }
 
 @Composable
@@ -135,6 +149,7 @@ fun HomeScreen(
     val s = vm.state
 
     fun open(r: FfiSearchResult, title: String) {
+        vm.logTap(r, title)
         // Prefer browse with params when present
         if (r.browseId != null && r.browseParams != null) {
             val enc = Uri.encode(r.browseParams)

@@ -14,7 +14,9 @@ import androidx.room.Room
 import com.teamshryne.mediyo.data.cache.MediyoDb
 import com.teamshryne.mediyo.data.cache.MIGRATION_4_5
 import com.teamshryne.mediyo.data.cache.MIGRATION_5_6
+import com.teamshryne.mediyo.data.cache.MIGRATION_6_7
 import com.teamshryne.mediyo.data.local.HistoryDao
+import com.teamshryne.mediyo.data.local.UserEventDao
 import com.teamshryne.mediyo.data.local.LikedTrackDao
 import com.teamshryne.mediyo.data.local.LocalPlaylistDao
 import com.teamshryne.mediyo.data.local.LocalPlaylistEntryDao
@@ -40,7 +42,7 @@ object AppModule {
     @Singleton
     fun provideDb(@ApplicationContext ctx: Context): MediyoDb =
         Room.databaseBuilder(ctx, MediyoDb::class.java, "mediyo.db")
-            .addMigrations(MIGRATION_4_5, MIGRATION_5_6)
+            .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
             .fallbackToDestructiveMigration()
             .build()
 
@@ -48,6 +50,7 @@ object AppModule {
     @Provides fun provideLocalPlaylistEntryDao(db: MediyoDb): LocalPlaylistEntryDao = db.localPlaylistEntryDao()
     @Provides fun provideLikedDao(db: MediyoDb): LikedTrackDao = db.likedDao()
     @Provides fun provideHistoryDao(db: MediyoDb): HistoryDao = db.historyDao()
+    @Provides fun provideUserEventDao(db: MediyoDb): UserEventDao = db.userEventDao()
     @Provides fun provideFollowedArtistDao(db: MediyoDb): com.teamshryne.mediyo.data.local.FollowedArtistDao = db.followedArtistDao()
     @Provides fun provideSavedCollectionDao(db: MediyoDb): com.teamshryne.mediyo.data.local.SavedCollectionDao = db.savedCollectionDao()
 
