@@ -5,13 +5,16 @@ import com.teamshryne.mediyo.data.local.LikedTrackEntity
 import com.teamshryne.mediyo.domain.model.Track
 import com.teamshryne.mediyo.domain.model.dbArtistIds
 import com.teamshryne.mediyo.domain.repository.LikeRepository
+import com.teamshryne.mediyo.domain.repository.UserEventRepository
+import com.teamshryne.mediyo.domain.repository.UserEventTypes
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class LikeRepositoryImpl @Inject constructor(
-    private val dao: LikedTrackDao
+    private val dao: LikedTrackDao,
+    private val events: UserEventRepository
 ) : LikeRepository {
     override fun flowLiked(): Flow<List<LikedTrackEntity>> = dao.flowAll()
     override suspend fun getLiked(): List<LikedTrackEntity> = dao.getAll()
@@ -21,7 +24,9 @@ class LikeRepositoryImpl @Inject constructor(
     override suspend fun toggle(track: Track): Boolean {
         val vid = track.videoId ?: return false
         return if (dao.isLiked(vid)) {
-            dao.remove(vid); false
+            dao.remove(vid)
+            events.log(UserEventTypes.UNLIKE, videoId = vid)
+            false
         } else {
             dao.upsert(
                 LikedTrackEntity(
@@ -37,7 +42,9 @@ class LikeRepositoryImpl @Inject constructor(
                     duration = track.duration,
                     category = track.category
                 )
-            ); true
+            )
+            events.log(UserEventTypes.LIKE, videoId = vid, meta = "title=${track.title.take(80)}")
+            true
         }
     }
     override suspend fun like(track: Track) {
@@ -54,8 +61,12 @@ class LikeRepositoryImpl @Inject constructor(
                 duration = track.duration, category = track.category
             )
         )
+        events.log(UserEventTypes.LIKE, videoId = vid, meta = "title=${track.title.take(80)}")
     }
-    override suspend fun unlike(videoId: String) { dao.remove(videoId) }
+    override suspend fun unlike(videoId: String) {
+        dao.remove(videoId)
+        events.log(UserEventTypes.UNLIKE, videoId = videoId)
+    }
     override suspend fun clearAll() { dao.clearAll() }
     override fun countFlow(): Flow<Int> = dao.countFlow()
 }

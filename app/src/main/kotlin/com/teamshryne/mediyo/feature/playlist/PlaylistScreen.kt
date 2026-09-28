@@ -43,7 +43,8 @@ import javax.inject.Inject
 
 @HiltViewModel class PlaylistVm @Inject constructor(
     private val bridge: MediyoBridge,
-    private val savedRepo: com.teamshryne.mediyo.domain.repository.SavedCollectionRepository
+    private val savedRepo: com.teamshryne.mediyo.domain.repository.SavedCollectionRepository,
+    private val events: com.teamshryne.mediyo.domain.repository.UserEventRepository
 ) : ViewModel() {
     var loading by mutableStateOf(true); var error by mutableStateOf<String?>(null)
     var loadingMore by mutableStateOf(false); var continuation by mutableStateOf<String?>(null)
@@ -68,6 +69,7 @@ import javax.inject.Inject
     fun load(id: String) {
         android.util.Log.d("PlaylistVm","load id=$id")
         loading = true; error = null; continuation = null
+        viewModelScope.launch { events.log(com.teamshryne.mediyo.domain.repository.UserEventTypes.VIEW_PLAYLIST, browseId = id) }
         viewModelScope.launch {
             try {
                 val p = bridge.playlist(id)

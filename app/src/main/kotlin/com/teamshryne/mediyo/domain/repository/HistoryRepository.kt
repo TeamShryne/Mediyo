@@ -13,7 +13,13 @@ interface HistoryRepository {
     suspend fun page(limit: Int, offset: Int): List<HistoryEntryEntity>
 
     /** Record a play start. Returns the play-event id for later finalization. */
-    suspend fun record(track: Track, origin: PlayOrigin? = null, startedAt: Long = System.currentTimeMillis()): Long
+    suspend fun record(
+        track: Track,
+        origin: PlayOrigin? = null,
+        startedAt: Long = System.currentTimeMillis(),
+        shuffled: Boolean = false,
+        queueIndex: Int = -1
+    ): Long
 
     /** Back-compat overload (no origin). */
     suspend fun record(track: Track)

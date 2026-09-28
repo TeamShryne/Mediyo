@@ -34,7 +34,10 @@ import uniffi.mediyo_ffi.FfiCommentSortFilter
 import javax.inject.Inject
 
 @HiltViewModel
-class CommentsVm @Inject constructor(private val repo: CommentRepository) : ViewModel() {
+class CommentsVm @Inject constructor(
+    private val repo: CommentRepository,
+    private val events: com.teamshryne.mediyo.domain.repository.UserEventRepository
+) : ViewModel() {
     var loading by mutableStateOf(true)
     var loadingMore by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
@@ -48,6 +51,7 @@ class CommentsVm @Inject constructor(private val repo: CommentRepository) : View
     fun load(videoId: String) {
         loading = true; error = null; comments = emptyList(); continuation = null; sortFilters = emptyList()
         viewModelScope.launch {
+            events.log(com.teamshryne.mediyo.domain.repository.UserEventTypes.COMMENTS_OPEN, videoId = videoId)
             try {
                 val t = repo.token(videoId)
                 token = t

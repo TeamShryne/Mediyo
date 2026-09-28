@@ -40,7 +40,8 @@ import uniffi.mediyo_ffi.FfiSearchResult
 
 @HiltViewModel class ArtistVm @Inject constructor(
     private val bridge: MediyoBridge,
-    private val artistRepo: com.teamshryne.mediyo.domain.repository.ArtistRepository
+    private val artistRepo: com.teamshryne.mediyo.domain.repository.ArtistRepository,
+    private val events: com.teamshryne.mediyo.domain.repository.UserEventRepository
 ) : ViewModel() {
     var loading by mutableStateOf(true); var error by mutableStateOf<String?>(null)
     var loadingMore by mutableStateOf(false); var continuation by mutableStateOf<String?>(null)
@@ -53,6 +54,7 @@ import uniffi.mediyo_ffi.FfiSearchResult
     fun load(id: String) {
         loading = true; error = null; continuation = null
         browseId = id
+        viewModelScope.launch { events.log(com.teamshryne.mediyo.domain.repository.UserEventTypes.VIEW_ARTIST, browseId = id) }
         viewModelScope.launch {
             try {
                 val p = bridge.artist(id)
@@ -109,7 +111,14 @@ fun ArtistScreen(
 
     fun handle(r: FfiSearchResult, shelf: List<FfiSearchResult>) {
         when {
-            r.videoId != null -> player?.playFrom(shelf, r)
+            r.videoId != null -> {
+                val id = vm.browseId
+                if (player != null && id != null) {
+                    player.playFromWithOrigin(shelf, r, com.teamshryne.mediyo.domain.model.PlayOrigin.ArtistTop(id, vm.name))
+                } else {
+                    player?.playFrom(shelf, r)
+                }
+            }
             r.browseId != null && r.category.contains("Album", true) -> nav?.navigate("album/${r.browseId}")
             r.browseId != null && r.category.contains("Artist", true) -> nav?.navigate("artist/${r.browseId}")
             r.browseId != null && r.category.contains("Playlist", true) -> nav?.navigate("playlist/${r.browseId}")
@@ -163,7 +172,16 @@ fun ArtistScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 FilledIconButton(
-                                    onClick = { vm.topSongs.firstOrNull()?.let { player?.playFrom(vm.topSongs, it) } },
+                                    onClick = {
+                                        vm.topSongs.firstOrNull()?.let {
+                                            val id = vm.browseId
+                                            if (player != null && id != null) {
+                                                player.playFromWithOrigin(vm.topSongs, it, com.teamshryne.mediyo.domain.model.PlayOrigin.ArtistTop(id, vm.name))
+                                            } else {
+                                                player?.playFrom(vm.topSongs, it)
+                                            }
+                                        }
+                                    },
                                     shape = CircleShape,
                                     colors = IconButtonDefaults.filledIconButtonColors(
                                         containerColor = MaterialTheme.colorScheme.primary,
@@ -174,7 +192,14 @@ fun ArtistScreen(
                                 OutlinedIconButton(
                                     onClick = {
                                         player?.toggleShuffle()
-                                        vm.topSongs.firstOrNull()?.let { player?.playFrom(vm.topSongs, it) }
+                                        vm.topSongs.firstOrNull()?.let {
+                                            val id = vm.browseId
+                                            if (player != null && id != null) {
+                                                player.playFromWithOrigin(vm.topSongs, it, com.teamshryne.mediyo.domain.model.PlayOrigin.ArtistTop(id, vm.name))
+                                            } else {
+                                                player?.playFrom(vm.topSongs, it)
+                                            }
+                                        }
                                     },
                                     shape = CircleShape,
                                     modifier = Modifier.size(52.dp)

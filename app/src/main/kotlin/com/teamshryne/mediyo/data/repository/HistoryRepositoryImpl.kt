@@ -25,7 +25,13 @@ class HistoryRepositoryImpl @Inject constructor(
         record(track, origin = null, startedAt = System.currentTimeMillis())
     }
 
-    override suspend fun record(track: Track, origin: PlayOrigin?, startedAt: Long): Long {
+    override suspend fun record(
+        track: Track,
+        origin: PlayOrigin?,
+        startedAt: Long,
+        shuffled: Boolean,
+        queueIndex: Int
+    ): Long {
         val vid = track.videoId ?: return -1L
         val (type, label, id) = origin?.toColumns() ?: Triple(null, null, null)
         val existing = dao.getById(vid)
@@ -80,7 +86,9 @@ class HistoryRepositoryImpl @Inject constructor(
                 dayOfWeek = cal.get(Calendar.DAY_OF_WEEK),
                 originType = type,
                 originLabel = label,
-                originId = id
+                originId = id,
+                shuffled = shuffled,
+                queueIndex = queueIndex
             )
         )
     }

@@ -7,6 +7,8 @@ import com.teamshryne.mediyo.domain.model.PlayQueueState
 import com.teamshryne.mediyo.domain.model.Track
 import com.teamshryne.mediyo.domain.model.bestThumbUrl
 import com.teamshryne.mediyo.domain.model.toDomainTrack
+import com.teamshryne.mediyo.domain.repository.UserEventRepository
+import com.teamshryne.mediyo.domain.repository.UserEventTypes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -18,7 +20,8 @@ import javax.inject.Singleton
 
 @Singleton
 class PlaybackQueueManager @Inject constructor(
-    private val bridge: MediyoBridge
+    private val bridge: MediyoBridge,
+    private val events: UserEventRepository
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -55,6 +58,7 @@ class PlaybackQueueManager @Inject constructor(
         val insertAt = (s.index + 1).coerceIn(0, s.entries.size)
         val newEntries = s.entries.toMutableList().apply { add(insertAt, track) }
         _state.value = s.copy(entries = newEntries)
+        scope.launch { events.log(UserEventTypes.QUEUE_ADD_NEXT, videoId = track.videoId) }
     }
 
     fun addNextList(tracks: List<Track>) {
@@ -64,12 +68,14 @@ class PlaybackQueueManager @Inject constructor(
         val insertAt = (s.index + 1).coerceIn(0, s.entries.size)
         val newEntries = s.entries.toMutableList().apply { addAll(insertAt, tracks) }
         _state.value = s.copy(entries = newEntries)
+        scope.launch { events.log(UserEventTypes.QUEUE_ADD_NEXT_LIST, meta = "count=${tracks.size}") }
     }
 
     fun addLast(track: Track) {
         val s = _state.value
         if (s.entries.isEmpty()) { setQueue(PlayOrigin.Single(track.videoId ?: ""), listOf(track), 0); return }
         _state.value = s.copy(entries = s.entries + track)
+        scope.launch { events.log(UserEventTypes.QUEUE_ADD_LAST, videoId = track.videoId) }
     }
 
     fun addLastList(tracks: List<Track>) {
@@ -77,11 +83,13 @@ class PlaybackQueueManager @Inject constructor(
         val s = _state.value
         if (s.entries.isEmpty()) { setQueue(PlayOrigin.Unknown, tracks, 0); return }
         _state.value = s.copy(entries = s.entries + tracks)
+        scope.launch { events.log(UserEventTypes.QUEUE_ADD_LAST_LIST, meta = "count=${tracks.size}") }
     }
 
     fun removeAt(pos: Int) {
         val s = _state.value
         if (pos !in s.entries.indices) return
+        val removed = s.entries[pos]
         val newEntries = s.entries.toMutableList().apply { removeAt(pos) }
         var newIndex = s.index
         if (pos < s.index) newIndex -= 1
@@ -91,11 +99,13 @@ class PlaybackQueueManager @Inject constructor(
         }
         if (newEntries.isEmpty()) newIndex = -1
         _state.value = s.copy(entries = newEntries, index = newIndex)
+        scope.launch { events.log(UserEventTypes.QUEUE_REMOVE, videoId = removed.videoId, meta = "pos=$pos") }
     }
 
     fun move(from: Int, to: Int) {
         val s = _state.value
         if (from !in s.entries.indices || to !in s.entries.indices) return
+        val moved = s.entries[from]
         val mutable = s.entries.toMutableList()
         val item = mutable.removeAt(from)
         mutable.add(to, item)
@@ -104,6 +114,7 @@ class PlaybackQueueManager @Inject constructor(
         else if (from < s.index && to >= s.index) newIndex -= 1
         else if (from > s.index && to <= s.index) newIndex += 1
         _state.value = s.copy(entries = mutable, index = newIndex)
+        scope.launch { events.log(UserEventTypes.QUEUE_MOVE, videoId = moved.videoId, meta = "from=$from;to=$to") }
     }
 
     /** Which track would [next] land on right now, without mutating state. */

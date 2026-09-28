@@ -17,6 +17,8 @@ import com.teamshryne.mediyo.domain.model.bestThumbUrl
 import com.teamshryne.mediyo.domain.model.toDomainTrack
 import com.teamshryne.mediyo.domain.repository.HistoryRepository
 import com.teamshryne.mediyo.domain.repository.LikeRepository
+import com.teamshryne.mediyo.domain.repository.UserEventRepository
+import com.teamshryne.mediyo.domain.repository.UserEventTypes
 import com.teamshryne.mediyo.playback.PlaybackService
 import com.teamshryne.mediyo.playback.PlaybackQueueManager
 import com.teamshryne.mediyo.playback.PlaybackSessionHub
@@ -77,6 +79,7 @@ class PlayerViewModel @Inject constructor(
     private val queueManager: PlaybackQueueManager,
     private val historyRepo: HistoryRepository,
     private val likeRepo: LikeRepository,
+    private val events: UserEventRepository,
     private val hub: PlaybackSessionHub,
     private val player: ExoPlayer,
     private val sleepManager: SleepTimerManager,
@@ -387,8 +390,10 @@ class PlayerViewModel @Inject constructor(
         if (track.videoId == lastHistoryVideoId && now - lastHistoryAt < 10_000) return
         lastHistoryVideoId = track.videoId
         lastHistoryAt = now
+        val shuffled = _state.value.shuffle
+        val index = queueManager.currentState().index
         viewModelScope.launch {
-            try { historyRepo.record(track, origin, now) } catch (_: Throwable) {}
+            try { historyRepo.record(track, origin, now, shuffled, index) } catch (_: Throwable) {}
         }
     }
 
@@ -536,11 +541,16 @@ class PlayerViewModel @Inject constructor(
         requestLoad(immediate = false)
     }
 
-    fun toggleRepeat() { _state.value = _state.value.copy(repeatOne = !_state.value.repeatOne) }
+    fun toggleRepeat() {
+        _state.value = _state.value.copy(repeatOne = !_state.value.repeatOne)
+        val on = _state.value.repeatOne
+        viewModelScope.launch { events.log(UserEventTypes.REPEAT, videoId = _state.value.videoId, meta = "on=$on") }
+    }
     fun toggleShuffle() {
         val newVal = !_state.value.shuffle
         _state.value = _state.value.copy(shuffle = newVal)
         queueManager.setShuffle(newVal, queueManager.currentState().index)
+        viewModelScope.launch { events.log(UserEventTypes.SHUFFLE, videoId = _state.value.videoId, meta = "on=$newVal") }
     }
 
     fun toggle() {
@@ -559,6 +569,11 @@ class PlayerViewModel @Inject constructor(
         if (dur > 0) {
             if (player.isPlaying) ensureServiceForPlayback()
             player.seekTo((dur * fraction.coerceIn(0f, 1f)).toLong())
+            // No position in meta on purpose: the 30s dedupe collapses a
+            // slider drag burst into one event per track.
+            viewModelScope.launch {
+                events.log(UserEventTypes.SEEK, videoId = _state.value.videoId, meta = "dur=$dur")
+            }
         }
     }
 
@@ -566,6 +581,9 @@ class PlayerViewModel @Inject constructor(
         if (player.isPlaying || player.playWhenReady) ensureServiceForPlayback()
         val dur = player.duration
         if (dur > 0) player.seekTo(positionMs.coerceIn(0L, dur)) else player.seekTo(positionMs.coerceAtLeast(0L))
+        viewModelScope.launch {
+            events.log(UserEventTypes.SEEK, videoId = _state.value.videoId, meta = "dur=$dur")
+        }
     }
 
     // ── Sleep timer delegation ────────────────────────────────────────

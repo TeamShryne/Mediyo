@@ -59,13 +59,17 @@ import javax.inject.Inject
  * adaptive grid, sentinel shimmer row driving pagination, shuffle FAB
  * that hides on scroll down.
  */
-@HiltViewModel class SectionVm @Inject constructor(private val bridge: MediyoBridge) : ViewModel() {
+@HiltViewModel class SectionVm @Inject constructor(
+    private val bridge: MediyoBridge,
+    private val events: com.teamshryne.mediyo.domain.repository.UserEventRepository
+) : ViewModel() {
     var loading by mutableStateOf(true); var error by mutableStateOf<String?>(null)
     var loadingMore by mutableStateOf(false)
     var continuation by mutableStateOf<String?>(null)
     var items by mutableStateOf<List<uniffi.mediyo_ffi.FfiSearchResult>>(emptyList())
     fun load(id: String, params: String?) {
         loading = true; error = null; continuation = null
+        viewModelScope.launch { events.log(com.teamshryne.mediyo.domain.repository.UserEventTypes.VIEW_SECTION, browseId = id, meta = params?.take(200)) }
         viewModelScope.launch {
             try {
                 val p = bridge.listPage(id, params)

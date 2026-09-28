@@ -111,7 +111,11 @@ data class HistoryPlayEventEntity(
     val playDurationMs: Long = 0,
     /** 0f..1f position/duration at finalize time. 0 when duration unknown. */
     val completionRatio: Float = 0f,
-    val completed: Boolean = false
+    val completed: Boolean = false,
+    /** Player shuffle state at play start — shuffle-vs-intentional is a taste signal. */
+    val shuffled: Boolean = false,
+    /** Queue position at play start (rank tapped / jump distance). -1 = unknown. */
+    val queueIndex: Int = -1
 )
 
 data class LocalPlaylistWithEntries(

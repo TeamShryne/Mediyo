@@ -8,6 +8,8 @@ import com.teamshryne.mediyo.domain.model.Track
 import com.teamshryne.mediyo.domain.model.dbArtistIds
 import com.teamshryne.mediyo.domain.model.newLocalId
 import com.teamshryne.mediyo.domain.repository.PlaylistRepository
+import com.teamshryne.mediyo.domain.repository.UserEventRepository
+import com.teamshryne.mediyo.domain.repository.UserEventTypes
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -15,7 +17,8 @@ import javax.inject.Singleton
 @Singleton
 class LocalPlaylistRepositoryImpl @Inject constructor(
     private val playlistDao: LocalPlaylistDao,
-    private val entryDao: LocalPlaylistEntryDao
+    private val entryDao: LocalPlaylistEntryDao,
+    private val events: UserEventRepository
 ) : PlaylistRepository {
     override fun flowPlaylists(): Flow<List<LocalPlaylistEntity>> = playlistDao.flowAll()
     override suspend fun getPlaylists(): List<LocalPlaylistEntity> = playlistDao.getAll()
@@ -28,6 +31,7 @@ class LocalPlaylistRepositoryImpl @Inject constructor(
         val id = newLocalId()
         val t = title.trim().ifEmpty { "Untitled" }
         playlistDao.upsert(LocalPlaylistEntity(id = id, title = t, description = description))
+        events.log(UserEventTypes.PLAYLIST_CREATE, browseId = id, label = t.take(120))
         return id
     }
 
@@ -39,6 +43,7 @@ class LocalPlaylistRepositoryImpl @Inject constructor(
     override suspend fun delete(id: String) {
         // cascade deletes entries via FK
         playlistDao.deleteById(id)
+        events.log(UserEventTypes.PLAYLIST_DELETE, browseId = id)
     }
 
     override suspend fun addTrack(playlistId: String, track: Track): Boolean {
@@ -64,11 +69,13 @@ class LocalPlaylistRepositoryImpl @Inject constructor(
         entryDao.insert(entry)
         val count = entryDao.count(playlistId)
         playlistDao.updateCount(playlistId, count)
+        events.log(UserEventTypes.PLAYLIST_ADD, videoId = vid, browseId = playlistId, meta = "pos=$pos")
         return true
     }
 
     override suspend fun removeTrack(playlistId: String, entryId: String) {
         entryDao.deleteById(entryId)
+        events.log(UserEventTypes.PLAYLIST_REMOVE, browseId = playlistId)
         val count = entryDao.count(playlistId)
         playlistDao.updateCount(playlistId, count)
         // recompact positions
@@ -80,6 +87,7 @@ class LocalPlaylistRepositoryImpl @Inject constructor(
 
     override suspend fun removeByVideoId(playlistId: String, videoId: String) {
         entryDao.deleteByVideoId(playlistId, videoId)
+        events.log(UserEventTypes.PLAYLIST_REMOVE, videoId = videoId, browseId = playlistId)
         val count = entryDao.count(playlistId)
         playlistDao.updateCount(playlistId, count)
         val entries = entryDao.getEntries(playlistId)
@@ -90,11 +98,13 @@ class LocalPlaylistRepositoryImpl @Inject constructor(
 
     override suspend fun reorder(playlistId: String, from: Int, to: Int) {
         entryDao.reorder(playlistId, from, to)
+        events.log(UserEventTypes.PLAYLIST_REORDER, browseId = playlistId, meta = "from=$from;to=$to")
     }
 
     override suspend fun clear(playlistId: String) {
         entryDao.clearPlaylist(playlistId)
         playlistDao.updateCount(playlistId, 0)
+        events.log(UserEventTypes.PLAYLIST_CLEAR, browseId = playlistId)
     }
 
     override suspend fun contains(playlistId: String, videoId: String): Boolean =

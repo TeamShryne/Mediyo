@@ -11,8 +11,11 @@ import com.teamshryne.mediyo.domain.model.PlayOrigin
 import com.teamshryne.mediyo.domain.model.Track
 import com.teamshryne.mediyo.domain.model.dbIdList
 import com.teamshryne.mediyo.domain.model.upscaledThumbUrl
+import com.teamshryne.mediyo.domain.repository.HistoryRepository
 import com.teamshryne.mediyo.domain.repository.LikeRepository
 import com.teamshryne.mediyo.domain.repository.PlaylistRepository
+import com.teamshryne.mediyo.domain.repository.UserEventRepository
+import com.teamshryne.mediyo.domain.repository.UserEventTypes
 import com.teamshryne.mediyo.playback.PlaybackQueueManager
 import com.teamshryne.mediyo.playback.PlaybackService
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -38,6 +41,8 @@ class WidgetPlaybackController @Inject constructor(
     private val player: ExoPlayer,
     private val likeRepo: LikeRepository,
     private val playlistRepo: PlaylistRepository,
+    private val historyRepo: HistoryRepository,
+    private val events: UserEventRepository,
     private val widgetRepo: WidgetStateRepository,
     private val sync: WidgetSync,
     private val artCache: WidgetArtworkCache
@@ -49,7 +54,8 @@ class WidgetPlaybackController @Inject constructor(
         false
     }
 
-    private fun loadTrack(track: Track) {
+    /** Plays [track] and records history — the cold-start path bypasses PlayerViewModel. */
+    private suspend fun loadTrack(track: Track, origin: PlayOrigin, shuffled: Boolean = false) {
         ensureService()
         val vid = track.videoId ?: return
         val metadata = MediaMetadata.Builder()
@@ -63,10 +69,20 @@ class WidgetPlaybackController @Inject constructor(
             .setMediaMetadata(metadata)
             .build()
         try {
-            player.setMediaItem(item)
-            player.prepare()
-            player.play()
+            withContext(Dispatchers.Main) {
+                player.setMediaItem(item)
+                player.prepare()
+                player.play()
+            }
         } catch (_: Throwable) {}
+        withContext(Dispatchers.IO) {
+            runCatching {
+                historyRepo.record(
+                    track, origin, System.currentTimeMillis(),
+                    shuffled, queueManager.currentState().index
+                )
+            }
+        }
     }
 
     /** Play/pause. Cold-start: rebuilds single-track queue from cache, then plays. */
@@ -83,7 +99,10 @@ class WidgetPlaybackController @Inject constructor(
                         artworkUrl = cached.artworkUrl
                     )
                     queueManager.setQueue(PlayOrigin.Single(cached.videoId), listOf(track), 0)
-                    loadTrack(track)
+                    loadTrack(track, PlayOrigin.Single(cached.videoId))
+                    withContext(Dispatchers.IO) {
+                        runCatching { events.log(UserEventTypes.WIDGET_TOGGLE, videoId = track.videoId) }
+                    }
                     true
                 } else {
                     // Nothing to resume — just make sure the service + app can open.
@@ -134,13 +153,16 @@ class WidgetPlaybackController @Inject constructor(
             val moved = try { queueManager.next(shuffle = false, repeatOne = false) } catch (_: Throwable) { null }
             val c = queueManager.currentState().current
             if (moved != null && c != null) {
-                loadTrack(c)
+                loadTrack(c, queueManager.currentState().origin)
                 c
             } else {
                 if (c == null) toggle()
                 c
             }
         } ?: return
+        withContext(Dispatchers.IO) {
+            runCatching { events.log(UserEventTypes.WIDGET_NEXT, videoId = cur.videoId) }
+        }
         // Optimistic: the new track is loading/playing NOW, not "soon".
         pushTrackOptimistic(cur, isBuffering = true)
     }
@@ -153,7 +175,7 @@ class WidgetPlaybackController @Inject constructor(
                 true
             } else {
                 try { queueManager.previous(pos) } catch (_: Throwable) {}
-                queueManager.currentState().current?.let { loadTrack(it) }
+                queueManager.currentState().current?.let { loadTrack(it, queueManager.currentState().origin) }
                 false
             }
         }
@@ -163,6 +185,9 @@ class WidgetPlaybackController @Inject constructor(
             if (cached != null) sync.push(cached.copy(isPlaying = true, isBuffering = false))
             else sync.refreshAll()
         } else {
+            withContext(Dispatchers.IO) {
+                runCatching { events.log(UserEventTypes.WIDGET_PREV, videoId = queueManager.currentState().current?.videoId) }
+            }
             queueManager.currentState().current?.let { pushTrackOptimistic(it, isBuffering = true) }
                 ?: sync.refreshAll()
         }
@@ -189,6 +214,9 @@ class WidgetPlaybackController @Inject constructor(
             )
         )
         withContext(Dispatchers.IO) { runCatching { likeRepo.toggle(cur) } }
+        withContext(Dispatchers.IO) {
+            runCatching { events.log(UserEventTypes.WIDGET_LIKE, videoId = cur.videoId, meta = "on=$flipped") }
+        }
         sync.refreshAllAsync()
     }
 
@@ -217,7 +245,10 @@ class WidgetPlaybackController @Inject constructor(
             )
             val first = queueManager.currentState().current
             if (first != null) {
-                withContext(Dispatchers.Main) { loadTrack(first) }
+                loadTrack(first, PlayOrigin.LocalPlaylist(playlistId, ""))
+                withContext(Dispatchers.IO) {
+                    runCatching { events.log(UserEventTypes.WIDGET_PLAYLIST, browseId = playlistId, meta = "count=${tracks.size}") }
+                }
                 pushTrackOptimistic(first, isBuffering = true)
             } else {
                 sync.refreshAll()
@@ -246,7 +277,10 @@ class WidgetPlaybackController @Inject constructor(
             queueManager.setQueue(PlayOrigin.Liked(tracks.size), tracks, 0)
             val first = queueManager.currentState().current
             if (first != null) {
-                withContext(Dispatchers.Main) { loadTrack(first) }
+                loadTrack(first, PlayOrigin.Liked(tracks.size), shuffled = true)
+                withContext(Dispatchers.IO) {
+                    runCatching { events.log(UserEventTypes.WIDGET_LIKED, meta = "count=${tracks.size}") }
+                }
                 pushTrackOptimistic(first, isBuffering = true)
             } else {
                 sync.refreshAll()
