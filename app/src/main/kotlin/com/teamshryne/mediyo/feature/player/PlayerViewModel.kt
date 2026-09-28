@@ -62,7 +62,14 @@ data class PlayerState(
     val originLabel: String = "Mediyo"
 )
 
-data class QueueEntry(val videoId: String, val title: String, val artist: String, val artwork: String?)
+data class QueueEntry(
+    val videoId: String,
+    val title: String,
+    val artist: String,
+    val artwork: String?,
+    /** Parallel artist browseIds — preserved so history keeps attribution. */
+    val artistIds: List<String> = emptyList()
+)
 
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
@@ -287,6 +294,10 @@ class PlayerViewModel @Inject constructor(
     private fun loadCurrent() {
         val cur = queueManager.currentState().current ?: return
         val vid = cur.videoId ?: return
+        val origin = queueManager.currentState().origin
+        // Finalize the outgoing track's session BEFORE swapping the media item —
+        // after setMediaItem the player position resets and the progress is lost.
+        finalizeSession()
         // Ensure service is foreground before swapping track so the notification
         // can be updated without an intermediate empty state.
         // If background start is denied we still prepare but don't claim foreground — avoids ghost audio
@@ -332,7 +343,7 @@ class PlayerViewModel @Inject constructor(
             player.prepare()
             player.play()
             _state.value = _state.value.copy(isPlaying = true, isBuffering = false)
-            maybeRecordHistory(cur)
+            maybeRecordHistory(cur, origin)
             prefetchNextForPlayback()
         } catch (_: Throwable) {
             _state.value = _state.value.copy(isBuffering = false)
@@ -371,20 +382,49 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    private fun maybeRecordHistory(track: Track) {
+    private fun maybeRecordHistory(track: Track, origin: PlayOrigin) {
         val now = System.currentTimeMillis()
         if (track.videoId == lastHistoryVideoId && now - lastHistoryAt < 10_000) return
         lastHistoryVideoId = track.videoId
         lastHistoryAt = now
         viewModelScope.launch {
-            try { historyRepo.record(track) } catch (_: Throwable) {}
+            try { historyRepo.record(track, origin, now) } catch (_: Throwable) {}
+        }
+    }
+
+    /**
+     * Close out the outgoing track's play session: how far playback got
+     * (position vs duration) feeds completions / skips / totalPlayMs rollups
+     * and finalizes its play-event row. Called before every media-item swap
+     * and when the ViewModel is cleared (app kill).
+     */
+    private fun finalizeSession() {
+        val vid = _state.value.videoId ?: return
+        val pos = runCatching { player.currentPosition }.getOrDefault(_state.value.positionMs)
+        val dur = runCatching { if (player.duration > 0) player.duration else 0L }
+            .getOrDefault(_state.value.durationMs)
+        if (pos <= 0 && dur <= 0) return
+        viewModelScope.launch {
+            try { historyRepo.finalizePlay(vid, pos, dur) } catch (_: Throwable) {}
         }
     }
 
     // ── Public API ──────────────────────────────────────────────────────────
 
-    fun play(videoId: String, title: String, artist: String, artwork: String?) {
-        val t = Track(videoId = videoId, title = title, artists = if (artist.isBlank()) emptyList() else listOf(artist), artworkUrl = artwork)
+    fun play(
+        videoId: String,
+        title: String,
+        artist: String,
+        artwork: String?,
+        artistIds: List<String> = emptyList()
+    ) {
+        val t = Track(
+            videoId = videoId,
+            title = title,
+            artists = if (artist.isBlank()) emptyList() else listOf(artist),
+            artistIds = artistIds,
+            artworkUrl = artwork
+        )
         playTrack(t, PlayOrigin.Single(videoId))
     }
 
@@ -394,7 +434,15 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun playQueue(entries: List<QueueEntry>, startIndex: Int) {
-        val tracks = entries.map { Track(videoId = it.videoId, title = it.title, artists = if (it.artist.isBlank()) emptyList() else listOf(it.artist), artworkUrl = it.artwork) }
+        val tracks = entries.map {
+            Track(
+                videoId = it.videoId,
+                title = it.title,
+                artists = if (it.artist.isBlank()) emptyList() else listOf(it.artist),
+                artistIds = it.artistIds,
+                artworkUrl = it.artwork
+            )
+        }
         queueManager.setQueue(PlayOrigin.Unknown, tracks, startIndex)
         requestLoad(immediate = true)
     }
@@ -544,6 +592,6 @@ class PlayerViewModel @Inject constructor(
     }
 
     private fun FfiSearchResult.toEntry() = QueueEntry(
-        videoId ?: "", title, artists.joinToString(), thumbnails.bestThumbUrl()
+        videoId ?: "", title, artists.joinToString(), thumbnails.bestThumbUrl(), artistIds
     )
 }
