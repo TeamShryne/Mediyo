@@ -28,7 +28,6 @@ enum class TabStyle(val id: String, val title: String, val subtitle: String) {
 enum class PlayerBgStyle(val id: String, val title: String, val subtitle: String) {
     Gradient("gradient", "Gradient", "Artwork colors melting into black"),
     Blur("blur", "Blur", "Soft-focus artwork wash"),
-    Glow("glow", "Glow", "Dark stage with color orbs"),
     Solid("solid", "Solid", "Clean flat backdrop");
 
     companion object {
@@ -42,7 +41,6 @@ class AppearancePrefs @Inject constructor(@ApplicationContext private val ctx: C
     private val K_BG = stringPreferencesKey("player_bg_style")
     private val K_BLUR = floatPreferencesKey("player_bg_blur")
     private val K_DIM = floatPreferencesKey("player_bg_dim")
-    private val K_GLOW = floatPreferencesKey("player_bg_glow")
     private val K_DEPTH = floatPreferencesKey("player_bg_depth")
     private val K_TINT = booleanPreferencesKey("player_bg_tint")
 
@@ -61,8 +59,6 @@ class AppearancePrefs @Inject constructor(@ApplicationContext private val ctx: C
     val bgBlurFlow: Flow<Float> = ctx.appearancePrefs.data.map { it[K_BLUR] ?: 22f }
     /** Dark shade over everything, 0..0.8. */
     val bgDimFlow: Flow<Float> = ctx.appearancePrefs.data.map { (it[K_DIM] ?: 0.35f).coerceIn(0f, 0.8f) }
-    /** Orb intensity, 0..1 (Glow style). */
-    val bgGlowFlow: Flow<Float> = ctx.appearancePrefs.data.map { (it[K_GLOW] ?: 0.8f).coerceIn(0f, 1f) }
     /** Gradient richness, 0..1 (Gradient style). */
     val bgDepthFlow: Flow<Float> = ctx.appearancePrefs.data.map { (it[K_DEPTH] ?: 0.75f).coerceIn(0f, 1f) }
     /** Tint the solid backdrop with artwork colors (Solid style). */
@@ -76,9 +72,6 @@ class AppearancePrefs @Inject constructor(@ApplicationContext private val ctx: C
     }
     suspend fun setBgDim(dim: Float) {
         ctx.appearancePrefs.edit { it[K_DIM] = dim.coerceIn(0f, 0.8f) }
-    }
-    suspend fun setBgGlow(glow: Float) {
-        ctx.appearancePrefs.edit { it[K_GLOW] = glow.coerceIn(0f, 1f) }
     }
     suspend fun setBgDepth(depth: Float) {
         ctx.appearancePrefs.edit { it[K_DEPTH] = depth.coerceIn(0f, 1f) }

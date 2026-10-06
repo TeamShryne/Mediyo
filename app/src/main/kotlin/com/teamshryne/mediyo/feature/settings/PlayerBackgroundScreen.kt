@@ -64,10 +64,9 @@ fun PlayerBackgroundScreen(
     val style by vm.bgStyle.collectAsState()
     val blur by vm.bgBlur.collectAsState()
     val dim by vm.bgDim.collectAsState()
-    val glow by vm.bgGlow.collectAsState()
     val depth by vm.bgDepth.collectAsState()
     val tint by vm.bgTint.collectAsState()
-    val config = PlayerBgConfig(style, blur, dim, glow, depth, tint)
+    val config = PlayerBgConfig(style, blur, dim, depth, tint)
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -129,12 +128,6 @@ fun PlayerBackgroundScreen(
                             valueText = "${blur.roundToInt()}dp",
                             value = blur, range = 4f..36f,
                             onChange = { vm.setBlur(it) }
-                        )
-                        PlayerBgStyle.Glow -> TuneSlider(
-                            label = "Intensity",
-                            valueText = "${(glow * 100).roundToInt()}%",
-                            value = glow, range = 0f..1f,
-                            onChange = { vm.setGlow(it) }
                         )
                         PlayerBgStyle.Solid -> Row(
                             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),

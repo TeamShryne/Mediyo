@@ -44,8 +44,11 @@ import com.teamshryne.mediyo.data.appearance.AppearancePrefs
 import com.teamshryne.mediyo.data.appearance.PlayerBgStyle
 import com.teamshryne.mediyo.data.appearance.TabStyle
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -63,31 +66,54 @@ class AppearanceVm @Inject constructor(
 
     val bgStyle: StateFlow<PlayerBgStyle> = prefs.bgStyleFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, PlayerBgStyle.Gradient)
-    val bgBlur: StateFlow<Float> = prefs.bgBlurFlow
-        .stateIn(viewModelScope, SharingStarted.Eagerly, 22f)
-    val bgDim: StateFlow<Float> = prefs.bgDimFlow
-        .stateIn(viewModelScope, SharingStarted.Eagerly, 0.35f)
-    val bgGlow: StateFlow<Float> = prefs.bgGlowFlow
-        .stateIn(viewModelScope, SharingStarted.Eagerly, 0.8f)
-    val bgDepth: StateFlow<Float> = prefs.bgDepthFlow
-        .stateIn(viewModelScope, SharingStarted.Eagerly, 0.75f)
+    // Tunables are instant in-memory state (sliders stay glued to the
+    // finger); persistence is debounced so fast drags don't thrash DataStore.
+    private val _bgBlur = MutableStateFlow(22f)
+    val bgBlur: StateFlow<Float> = _bgBlur
+    private val _bgDim = MutableStateFlow(0.35f)
+    val bgDim: StateFlow<Float> = _bgDim
+    private val _bgDepth = MutableStateFlow(0.75f)
+    val bgDepth: StateFlow<Float> = _bgDepth
     val bgTint: StateFlow<Boolean> = prefs.bgTintFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    init {
+        viewModelScope.launch {
+            _bgBlur.value = prefs.bgBlurFlow.first()
+            _bgDim.value = prefs.bgDimFlow.first()
+            _bgDepth.value = prefs.bgDepthFlow.first()
+        }
+    }
 
     fun selectBg(style: PlayerBgStyle) {
         viewModelScope.launch { prefs.setBgStyle(style) }
     }
+    private var blurJob: Job? = null
+    private var dimJob: Job? = null
+    private var depthJob: Job? = null
     fun setBlur(dp: Float) {
-        viewModelScope.launch { prefs.setBgBlur(dp) }
+        _bgBlur.value = dp
+        blurJob?.cancel()
+        blurJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(350)
+            prefs.setBgBlur(dp)
+        }
     }
     fun setDim(dim: Float) {
-        viewModelScope.launch { prefs.setBgDim(dim) }
-    }
-    fun setGlow(glow: Float) {
-        viewModelScope.launch { prefs.setBgGlow(glow) }
+        _bgDim.value = dim
+        dimJob?.cancel()
+        dimJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(350)
+            prefs.setBgDim(dim)
+        }
     }
     fun setDepth(depth: Float) {
-        viewModelScope.launch { prefs.setBgDepth(depth) }
+        _bgDepth.value = depth
+        depthJob?.cancel()
+        depthJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(350)
+            prefs.setBgDepth(depth)
+        }
     }
     fun setTint(tint: Boolean) {
         viewModelScope.launch { prefs.setBgTint(tint) }

@@ -208,22 +208,25 @@ private fun AppShell() {
     val tabScrim = remember(bg) {
         Brush.verticalGradient(
             0f to Color.Transparent,
-            0.55f to Color.Transparent,
-            0.85f to bg.copy(alpha = 0.6f),
+            0.7f to Color.Transparent,
+            0.92f to bg.copy(alpha = 0.55f),
             1f to bg
         )
     }
     val pillScrim = remember {
         Brush.verticalGradient(
             0f to Color.Transparent,
-            0.55f to Color.Transparent,
-            1f to Color.Black.copy(alpha = 0.38f)
+            0.65f to Color.Transparent,
+            1f to Color.Black.copy(alpha = 0.3f)
         )
     }
     // Overlays float above content: content reserves only the opaque
     // footprints, so scrolling content glides visibly behind the fades.
     val barReserve = if (showTabBar && tabBarH > 0) with(density) { tabBarH.toDp() } else 0.dp
-    val pillSpace = if (playerState.title.isNotEmpty()) pillReserve else 0.dp
+    // The pill reserve tucks 20dp under the pill so the fade bands always
+    // overlap real content; screens end lists with 24dp padding, so the
+    // last item still clears the pill.
+    val pillSpace = if (playerState.title.isNotEmpty()) pillReserve - 20.dp else 0.dp
 
     Box(Modifier.fillMaxSize()) {
         Scaffold(
