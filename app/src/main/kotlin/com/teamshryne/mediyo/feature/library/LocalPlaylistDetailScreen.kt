@@ -130,7 +130,8 @@ fun LocalPlaylistDetailScreen(
                     }
                 }
             }
-        } else {
+        }
+        if (entries.isNotEmpty()) {
             itemsIndexed(tracks, key = { idx, _ -> entries.getOrNull(idx)?.id ?: "track_$idx" }) { idx, t ->
                 LocalTrackRow(
                     track = t,
@@ -146,6 +147,7 @@ fun LocalPlaylistDetailScreen(
                     player?.playTracks(tracks, idx, PlayOrigin.LocalPlaylist(playlistId, title))
                 }
             }
+        }
         } else {
             itemsIndexed(matchTracks, key = { idx, _ -> "local_${entries.getOrNull(idx)?.id ?: "track_$idx"}" }) { _, t ->
                 LocalTrackRow(
