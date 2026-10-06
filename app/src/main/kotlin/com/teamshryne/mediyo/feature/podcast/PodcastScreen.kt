@@ -184,23 +184,21 @@ fun PodcastScreen(
                 if (sq.isBlank()) {
                 item(key = "hero") {
                     Column(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                        Row(
-                            Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(onClick = { nav?.popBackStack() }) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        com.teamshryne.mediyo.core.design.HeroSearchTopRow(
+                            state = listSearch,
+                            placeholder = "Search episodes",
+                            onBack = { nav?.popBackStack() },
+                            trailing = {
+                                val saveFlow = remember(browseId) { vm.isSavedFlow(browseId) }
+                                val isSaved by saveFlow.collectAsState(initial = false)
+                                IconButton(onClick = { vm.toggleSave(browseId) }) {
+                                    Icon(
+                                        if (isSaved) Icons.Filled.BookmarkRemove else Icons.Filled.BookmarkAdd,
+                                        contentDescription = if (isSaved) "Remove from library" else "Add to library"
+                                    )
+                                }
                             }
-                            Spacer(Modifier.weight(1f))
-                            val saveFlow = remember(browseId) { vm.isSavedFlow(browseId) }
-                            val isSaved by saveFlow.collectAsState(initial = false)
-                            IconButton(onClick = { vm.toggleSave(browseId) }) {
-                                Icon(
-                                    if (isSaved) Icons.Filled.BookmarkRemove else Icons.Filled.BookmarkAdd,
-                                    contentDescription = if (isSaved) "Remove from library" else "Add to library"
-                                )
-                            }
-                        }
+                        )
                         Row(
                             Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                             verticalAlignment = Alignment.CenterVertically

@@ -1,5 +1,11 @@
 package com.teamshryne.mediyo.core.design
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -22,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
@@ -31,6 +38,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +49,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.ImeAction
@@ -72,10 +82,12 @@ suspend fun loadAllPaged(
     }
 }
 
-/** Per-screen in-list search state: query + full-load progress. */
+/** Per-screen in-list search state: query + expanded + full-load progress. */
 @Stable
 class ListSearchUiState {
     var query by mutableStateOf("")
+    /** Search field is expanded (takes over the header row). */
+    var active by mutableStateOf(false)
     /** A full load-all sweep is running (drives the waiting animation). */
     var searchingAll by mutableStateOf(false)
 
@@ -83,6 +95,26 @@ class ListSearchUiState {
         if (query == q) return
         query = q
         searchingAll = false
+    }
+
+    fun open() { active = true }
+
+    fun close() {
+        active = false
+        if (query.isNotEmpty()) query = ""
+        searchingAll = false
+    }
+
+    /** Back first clears text, then collapses — never exits the screen. */
+    fun onBack(): Boolean {
+        if (!active && query.isBlank()) return false
+        if (query.isNotBlank()) {
+            query = ""
+            searchingAll = false
+        } else {
+            active = false
+        }
+        return true
     }
 }
 
@@ -123,6 +155,121 @@ fun ListSearchField(
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
     )
+}
+
+/**
+ * Inline field used when search takes over a header row. Auto-focuses on
+ * expand so the keyboard follows the animation instead of feeling forced.
+ */
+@Composable
+fun InlineSearchField(
+    state: ListSearchUiState,
+    placeholder: String = "Search in this list",
+    modifier: Modifier = Modifier
+) {
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+    OutlinedTextField(
+        value = state.query,
+        onValueChange = { state.updateQuery(it) },
+        placeholder = { Text(placeholder, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1) },
+        trailingIcon = if (state.query.isNotEmpty()) {
+            {
+                IconButton(onClick = { state.updateQuery("") }) {
+                    Icon(Icons.Filled.Close, "Clear search", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        } else null,
+        singleLine = true,
+        shape = RoundedCornerShape(28.dp),
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+        colors = OutlinedTextFieldDefaults.colors(
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            unfocusedBorderColor = Color.Transparent,
+            focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+        ),
+        modifier = modifier.focusRequester(focus)
+    )
+}
+
+/**
+ * Expanded row: X on the left collapses, field takes the rest of the row.
+ * Shared by sticky headers and hero top bars so both feel identical.
+ */
+@Composable
+fun ExpandedSearchRow(
+    state: ListSearchUiState,
+    placeholder: String = "Search in this list",
+    modifier: Modifier = Modifier,
+    iconTint: Color = Color.Unspecified
+) {
+    Row(
+        modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(onClick = { state.close() }) {
+            Icon(
+                Icons.Filled.Close, contentDescription = "Close search",
+                tint = if (iconTint == Color.Unspecified) MaterialTheme.colorScheme.onSurface else iconTint
+            )
+        }
+        InlineSearchField(
+            state = state,
+            placeholder = placeholder,
+            modifier = Modifier.weight(1f).padding(end = 8.dp)
+        )
+    }
+}
+
+/**
+ * Hero top bar with the same expand/collapse behaviour as the sticky
+ * header. Collapsed: back + search + [trailing]. Expanded: X + field.
+ */
+@Composable
+fun HeroSearchTopRow(
+    state: ListSearchUiState,
+    placeholder: String = "Search in this list",
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    iconTint: Color = Color.Unspecified,
+    trailing: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {}
+) {
+    BackHandler(enabled = state.active) { state.onBack() }
+    val tint = if (iconTint == Color.Unspecified) MaterialTheme.colorScheme.onSurface else iconTint
+    AnimatedContent(
+        targetState = state.active,
+        transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(180)) },
+        label = "hero_search",
+        modifier = modifier.fillMaxWidth()
+    ) { expanded ->
+        if (!expanded) {
+            Row(
+                Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = tint)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { state.open() }) {
+                        Icon(Icons.Filled.Search, contentDescription = "Search in this list", tint = tint)
+                    }
+                    trailing()
+                }
+            }
+        } else {
+            ExpandedSearchRow(
+                state = state,
+                placeholder = placeholder,
+                iconTint = iconTint,
+                modifier = Modifier.padding(start = 0.dp, end = 0.dp, top = 4.dp, bottom = 4.dp)
+            )
+        }
+    }
 }
 
 /**

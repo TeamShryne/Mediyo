@@ -194,24 +194,22 @@ fun PlaylistScreen(
                             .padding(top = 4.dp, bottom = 24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Row(
-                            Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(onClick = { nav?.popBackStack() }) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
+                        com.teamshryne.mediyo.core.design.HeroSearchTopRow(
+                            state = listSearch,
+                            placeholder = "Search in this list",
+                            onBack = { nav?.popBackStack() },
+                            trailing = {
+                                val saveFlow = remember(browseId) { vm.isSavedFlow(browseId) }
+                                val isSaved by saveFlow.collectAsState(initial = false)
+                                IconButton(onClick = { vm.toggleSave(browseId) }) {
+                                    Icon(
+                                        if (isSaved) Icons.Filled.BookmarkRemove else Icons.Filled.BookmarkAdd,
+                                        contentDescription = if (isSaved) "Remove from library" else "Add to library",
+                                        tint = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
                             }
-                            val saveFlow = remember(browseId) { vm.isSavedFlow(browseId) }
-                            val isSaved by saveFlow.collectAsState(initial = false)
-                            IconButton(onClick = { vm.toggleSave(browseId) }) {
-                                Icon(
-                                    if (isSaved) Icons.Filled.BookmarkRemove else Icons.Filled.BookmarkAdd,
-                                    contentDescription = if (isSaved) "Remove from library" else "Add to library",
-                                    tint = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                        }
+                        )
                         AsyncImage(
                             model = vm.thumb,
                             contentDescription = vm.title,
