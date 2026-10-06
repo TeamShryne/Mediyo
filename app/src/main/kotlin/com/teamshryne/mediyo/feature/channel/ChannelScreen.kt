@@ -120,12 +120,12 @@ fun ChannelScreen(
                             modifier = Modifier.fillMaxWidth().height(160.dp)
                                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                         )
-                        IconButton(
-                            onClick = { nav?.popBackStack() },
-                            modifier = Modifier.align(Alignment.TopStart).padding(start = 8.dp, top = 4.dp)
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                        }
+                        com.teamshryne.mediyo.core.design.HeroSearchTopRow(
+                            state = listSearch,
+                            placeholder = "Search this channel",
+                            onBack = { nav?.popBackStack() },
+                            modifier = Modifier.align(Alignment.TopCenter).padding(top = 4.dp)
+                        )
                     }
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 12.dp),

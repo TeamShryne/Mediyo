@@ -115,14 +115,11 @@ fun EpisodeScreen(
                 if (sq.isBlank()) {
                 item(key = "hero") {
                     Column(Modifier.fillMaxWidth()) {
-                        Row(
-                            Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(onClick = { nav?.popBackStack() }) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                            }
-                        }
+                        com.teamshryne.mediyo.core.design.HeroSearchTopRow(
+                            state = listSearch,
+                            placeholder = "Search chapters",
+                            onBack = { nav?.popBackStack() }
+                        )
                         AsyncImage(
                             model = p.artworkUrl,
                             contentDescription = null,

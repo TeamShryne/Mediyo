@@ -245,17 +245,6 @@ fun SectionScreen(
                                 }
                             }
                         }
-                        stickyHeader(key = "search_header") {
-                            com.teamshryne.mediyo.core.design.DetailSearchHeader(
-                                listState = listState,
-                                title = heading,
-                                search = listSearch,
-                                searching = listSearch.searchingAll,
-                                resultCount = matches.size,
-                                onBack = { nav?.popBackStack() },
-                                placeholder = "Search this list"
-                            )
-                        }
                         if (sq.isBlank()) {
                         items(vm.items.size, key = { i ->
                             vm.items[i].let { it.videoId ?: it.browseId ?: it.playlistId }
@@ -323,9 +312,6 @@ fun SectionScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                            com.teamshryne.mediyo.core.design.ListSearchField(state = listSearch, placeholder = "Search this list")
-                        }
                         val gridItems = if (sq.isBlank()) vm.items else matches
                         items(gridItems.size, key = { i ->
                             gridItems[i].let { it.videoId ?: it.browseId ?: it.playlistId }
@@ -367,22 +353,13 @@ fun SectionScreen(
                     }
                 }
 
-                TopAppBar(
-                    // Zero insets: the outer Scaffold padding already clears the
-                    // status bar. Default TopAppBar insets would add it a second
-                    // time (dead gap above the bar + content hiding behind it).
-                    windowInsets = WindowInsets(0, 0, 0, 0),
-                    title = {
-                        Text(
-                            heading,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis
-                        )
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = { nav?.popBackStack() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                        }
-                    }
+                com.teamshryne.mediyo.core.design.SectionSearchBar(
+                    title = heading,
+                    search = listSearch,
+                    searching = listSearch.searchingAll,
+                    resultCount = matches.size,
+                    onBack = { nav?.popBackStack() },
+                    placeholder = "Search this list"
                 )
 
                 AnimatedVisibility(
