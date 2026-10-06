@@ -102,7 +102,7 @@ fun EpisodeScreen(
             val playingId = player?.state?.collectAsState()?.value?.videoId
             val track = remember(p) { vm.trackOf(p) }
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-            val headerVisible = com.teamshryne.mediyo.core.design.rememberHeaderVisible(listState, 200.dp)
+            val headerVisible = com.teamshryne.mediyo.core.design.rememberHeaderVisible(listState)
             LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp)) {
                 stickyHeader(key = "topbar") {
                     com.teamshryne.mediyo.core.design.CollapsingTopBar(
@@ -111,7 +111,7 @@ fun EpisodeScreen(
                         onBack = { nav?.popBackStack() }
                     )
                 }
-                item(key = "episode_header") {
+                item(key = "hero") {
                     Column(Modifier.fillMaxWidth()) {
                         Row(
                             Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp),

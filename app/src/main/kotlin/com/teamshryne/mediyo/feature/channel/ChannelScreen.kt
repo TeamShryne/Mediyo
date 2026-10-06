@@ -98,7 +98,7 @@ fun ChannelScreen(
         else -> {
             val playingId = player?.state?.collectAsState()?.value?.videoId
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-            val headerVisible = com.teamshryne.mediyo.core.design.rememberHeaderVisible(listState, 140.dp)
+            val headerVisible = com.teamshryne.mediyo.core.design.rememberHeaderVisible(listState)
             LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp)) {
                 stickyHeader(key = "topbar") {
                     com.teamshryne.mediyo.core.design.CollapsingTopBar(
@@ -107,7 +107,7 @@ fun ChannelScreen(
                         onBack = { nav?.popBackStack() }
                     )
                 }
-                item {
+                item(key = "hero") {
                     Box(Modifier.fillMaxWidth()) {
                         AsyncImage(
                             model = vm.banner,

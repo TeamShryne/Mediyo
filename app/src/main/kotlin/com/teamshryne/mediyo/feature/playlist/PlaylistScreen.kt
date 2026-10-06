@@ -158,7 +158,7 @@ fun PlaylistScreen(
             val dominant = rememberDominantColors(vm.thumb)
             val playingId = player?.state?.collectAsState()?.value?.videoId
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-            val headerVisible = com.teamshryne.mediyo.core.design.rememberHeaderVisible(listState, 170.dp)
+            val headerVisible = com.teamshryne.mediyo.core.design.rememberHeaderVisible(listState)
             LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp)) {
                 stickyHeader(key = "topbar") {
                     com.teamshryne.mediyo.core.design.CollapsingTopBar(
@@ -167,7 +167,7 @@ fun PlaylistScreen(
                         onBack = { nav?.popBackStack() }
                     )
                 }
-                item {
+                item(key = "hero") {
                     Column(
                         Modifier
                             .fillMaxWidth()

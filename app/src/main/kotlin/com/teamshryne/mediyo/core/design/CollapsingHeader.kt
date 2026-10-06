@@ -24,23 +24,20 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 
 /**
- * True when the list has scrolled past its hero: either the first item is
- * gone or it has moved up by more than [pastHero]. Detail screens use this
- * to fade their top bar in only once the big title scrolls out.
+ * True only once the hero item has scrolled fully out of view: the bar is
+ * absent while the big title is anywhere on screen, pins itself the moment
+ * it leaves, and drops away again when scrolled back. Key-based (not
+ * index/offset thresholds) so it stays exact regardless of hero height.
  */
 @Composable
-fun rememberHeaderVisible(listState: LazyListState, pastHero: Dp = 160.dp): Boolean {
-    val thresholdPx = with(LocalDensity.current) { pastHero.toPx() }
-    val visible by remember(listState, thresholdPx) {
+fun rememberHeaderVisible(listState: LazyListState, heroKey: Any = "hero"): Boolean {
+    val visible by remember(listState, heroKey) {
         derivedStateOf {
-            listState.firstVisibleItemIndex > 0 ||
-                listState.firstVisibleItemScrollOffset > thresholdPx
+            val items = listState.layoutInfo.visibleItemsInfo
+            items.isNotEmpty() && items.none { it.key == heroKey }
         }
     }
     return visible
