@@ -105,7 +105,7 @@ fun ProfileScreen(nav: androidx.navigation.NavController? = null, vm: ProfileVm 
             vm.error != null && vm.visitorData.isEmpty() -> ErrorState(vm.error ?: "Failed to load") { vm.load() }
             else -> LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 24.dp),
+                contentPadding = PaddingValues(bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // ── Header with status bar handling ──

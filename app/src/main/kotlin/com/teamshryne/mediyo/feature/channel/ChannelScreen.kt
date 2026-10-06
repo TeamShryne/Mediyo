@@ -96,7 +96,7 @@ fun ChannelScreen(
         vm.error != null -> ErrorState(vm.error ?: "Failed to load") { vm.load(browseId) }
         else -> {
             val playingId = player?.state?.collectAsState()?.value?.videoId
-            LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+            LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp)) {
                 item {
                     Box(Modifier.fillMaxWidth()) {
                         AsyncImage(

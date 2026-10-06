@@ -85,7 +85,7 @@ fun HomeScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(top = 4.dp, bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp),
         verticalArrangement = Arrangement.spacedBy(26.dp)
     ) {
         item {

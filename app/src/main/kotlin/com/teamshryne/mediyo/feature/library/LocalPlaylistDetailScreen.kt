@@ -87,7 +87,7 @@ fun LocalPlaylistDetailScreen(
         player?.playTracks(ordered, 0, PlayOrigin.LocalPlaylist(playlistId, title))
     }
 
-    LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+    LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp)) {
         item(key = "local_hero") {
             CollectionHero(
                 title = title,

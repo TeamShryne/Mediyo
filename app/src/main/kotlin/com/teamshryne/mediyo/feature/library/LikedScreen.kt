@@ -62,7 +62,7 @@ fun LikedScreen(
         player?.playTracks(ordered, 0, PlayOrigin.Liked(tracks.size))
     }
 
-    LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+    LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp)) {
         item(key = "liked_hero") {
             CollectionHero(
                 title = "Liked songs",
