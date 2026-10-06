@@ -3,19 +3,7 @@ name: Android
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - "rust/**"
-      - ".github/workflows/native.yml"
   pull_request:
-    branches: [main]
-    paths-ignore:
-      - "rust/**"
-  # Run after Native completes so rust changes land as fresh jniLibs +
-  # bindings before the APK builds (the native bot commit itself cannot
-  # retrigger workflows, hence this explicit chain).
-  workflow_run:
-    workflows: ["Native"]
-    types: [completed]
     branches: [main]
   workflow_dispatch:
 
@@ -30,8 +18,6 @@ permissions:
 jobs:
   apk:
     name: APK
-    # workflow_run fires on completed (incl. failure) — only build on success.
-    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -48,8 +34,14 @@ jobs:
       - name: Android SDK
         uses: android-actions/setup-android@v4
 
-      - name: Install platform + build-tools
-        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+      - name: Install platform + build-tools + NDK
+        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "ndk;27.0.12077973"
+
+      - name: Verify vendored mediyo-core AAR
+        run: |
+          set -euo pipefail
+          test -f app/libs/mediyo.aar || { echo "::error::app/libs/mediyo.aar missing — rebuild it in mediyo-core (make aar) and copy it over"; exit 1; }
+          ls -la app/libs/
 
       - name: Gradle cache (heavy)
         uses: gradle/actions/setup-gradle@v4
@@ -95,17 +87,17 @@ jobs:
       contents: read
       actions: write
     steps:
-      - name: Keep 12 newest + newest Rust
+      - name: Prune stale caches
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           REPO="${{ github.repository }}"
           caches=$(gh api "repos/$REPO/actions/caches?per_page=100" -q '.actions_caches | sort_by(.created_at) | reverse | map({id, key})')
-          newest_rust_id=$(echo "$caches" | jq -r '[.[] | select(.key | test("rust"; "i"))][0].id // empty')
-          echo "newest rust: $newest_rust_id"
+          newest_go_id=$(echo "$caches" | jq -r '[.[] | select(.key | test("go"; "i"))][0].id // empty')
+          echo "newest go: $newest_go_id"
           for id in $(echo "$caches" | jq -r '.[12:][].id'); do
-            if [ "$id" = "$newest_rust_id" ]; then echo "keep rust $id"; continue; fi
+            if [ "$id" = "$newest_go_id" ]; then echo "keep go $id"; continue; fi
             echo "delete $id"
             gh api -X DELETE "repos/$REPO/actions/caches/$id" > /dev/null
           done

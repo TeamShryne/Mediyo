@@ -124,7 +124,7 @@ private fun MenuItem(icon: androidx.compose.ui.graphics.vector.ImageVector, labe
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FfiTrackMenuSheet(
-    item: uniffi.mediyo_ffi.FfiSearchResult,
+    item: com.teamshryne.mediyo.data.mediyo.FfiSearchResult,
     show: Boolean,
     onDismiss: () -> Unit,
     isLiked: Boolean = false,

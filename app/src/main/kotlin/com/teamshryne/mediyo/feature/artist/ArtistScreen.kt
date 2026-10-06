@@ -36,7 +36,7 @@ import com.teamshryne.mediyo.domain.model.bestThumbUrl
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-import uniffi.mediyo_ffi.FfiSearchResult
+import com.teamshryne.mediyo.data.mediyo.FfiSearchResult
 
 @HiltViewModel class ArtistVm @Inject constructor(
     private val bridge: MediyoBridge,
@@ -49,8 +49,8 @@ import uniffi.mediyo_ffi.FfiSearchResult
     var thumb by mutableStateOf<String?>(null)
     var browseId by mutableStateOf<String?>(null)
     var topSongs by mutableStateOf<List<FfiSearchResult>>(emptyList())
-    var topSongsViewAll by mutableStateOf<uniffi.mediyo_ffi.FfiViewAll?>(null)
-    var carousels by mutableStateOf<List<uniffi.mediyo_ffi.FfiCarousel>>(emptyList())
+    var topSongsViewAll by mutableStateOf<com.teamshryne.mediyo.data.mediyo.FfiViewAll?>(null)
+    var carousels by mutableStateOf<List<com.teamshryne.mediyo.data.mediyo.FfiCarousel>>(emptyList())
     fun load(id: String) {
         loading = true; error = null; continuation = null
         browseId = id
@@ -74,23 +74,29 @@ import uniffi.mediyo_ffi.FfiSearchResult
         }
     }
     fun loadMore() {
-        val token = continuation ?: return
         if (loadingMore || loading) return
+        val token = continuation
+        val va = topSongsViewAll
+        if (token == null && va == null) return
         loadingMore = true
         viewModelScope.launch {
             try {
-                val p = bridge.nextPage(token)
+                val p = if (token != null) bridge.artistSectionNext(token)
+                else bridge.artistSection(va!!.browseId, va.params, "Popular")
+                    .also { topSongsViewAll = null }
                 val before = topSongs.size
                 topSongs = topSongs.appendUnique(p.items)
                 continuation = if (p.items.isEmpty() || topSongs.size == before) null else p.continuation
-            } catch (_: Throwable) { continuation = null } finally { loadingMore = false }
+            } catch (_: Throwable) {
+                if (token != null) continuation = null else topSongsViewAll = null
+            } finally { loadingMore = false }
         }
     }
 }
 
 /** Section-screen route for a shelf "show all" (params/title encoded, optional). */
 private fun sectionRoute(browseId: String, params: String?, title: String): String {
-    val sb = StringBuilder("list/$browseId")
+    val sb = StringBuilder("section/artist/$browseId")
     var first = true
     if (!params.isNullOrBlank()) {
         sb.append("?params=${android.net.Uri.encode(params)}")
@@ -122,7 +128,9 @@ fun ArtistScreen(
             r.browseId != null && r.category.contains("Album", true) -> nav?.navigate("album/${r.browseId}")
             r.browseId != null && r.category.contains("Artist", true) -> nav?.navigate("artist/${r.browseId}")
             r.browseId != null && r.category.contains("Playlist", true) -> nav?.navigate("playlist/${r.browseId}")
-            r.browseId != null -> nav?.navigate("list/${r.browseId}")
+            r.browseId != null && r.category.contains("Podcast", true) -> nav?.navigate("podcast/${r.browseId}")
+            r.browseId != null && r.pageType.contains("USER_CHANNEL", true) -> nav?.navigate("channel/${r.browseId}")
+            r.browseId != null -> nav?.navigate("channel/${r.browseId}")
         }
     }
 
@@ -296,7 +304,7 @@ fun ArtistScreen(
             InfiniteScrollHandler(
                 listState = listState,
                 itemCount = vm.topSongs.size + vm.carousels.size + 1,
-                enabled = vm.continuation != null && !vm.loading
+                enabled = (vm.continuation != null || vm.topSongsViewAll != null) && !vm.loading
             ) { vm.loadMore() }
         }
     }

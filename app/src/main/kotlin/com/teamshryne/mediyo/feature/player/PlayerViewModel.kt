@@ -36,7 +36,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import uniffi.mediyo_ffi.FfiSearchResult
+import com.teamshryne.mediyo.data.mediyo.FfiSearchResult
 import javax.inject.Inject
 
 data class PlayerState(

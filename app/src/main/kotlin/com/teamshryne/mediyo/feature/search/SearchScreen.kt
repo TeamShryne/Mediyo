@@ -48,8 +48,9 @@ import com.teamshryne.mediyo.domain.repository.UserEventRepository
 import com.teamshryne.mediyo.domain.repository.UserEventTypes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
-import uniffi.mediyo_ffi.FfiSearchFilter
-import uniffi.mediyo_ffi.FfiSearchResult
+import com.teamshryne.mediyo.data.mediyo.FfiSearchFilter
+import com.teamshryne.mediyo.data.mediyo.FfiSearchResult
+import com.teamshryne.mediyo.data.mediyo.FfiSuggestText
 import javax.inject.Inject
 
 @HiltViewModel
@@ -68,14 +69,40 @@ class SearchVm @Inject constructor(
     var continuation by mutableStateOf<String?>(null)
     var hasSearched by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
+    /** Live completions for the current query (core Suggest endpoint). */
+    var suggestTexts by mutableStateOf<List<FfiSuggestText>>(emptyList())
+    var suggestEntities by mutableStateOf<List<FfiSearchResult>>(emptyList())
+    private var suggestJob: kotlinx.coroutines.Job? = null
 
     private var lastQueryInternal = ""
     val lastQuery: String get() = lastQueryInternal
+
+    /** Called on every keystroke: updates the query and refreshes suggestions. */
+    fun onQueryChange(q: String) {
+        query = q
+        suggestJob?.cancel()
+        if (q.isBlank()) {
+            suggestTexts = emptyList()
+            suggestEntities = emptyList()
+            return
+        }
+        suggestJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(300)
+            try {
+                val s = bridge.suggest(q)
+                suggestTexts = s.texts
+                suggestEntities = s.entities
+            } catch (_: Throwable) { }
+        }
+    }
 
     /** Run a fresh search. [filter] == null means "All". */
     fun runSearch(filter: FfiSearchFilter?) {
         val q = query.trim()
         if (q.isEmpty()) return
+        suggestJob?.cancel()
+        suggestTexts = emptyList()
+        suggestEntities = emptyList()
         lastQueryInternal = q
         // A chip without params behaves exactly like All — normalize it so
         // the All chip stays selected instead of showing nothing selected.
@@ -159,7 +186,8 @@ fun SearchScreen(
             r.browseId != null && r.category.contains("Album", true) -> nav.navigate("album/${r.browseId}")
             r.browseId != null && r.category.contains("Artist", true) -> nav.navigate("artist/${r.browseId}")
             r.browseId != null && r.category.contains("Playlist", true) -> nav.navigate("playlist/${r.browseId}")
-            r.browseId != null -> nav.navigate("list/${r.browseId}")
+            r.browseId != null && r.category.contains("Podcast", true) -> nav.navigate("podcast/${r.browseId}")
+            r.browseId != null -> nav.navigate("channel/${r.browseId}")
             r.playlistId != null -> nav.navigate("playlist/${r.playlistId}")
         }
     }
@@ -195,7 +223,7 @@ fun SearchScreen(
             ) {
                 OutlinedTextField(
                     value = vm.query,
-                    onValueChange = { vm.query = it },
+                    onValueChange = { vm.onQueryChange(it) },
                     placeholder = { Text("Songs, artists, albums…", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                     leadingIcon = { Icon(Icons.Filled.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                     singleLine = true,
@@ -210,6 +238,18 @@ fun SearchScreen(
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
+                if (vm.query.isNotBlank() && (vm.suggestTexts.isNotEmpty() || vm.suggestEntities.isNotEmpty())) {
+                    SuggestDropdown(
+                        texts = vm.suggestTexts,
+                        entities = vm.suggestEntities,
+                        onText = {
+                            vm.query = it.query.ifBlank { it.text }
+                            vm.runSearch(null)
+                        },
+                        onEntity = { open(it) },
+                        onMenu = { menuItem = it }
+                    )
+                }
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     item {
                         FilterChip(
@@ -534,5 +574,57 @@ private fun ResultRow(item: FfiSearchResult, onClick: () -> Unit, onMenu: () -> 
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         TrackOverflowIcon(onClick = onMenu)
+    }
+}
+
+/**
+ * Live completions under the search field (core Suggest endpoint): query
+ * completions fill the field and run, entity results open directly.
+ */
+@Composable
+private fun SuggestDropdown(
+    texts: List<FfiSuggestText>,
+    entities: List<com.teamshryne.mediyo.data.mediyo.FfiSearchResult>,
+    onText: (FfiSuggestText) -> Unit,
+    onEntity: (com.teamshryne.mediyo.data.mediyo.FfiSearchResult) -> Unit,
+    onMenu: (com.teamshryne.mediyo.data.mediyo.FfiSearchResult) -> Unit = {}
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .padding(vertical = 4.dp)
+    ) {
+        texts.take(4).forEach { t ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { onText(t) }
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Filled.Search, null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    t.text,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+        entities.take(3).forEach { r ->
+            HorizontalDivider(
+                Modifier.padding(horizontal = 12.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHighest
+            )
+            TopResultMiniRow(item = r, onClick = { onEntity(r) }, onMenu = { onMenu(r) })
+        }
     }
 }

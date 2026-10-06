@@ -1,6 +1,6 @@
 package com.teamshryne.mediyo.domain.model
 
-import uniffi.mediyo_ffi.FfiThumbnail
+import com.teamshryne.mediyo.data.mediyo.FfiThumbnail
 
 /**
  * InnerTube thumbnail ladders are ordered smallest-first.

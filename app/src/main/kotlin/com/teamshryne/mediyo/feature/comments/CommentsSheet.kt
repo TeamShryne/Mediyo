@@ -29,8 +29,8 @@ import com.teamshryne.mediyo.core.design.LoadingFooter
 import com.teamshryne.mediyo.domain.repository.CommentRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
-import uniffi.mediyo_ffi.FfiComment
-import uniffi.mediyo_ffi.FfiCommentSortFilter
+import com.teamshryne.mediyo.data.mediyo.FfiComment
+import com.teamshryne.mediyo.data.mediyo.FfiCommentSortFilter
 import javax.inject.Inject
 
 @HiltViewModel
@@ -76,7 +76,7 @@ class CommentsVm @Inject constructor(
         loading = true; error = null
         viewModelScope.launch {
             try {
-                val page = repo.page(filter.continuationToken)
+                val page = repo.reload(filter.continuationToken)
                 count = page.count
                 comments = page.comments
                 continuation = page.continuation

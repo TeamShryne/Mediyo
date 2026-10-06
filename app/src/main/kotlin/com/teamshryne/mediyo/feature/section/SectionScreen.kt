@@ -53,11 +53,10 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * Full "view all" page for any section shelf (artist Popular / Singles &
- * EPs / Videos, home shelves, generic browse lists) — Metrolist style:
- * overlaid TopAppBar, song pages as a list / collection pages as an
- * adaptive grid, sentinel shimmer row driving pagination, shuffle FAB
- * that hides on scroll down.
+ * Full "view all" page for a section shelf — artist discographies / track
+ * lists and channel shelves. Backed by the typed core endpoints instead of a
+ * generic browse list. Route: `section/{kind}/{browseId}?params&title`,
+ * where kind is `artist` or `channel`.
  */
 @HiltViewModel class SectionVm @Inject constructor(
     private val bridge: MediyoBridge,
@@ -66,24 +65,26 @@ import javax.inject.Inject
     var loading by mutableStateOf(true); var error by mutableStateOf<String?>(null)
     var loadingMore by mutableStateOf(false)
     var continuation by mutableStateOf<String?>(null)
-    var items by mutableStateOf<List<uniffi.mediyo_ffi.FfiSearchResult>>(emptyList())
-    fun load(id: String, params: String?) {
+    var items by mutableStateOf<List<com.teamshryne.mediyo.data.mediyo.FfiSearchResult>>(emptyList())
+    fun load(kind: String, id: String, params: String?) {
         loading = true; error = null; continuation = null
         viewModelScope.launch { events.log(com.teamshryne.mediyo.domain.repository.UserEventTypes.VIEW_SECTION, browseId = id, meta = params?.take(200)) }
         viewModelScope.launch {
             try {
-                val p = bridge.listPage(id, params)
+                val p = if (kind == "channel") bridge.channelSection(id, params, null)
+                else bridge.artistSection(id, params, null)
                 items = p.items; continuation = p.continuation.takeIf { p.items.isNotEmpty() }
             } catch (e: Throwable) { error = e.message } finally { loading = false }
         }
     }
-    fun loadMore() {
+    fun loadMore(kind: String) {
         val token = continuation ?: return
         if (loadingMore || loading) return
         loadingMore = true
         viewModelScope.launch {
             try {
-                val p = bridge.nextPage(token)
+                val p = if (kind == "channel") bridge.channelSectionNext(token)
+                else bridge.artistSectionNext(token)
                 val before = items.size
                 items = items.appendUnique(p.items)
                 continuation = if (p.items.isEmpty() || items.size == before) null else p.continuation
@@ -95,6 +96,7 @@ import javax.inject.Inject
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SectionScreen(
+    kind: String,
     browseId: String,
     params: String? = null,
     title: String? = null,
@@ -102,8 +104,8 @@ fun SectionScreen(
     player: com.teamshryne.mediyo.feature.player.PlayerViewModel? = null,
     vm: SectionVm = hiltViewModel()
 ) {
-    LaunchedEffect(browseId, params) { vm.load(browseId, params) }
-    var menuItem by remember { mutableStateOf<uniffi.mediyo_ffi.FfiSearchResult?>(null) }
+    LaunchedEffect(kind, browseId, params) { vm.load(kind, browseId, params) }
+    var menuItem by remember { mutableStateOf<com.teamshryne.mediyo.data.mediyo.FfiSearchResult?>(null) }
     var showAddTrack by remember { mutableStateOf<Track?>(null) }
     val menuScope = rememberCoroutineScope()
     val menuVm: com.teamshryne.mediyo.core.design.MediaMenuVm = hiltViewModel()
@@ -111,7 +113,7 @@ fun SectionScreen(
     val heading = title?.takeIf { it.isNotBlank() } ?: "Playlist"
     fun origin() = PlayOrigin.GenericList("$browseId|$heading")
 
-    fun handle(r: uniffi.mediyo_ffi.FfiSearchResult) {
+    fun handle(r: com.teamshryne.mediyo.data.mediyo.FfiSearchResult) {
         when {
             r.videoId != null -> {
                 if (player?.state?.value?.videoId == r.videoId) player?.toggle()
@@ -121,11 +123,7 @@ fun SectionScreen(
             r.browseId != null && r.category.contains("Artist", true) -> nav?.navigate("artist/${r.browseId}")
             r.browseId != null && r.category.contains("Playlist", true) -> nav?.navigate("playlist/${r.browseId}")
             r.browseId != null && r.category.contains("Podcast", true) -> nav?.navigate("podcast/${r.browseId}")
-            r.browseId != null -> {
-                val p = r.browseParams?.takeIf { it.isNotBlank() }
-                    ?.let { "?params=${android.net.Uri.encode(it)}" } ?: ""
-                nav?.navigate("list/${r.browseId}$p")
-            }
+            r.browseId != null -> nav?.navigate("channel/${r.browseId}")
             r.playlistId != null -> nav?.navigate("playlist/${r.playlistId}")
         }
     }
@@ -138,7 +136,7 @@ fun SectionScreen(
 
     when {
         vm.loading -> SectionShimmer()
-        vm.error != null && vm.items.isEmpty() -> ErrorState(vm.error ?: "Failed to load") { vm.load(browseId, params) }
+        vm.error != null && vm.items.isEmpty() -> ErrorState(vm.error ?: "Failed to load") { vm.load(kind, browseId, params) }
         vm.items.isEmpty() -> EmptyState("Nothing here", "This section came back empty")
         else -> {
             // Song pages (Popular, Videos) as a list; collection pages
@@ -155,11 +153,11 @@ fun SectionScreen(
             // the continuation runs dry, so loading stops on its own.
             LaunchedEffect(listState) {
                 snapshotFlow { listState.layoutInfo.visibleItemsInfo.any { it.key == "loading" } }
-                    .collect { if (it) vm.loadMore() }
+                    .collect { if (it) vm.loadMore(kind) }
             }
             LaunchedEffect(gridState) {
                 snapshotFlow { gridState.layoutInfo.visibleItemsInfo.any { it.key == "loading" } }
-                    .collect { if (it) vm.loadMore() }
+                    .collect { if (it) vm.loadMore(kind) }
             }
             // Shuffle FAB hides on scroll down, returns on scroll up / top.
             if (songPage) {
@@ -338,7 +336,7 @@ fun SectionScreen(
 
 @Composable
 private fun SectionGridCard(
-    item: uniffi.mediyo_ffi.FfiSearchResult,
+    item: com.teamshryne.mediyo.data.mediyo.FfiSearchResult,
     isPlaying: Boolean,
     onClick: () -> Unit,
     onMenu: () -> Unit,

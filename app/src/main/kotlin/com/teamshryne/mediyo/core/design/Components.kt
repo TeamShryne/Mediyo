@@ -41,7 +41,7 @@ import coil.request.ImageRequest
 import com.teamshryne.mediyo.domain.model.bestThumbUrl
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import uniffi.mediyo_ffi.FfiSearchResult
+import com.teamshryne.mediyo.data.mediyo.FfiSearchResult
 import java.util.Calendar
 
 // ── Time helpers ─────────────────────────────────────────────────────────────

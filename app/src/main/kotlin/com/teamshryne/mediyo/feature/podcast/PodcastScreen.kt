@@ -33,8 +33,9 @@ import javax.inject.Inject
 ) : ViewModel() {
     var loading by mutableStateOf(true); var error by mutableStateOf<String?>(null)
     var loadingMore by mutableStateOf(false); var continuation by mutableStateOf<String?>(null)
-    var items by mutableStateOf<List<uniffi.mediyo_ffi.FfiSearchResult>>(emptyList())
+    var items by mutableStateOf<List<com.teamshryne.mediyo.data.mediyo.FfiSearchResult>>(emptyList())
     var title by mutableStateOf("")
+    var author by mutableStateOf<String?>(null)
     var thumb by mutableStateOf<String?>(null)
     fun isSavedFlow(id: String) = savedRepo.isSavedFlow(id)
     fun toggleSave(id: String) {
@@ -44,7 +45,7 @@ import javax.inject.Inject
                     browseId = id,
                     kind = com.teamshryne.mediyo.data.local.SavedCollectionEntity.PODCAST,
                     title = title.ifBlank { "Podcast" },
-                    subtitle = null,
+                    subtitle = author,
                     artworkUrl = thumb,
                     trackCountText = items.size.takeIf { it > 0 }?.let { "$it episodes" }
                 )
@@ -58,19 +59,16 @@ import javax.inject.Inject
             try {
                 val p = bridge.podcast(id)
                 items = p.items; continuation = p.continuation.takeIf { p.items.isNotEmpty() }
-                // Derive show title/artwork from the first episode (podcast page has no header).
-                val first = p.items.firstOrNull()
-                title = first?.album?.takeIf { it.isNotBlank() }
-                    ?: first?.artists?.firstOrNull()?.takeIf { it.isNotBlank() }
-                    ?: "Podcast"
-                thumb = first?.thumbnails?.bestThumbUrl()
+                title = p.title.ifBlank { "Podcast" }
+                author = p.author
+                thumb = p.artworkUrl
                 // Background refresh of the library snapshot when this podcast is saved.
                 try {
                     if (savedRepo.isSaved(id)) {
                         savedRepo.save(
                             browseId = id,
                             kind = com.teamshryne.mediyo.data.local.SavedCollectionEntity.PODCAST,
-                            title = title, artworkUrl = thumb,
+                            title = title, subtitle = author, artworkUrl = thumb,
                             trackCountText = p.items.size.takeIf { it > 0 }?.let { "$it episodes" }
                         )
                     }
@@ -84,10 +82,18 @@ import javax.inject.Inject
         loadingMore = true
         viewModelScope.launch {
             try {
-                val p = bridge.nextPage(token)
-                val before = items.size
-                items = items.appendUnique(p.items)
-                continuation = if (p.items.isEmpty() || items.size == before) null else p.continuation
+                val p = bridge.podcastNext(token)
+                if (p.reloaded) {
+                    items = p.items
+                } else {
+                    val before = items.size
+                    items = items.appendUnique(p.items)
+                    if (p.items.isEmpty() || items.size == before) {
+                        continuation = null
+                        return@launch
+                    }
+                }
+                continuation = p.continuation
             } catch (_: Throwable) { continuation = null } finally { loadingMore = false }
         }
     }
@@ -120,8 +126,7 @@ fun PodcastScreen(
                         SectionHeader(
                             if (vm.title.isNotBlank()) vm.title else "Podcast",
                             Modifier.weight(1f).padding(bottom = 0.dp)
-                        )
-                        val saveFlow = remember(browseId) { vm.isSavedFlow(browseId) }
+                        )                        val saveFlow = remember(browseId) { vm.isSavedFlow(browseId) }
                         val isSaved by saveFlow.collectAsState(initial = false)
                         IconButton(onClick = { vm.toggleSave(browseId) }) {
                             Icon(

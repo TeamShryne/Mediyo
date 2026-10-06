@@ -62,8 +62,8 @@ import com.teamshryne.mediyo.core.design.sheetEnter
 import com.teamshryne.mediyo.core.design.sheetExit
 import com.teamshryne.mediyo.feature.album.AlbumScreen
 import com.teamshryne.mediyo.feature.artist.ArtistScreen
+import com.teamshryne.mediyo.feature.channel.ChannelScreen
 import com.teamshryne.mediyo.feature.comments.CommentsBottomSheet
-import com.teamshryne.mediyo.feature.episodes.EpisodesScreen
 import com.teamshryne.mediyo.feature.history.HistoryScreen
 import com.teamshryne.mediyo.feature.home.HomeScreen
 import com.teamshryne.mediyo.feature.library.LibraryScreen
@@ -157,7 +157,8 @@ private fun AppShell() {
         currentRoute.startsWith("localPlaylist/") -> "Playlist"
         currentRoute.startsWith("liked") -> "Liked"
         currentRoute.startsWith("history") -> "History"
-        currentRoute.startsWith("list/") -> "Playlist"
+        currentRoute.startsWith("section/") -> "Playlist"
+        currentRoute.startsWith("channel/") -> "Channel"
         else -> tabs.firstOrNull { it.route == currentRoute }?.label ?: "Mediyo"
     }
 
@@ -265,16 +266,18 @@ private fun AppShell() {
                 composable("album/{id}") { AlbumScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
                 composable("artist/{id}") { ArtistScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
                 composable("podcast/{id}") { PodcastScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
-                composable("episodes/{id}") { EpisodesScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
+                composable("channel/{id}") { ChannelScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
                 composable(
-                    route = "list/{id}?params={params}&title={title}",
+                    route = "section/{kind}/{id}?params={params}&title={title}",
                     arguments = listOf(
+                        navArgument("kind") { type = NavType.StringType },
                         navArgument("id") { type = NavType.StringType },
                         navArgument("params") { type = NavType.StringType; nullable = true; defaultValue = null },
                         navArgument("title") { type = NavType.StringType; nullable = true; defaultValue = null }
                     )
                 ) {
                     SectionScreen(
+                        kind = it.arguments?.getString("kind") ?: "artist",
                         browseId = it.arguments?.getString("id") ?: "",
                         params = it.arguments?.getString("params"),
                         title = it.arguments?.getString("title"),
@@ -319,7 +322,7 @@ private fun AppShell() {
                 onShowComments = { playerState.videoId?.let { showCommentsId = it } },
                 onShowSleepTimer = { showSleepSheet = true },
                 onGoToArtist = { showFullPlayer = false; nav.navigate("artist/$it") },
-                onOpenChannel = { showFullPlayer = false; nav.navigate("list/$it") },
+                onOpenChannel = { showFullPlayer = false; nav.navigate("channel/$it") },
                 playerVm = playerVm
             )
         }

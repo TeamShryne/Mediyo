@@ -89,8 +89,14 @@ jobs:
       - name: Android SDK
         uses: android-actions/setup-android@v4
 
-      - name: Install platform + build-tools
-        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+      - name: Install platform + build-tools + NDK
+        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "ndk;27.0.12077973"
+
+      - name: Verify vendored mediyo-core AAR
+        run: |
+          set -euo pipefail
+          test -f app/libs/mediyo.aar || { echo "::error::app/libs/mediyo.aar missing — rebuild it in mediyo-core (make aar) and copy it over"; exit 1; }
+          ls -la app/libs/
 
       - name: Gradle cache (heavy)
         uses: gradle/actions/setup-gradle@v4
