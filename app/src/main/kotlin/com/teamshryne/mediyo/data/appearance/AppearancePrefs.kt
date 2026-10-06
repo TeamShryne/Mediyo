@@ -15,9 +15,7 @@ import javax.inject.Singleton
 private val Context.appearancePrefs by preferencesDataStore("appearance_prefs")
 
 enum class TabStyle(val id: String, val title: String, val subtitle: String) {
-    Classic("classic", "Classic", "Standard bar with a soft indicator"),
     Docked("docked", "Dock", "Floating pill, centered"),
-    Minimal("minimal", "Minimal", "Icons with a dot indicator"),
     Capsule("capsule", "Capsule", "Full-width segmented control");
 
     companion object {
@@ -45,7 +43,7 @@ class AppearancePrefs @Inject constructor(@ApplicationContext private val ctx: C
     private val K_TINT = booleanPreferencesKey("player_bg_tint")
 
     val tabStyleFlow: Flow<TabStyle> = ctx.appearancePrefs.data.map { prefs ->
-        TabStyle.fromId(prefs[K_TAB]) ?: TabStyle.Classic
+        TabStyle.fromId(prefs[K_TAB]) ?: TabStyle.Docked
     }
 
     suspend fun setTabStyle(style: TabStyle) {

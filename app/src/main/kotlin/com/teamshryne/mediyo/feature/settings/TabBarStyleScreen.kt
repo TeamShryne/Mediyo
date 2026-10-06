@@ -125,23 +125,6 @@ private fun TabStylePreview(style: TabStyle) {
     val idle = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
     val track = MaterialTheme.colorScheme.surfaceContainerHighest
     when (style) {
-        TabStyle.Classic -> Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(track).padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            repeat(4) { i ->
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Box(
-                        Modifier.size(width = 40.dp, height = 22.dp).clip(CircleShape)
-                            .background(if (i == 1) active.copy(alpha = 0.35f) else idle.copy(alpha = 0.18f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Box(Modifier.size(10.dp).clip(CircleShape).background(if (i == 1) active else idle))
-                    }
-                    Box(Modifier.size(width = 20.dp, height = 4.dp).clip(CircleShape).background(idle.copy(alpha = 0.5f)))
-                }
-            }
-        }
         TabStyle.Docked -> Box(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(track),
             contentAlignment = Alignment.Center
@@ -159,18 +142,6 @@ private fun TabStylePreview(style: TabStyle) {
                     ) {
                         Box(Modifier.size(9.dp).clip(CircleShape).background(if (i == 1) MaterialTheme.colorScheme.onPrimary else idle))
                     }
-                }
-            }
-        }
-        TabStyle.Minimal -> Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(track).padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            repeat(4) { i ->
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Box(Modifier.size(11.dp).clip(CircleShape).background(if (i == 1) active else idle))
-                    if (i == 1) Box(Modifier.size(5.dp).clip(CircleShape).background(active))
-                    else Box(Modifier.size(5.dp))
                 }
             }
         }

@@ -38,9 +38,6 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -470,34 +467,8 @@ private fun MediyoTabBar(
     onSelect: (Tab) -> Unit
 ) {
     when (style) {
-        TabStyle.Classic -> ClassicTabBar(tabs, currentRoute, onSelect)
         TabStyle.Docked -> DockedTabBar(tabs, currentRoute, onSelect)
-        TabStyle.Minimal -> MinimalTabBar(tabs, currentRoute, onSelect)
         TabStyle.Capsule -> CapsuleTabBar(tabs, currentRoute, onSelect)
-    }
-}
-
-@Composable
-private fun ClassicTabBar(tabs: List<Tab>, currentRoute: String?, onSelect: (Tab) -> Unit) {
-    NavigationBar(
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.85f),
-        tonalElevation = 0.dp
-    ) {
-        tabs.forEach { t ->
-            NavigationBarItem(
-                selected = currentRoute == t.route,
-                onClick = { onSelect(t) },
-                icon = { Icon(t.icon, contentDescription = t.label) },
-                label = { Text(t.label) },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = MaterialTheme.colorScheme.onSurface,
-                    selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    indicatorColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                )
-            )
-        }
     }
 }
 
@@ -544,42 +515,6 @@ private fun DockedTabBar(tabs: List<Tab>, currentRoute: String?, onSelect: (Tab)
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun MinimalTabBar(tabs: List<Tab>, currentRoute: String?, onSelect: (Tab) -> Unit) {
-    NavigationBar(
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.85f),
-        tonalElevation = 0.dp
-    ) {
-        tabs.forEach { t ->
-            val sel = currentRoute == t.route
-            NavigationBarItem(
-                selected = sel,
-                onClick = { onSelect(t) },
-                icon = {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(t.icon, contentDescription = t.label)
-                        Box(
-                            Modifier.padding(top = 5.dp).size(5.dp).clip(CircleShape)
-                                .background(
-                                    if (sel) MaterialTheme.colorScheme.primary
-                                    else Color.Transparent
-                                )
-                        )
-                    }
-                },
-                label = { Text(t.label) },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = MaterialTheme.colorScheme.onSurface,
-                    selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    indicatorColor = Color.Transparent
-                )
-            )
         }
     }
 }
