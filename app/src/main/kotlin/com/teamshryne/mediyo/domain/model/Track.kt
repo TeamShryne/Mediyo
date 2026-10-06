@@ -1,8 +1,8 @@
 package com.teamshryne.mediyo.domain.model
 
-import uniffi.mediyo_ffi.FfiSearchResult
-import uniffi.mediyo_ffi.FfiQueueItem
-import uniffi.mediyo_ffi.FfiThumbnail
+import com.teamshryne.mediyo.data.mediyo.FfiSearchResult
+import com.teamshryne.mediyo.data.mediyo.FfiQueueItem
+import com.teamshryne.mediyo.data.mediyo.FfiThumbnail
 import java.util.UUID
 
 data class Track(

@@ -145,7 +145,7 @@ fun LocalPlaylistDetailScreen(
             onPlayNext = { player?.addNext(t) },
             onAddToQueue = { player?.addToQueue(t) },
             onGoToAlbum = t.albumId?.takeIf { it.isNotBlank() }?.let { { nav?.navigate("album/$it") } },
-            onOpenChannel = t.channelId?.takeIf { it.isNotBlank() }?.let { { nav?.navigate("list/$it") } },
+            onOpenChannel = t.channelId?.takeIf { it.isNotBlank() }?.let { { nav?.navigate("channel/$it") } },
             onShowArtist = { name, id ->
                 menuScope.launch { (id?.takeIf { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name))?.let { nav?.navigate("artist/$it") } }
             },

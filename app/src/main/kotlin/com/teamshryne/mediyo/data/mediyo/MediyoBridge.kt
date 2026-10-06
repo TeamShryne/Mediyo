@@ -6,179 +6,538 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import uniffi.mediyo_ffi.FfiAlbumPage
-import uniffi.mediyo_ffi.FfiArtistPage
-import uniffi.mediyo_ffi.FfiCommentsPage
-import uniffi.mediyo_ffi.FfiHomePage
-import uniffi.mediyo_ffi.FfiListPage
-import uniffi.mediyo_ffi.FfiPlaylistPage
-import uniffi.mediyo_ffi.FfiQueue
-import uniffi.mediyo_ffi.FfiSearchResponse
-import uniffi.mediyo_ffi.FfiSong
-import uniffi.mediyo_ffi.MediyoSession
-import uniffi.mediyo_ffi.browseAlbum
-import uniffi.mediyo_ffi.browseArtist
-import uniffi.mediyo_ffi.browseExplore
-import uniffi.mediyo_ffi.browseHome
-import uniffi.mediyo_ffi.browseHomeContinue
-import uniffi.mediyo_ffi.browseListPage
-import uniffi.mediyo_ffi.browseNextPage
-import uniffi.mediyo_ffi.browsePlaylist
-import uniffi.mediyo_ffi.browsePodcast
-import uniffi.mediyo_ffi.search
-import uniffi.mediyo_ffi.searchContinuation
-import uniffi.mediyo_ffi.searchWithParams
+import mediyo.AlbumPage
+import mediyo.ArtistCard
+import mediyo.ArtistPage
+import mediyo.ArtistSectionPage
+import mediyo.ChannelCard
+import mediyo.ChannelPage
+import mediyo.ChannelSectionPage
+import mediyo.CommentsPage
+import mediyo.PlaylistPage
+import mediyo.PlaylistTrack
+import mediyo.PodcastEpisode
+import mediyo.PodcastPage
+import mediyo.QueueItem
+import mediyo.QueuePage
+import mediyo.SearchPage
+import mediyo.SearchResult
+import mediyo.Session
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** Continuation page for a podcast show; [reloaded] means replace, not append. */
+data class FfiPodcastNext(
+    val items: List<FfiSearchResult>,
+    val continuation: String?,
+    val reloaded: Boolean
+)
+
+private fun String.emptyToNull(): String? = ifEmpty { null }
+
+private fun thumbsOf(count: Long, url: (Long) -> String?, width: (Long) -> Long, height: (Long) -> Long): List<FfiThumbnail> {
+    if (count <= 0) return emptyList()
+    return (0 until count).mapNotNull { i ->
+        val u = url(i) ?: return@mapNotNull null
+        if (u.isEmpty()) return@mapNotNull null
+        FfiThumbnail(u, width(i).toUInt(), height(i).toUInt())
+    }
+}
+
+/** Go Category int → the display string the UI matches on (`isArtist()`, ...). */
+private fun categoryOf(c: Long): String = when (c.toInt()) {
+    1 -> "Song"
+    2 -> "Video"
+    3 -> "Album"
+    4 -> "Artist"
+    5, 6, 7, 11 -> "Playlist"
+    8 -> "Podcast"
+    9 -> "Episode"
+    10 -> "Profile"
+    else -> "Unknown"
+}
+
+/** Artist/discography card kinds that address an album-style page. */
+private fun cardCategoryOf(kind: String): String = when {
+    kind.equals("Single", true) || kind.equals("EP", true) -> "Album"
+    kind.isBlank() -> "Unknown"
+    else -> kind
+}
+
+private fun SearchResult.toModel(top: Boolean = false): FfiSearchResult {
+    val artists = (0 until artistCount()).map { artistName(it) }
+    val artistIds = (0 until artistCount()).map { artistID(it) }
+    return FfiSearchResult(
+        title = title(),
+        videoId = videoID().emptyToNull(),
+        browseId = browseID().emptyToNull(),
+        browseParams = browseParams().emptyToNull(),
+        playlistId = playlistID().emptyToNull(),
+        category = categoryOf(category()),
+        year = year().emptyToNull(),
+        duration = duration().emptyToNull(),
+        explicit = explicit(),
+        thumbnails = thumbsOf(thumbnailCount(), ::thumbnailURL, ::thumbnailWidth, ::thumbnailHeight),
+        artists = artists,
+        artistIds = artistIds,
+        album = albumName().emptyToNull(),
+        albumId = (albumID().ifEmpty { albumIDFromMenu() }).emptyToNull(),
+        info = subtitle().emptyToNull(),
+        isTopResult = top,
+        channelName = channelName().emptyToNull(),
+        channelId = channelID().emptyToNull(),
+        pageType = browsePageType()
+    ).also { close() }
+}
+
+private fun PlaylistTrack.toModel(): FfiSearchResult = result().toModel()
+
+private fun ArtistCard.toModel(): FfiSearchResult {
+    val kind = cardCategoryOf(kind())
+    return FfiSearchResult(
+        title = title(),
+        videoId = videoID().emptyToNull(),
+        browseId = browseID().emptyToNull(),
+        browseParams = params().emptyToNull(),
+        playlistId = playlistID().emptyToNull(),
+        category = kind,
+        year = year().emptyToNull(),
+        duration = null,
+        explicit = explicit(),
+        thumbnails = thumbsOf(thumbnailCount(), ::thumbnailURL, ::thumbnailWidth, ::thumbnailHeight),
+        artists = listOfNotNull(artistName().emptyToNull()),
+        artistIds = listOf(artistID()),
+        album = null,
+        albumId = null,
+        info = subtitle().emptyToNull(),
+        isTopResult = false,
+        channelName = null,
+        channelId = null,
+        pageType = pageType()
+    ).also { close() }
+}
+
+private fun ChannelCard.toModel(): FfiSearchResult {
+    val v = videoID().emptyToNull()
+    val b = browseID().emptyToNull() ?: playlistID().emptyToNull()
+    return FfiSearchResult(
+        title = title(),
+        videoId = v,
+        browseId = if (v != null) null else b,
+        browseParams = params().emptyToNull(),
+        playlistId = playlistID().emptyToNull(),
+        category = kind().ifBlank { if (v != null) "Video" else "Playlist" },
+        year = null,
+        duration = null,
+        explicit = false,
+        thumbnails = thumbsOf(thumbnailCount(), ::thumbnailURL, ::thumbnailWidth, ::thumbnailHeight),
+        artists = emptyList(),
+        artistIds = emptyList(),
+        album = null,
+        albumId = null,
+        info = subtitle().emptyToNull(),
+        isTopResult = false,
+        channelName = null,
+        channelId = null,
+        pageType = pageType()
+    ).also { close() }
+}
+
+private fun PodcastEpisode.toModel(showTitle: String, author: String): FfiSearchResult {
+    return FfiSearchResult(
+        title = title(),
+        videoId = videoID().emptyToNull(),
+        browseId = null,
+        browseParams = null,
+        playlistId = null,
+        category = "Episode",
+        year = null,
+        duration = duration().emptyToNull(),
+        explicit = false,
+        thumbnails = thumbsOf(thumbnailCount(), ::thumbnailURL, ::thumbnailWidth, ::thumbnailHeight),
+        artists = listOfNotNull(author.emptyToNull()),
+        artistIds = emptyList(),
+        album = showTitle.emptyToNull(),
+        albumId = null,
+        info = date().emptyToNull(),
+        isTopResult = false,
+        channelName = null,
+        channelId = null,
+        pageType = episodePageType()
+    ).also { close() }
+}
+
+private fun QueueItem.toModel(): FfiQueueItem {
+    val artists = (0 until artistCount()).map { artistName(it) }
+    val artistIds = (0 until artistCount()).map { artistID(it) }
+    return FfiQueueItem(
+        title = title(),
+        videoId = videoID(),
+        artists = artists,
+        artistIds = artistIds,
+        album = albumName().emptyToNull(),
+        duration = duration().emptyToNull(),
+        thumbnails = thumbsOf(thumbnailCount(), ::thumbnailURL, ::thumbnailWidth, ::thumbnailHeight)
+    ).also { close() }
+}
+
+private fun QueuePage.toModel(): FfiQueue {
+    val items = (0 until itemCount()).mapNotNull { item(it)?.toModel() }
+    return FfiQueue(
+        playlistId = playlistID(),
+        isInfinite = isInfinite(),
+        items = items,
+        continuation = continuation().emptyToNull()
+    ).also { close() }
+}
+
+private fun CommentsPage.toModel(): FfiCommentsPage {
+    val comments = (0 until commentCount()).mapNotNull { i ->
+        val c = comment(i) ?: return@mapNotNull null
+        FfiComment(
+            content = c.content(),
+            author = c.authorName(),
+            publishedTime = c.publishedTime(),
+            likeCount = c.likeCount().emptyToNull(),
+            replyCount = c.replyCount().emptyToNull(),
+            repliesContinuation = c.repliesToken().emptyToNull()
+        ).also { c.close() }
+    }
+    val sorts = (0 until sortCount()).map {
+        FfiCommentSortFilter(sortTitle(it), sortSelected(it), sortToken(it))
+    }
+    return FfiCommentsPage(
+        count = count().emptyToNull(),
+        comments = comments,
+        continuation = continuation().emptyToNull(),
+        sortFilters = sorts
+    ).also { close() }
+}
+
+private fun SearchPage.toModel(): FfiSearchResponse {
+    val out = ArrayList<FfiSearchResult>(resultCount().toInt() + 8)
+    topResult()?.let { out.add(it.toModel(top = true)) }
+    (0 until topResultCount()).mapNotNullTo(out) { topResultItem(it)?.toModel(top = true) }
+    (0 until resultCount()).mapNotNullTo(out) { results(it)?.toModel() }
+    val filters = (0 until filterCount()).mapNotNull {
+        val f = filters(it) ?: return@mapNotNull null
+        FfiSearchFilter(f.label(), f.query(), f.params().emptyToNull()).also { f.close() }
+    }
+    return FfiSearchResponse(out, filters, continuation().emptyToNull()).also { close() }
+}
+
+private fun AlbumPage.toModel(): FfiAlbumPage {
+    val artists = (0 until artistCount()).map { artistName(it) }
+    val tracks = (0 until trackCount()).mapNotNull { track(it)?.toModel() }
+    val shelves = (0 until relatedCount()).map { s ->
+        val items = (0 until relatedItemCount(s)).mapNotNull { i ->
+            FfiSearchResult(
+                title = relatedItemTitle(s, i),
+                videoId = null,
+                browseId = relatedItemBrowseID(s, i).emptyToNull(),
+                browseParams = relatedItemParams(s, i).emptyToNull(),
+                playlistId = null,
+                category = cardCategoryOf(relatedItemKind(s, i)),
+                year = relatedItemYear(s, i).emptyToNull(),
+                duration = null,
+                explicit = false,
+                thumbnails = thumbsOf(
+                    relatedItemThumbnailCount(s, i).toLong(),
+                    { t -> relatedItemThumbnailURL(s, i, t) },
+                    { t -> relatedItemThumbnailWidth(s, i, t) },
+                    { t -> relatedItemThumbnailHeight(s, i, t) }
+                ),
+                artists = listOfNotNull(relatedItemArtistName(s, i).emptyToNull()),
+                artistIds = listOf(relatedItemArtistID(s, i)),
+                album = null,
+                albumId = null,
+                info = null,
+                isTopResult = false,
+                channelName = null,
+                channelId = null,
+                pageType = relatedItemPageType(s, i)
+            )
+        }
+        FfiCarousel(relatedTitle(s), items, null, null)
+    }
+    return FfiAlbumPage(
+        title = title(),
+        artist = artists.firstOrNull(),
+        year = year().emptyToNull(),
+        thumbnails = thumbsOf(thumbnailCount(), ::thumbnailURL, ::thumbnailWidth, ::thumbnailHeight),
+        tracks = tracks,
+        carousels = shelves,
+        continuation = continuation().emptyToNull()
+    ).also { close() }
+}
+
+private fun ArtistPage.toModel(): FfiArtistPage {
+    val topSongs = (0 until topSongCount()).mapNotNull { topSong(it)?.toModel() }
+    val shelves = (0 until sectionCount()).map { s ->
+        val items = (0 until sectionItemCount(s)).mapNotNull { sectionItem(s, it)?.toModel() }
+        val more = if (sectionHasMore(s)) {
+            FfiViewAll(sectionMoreBrowseID(s), sectionMoreParams(s).emptyToNull())
+        } else null
+        FfiCarousel(sectionTitle(s), items, more, null)
+    }
+    val viewAll = if (hasTopSongsMore()) {
+        FfiViewAll(topSongsMoreBrowseID(), topSongsMoreParams().emptyToNull())
+    } else null
+    return FfiArtistPage(
+        name = title(),
+        subscriberCount = subscriberCount().emptyToNull(),
+        monthlyAudience = monthlyAudience().emptyToNull(),
+        description = description().emptyToNull(),
+        thumbnails = thumbsOf(thumbnailCount(), ::thumbnailURL, ::thumbnailWidth, ::thumbnailHeight),
+        topSongs = topSongs,
+        topSongsViewAll = viewAll,
+        carousels = shelves,
+        continuation = null
+    ).also { close() }
+}
+
+private fun ArtistSectionPage.toList(): FfiListPage {
+    val items = ArrayList<FfiSearchResult>(trackCount().toInt() + cardCount().toInt())
+    (0 until trackCount()).mapNotNullTo(items) { track(it)?.toModel() }
+    (0 until cardCount()).mapNotNullTo(items) { card(it)?.toModel() }
+    return FfiListPage(items, continuation().emptyToNull()).also { close() }
+}
+
+private fun ChannelPage.toModel(): FfiChannelPage {
+    val shelves = (0 until sectionCount()).map { s ->
+        val items = (0 until sectionItemCount(s)).mapNotNull { sectionItem(s, it)?.toModel() }
+        val more = if (sectionHasMore(s)) {
+            FfiViewAll(sectionMoreBrowseID(s), sectionMoreParams(s).emptyToNull())
+        } else null
+        FfiCarousel(sectionTitle(s), items, more, null)
+    }
+    return FfiChannelPage(
+        title = title(),
+        subscriberCount = subscriberCount().emptyToNull(),
+        avatarUrl = if (avatarCount() > 0) avatarURL(0).emptyToNull() else null,
+        bannerUrl = if (bannerCount() > 0) bannerURL(0).emptyToNull() else null,
+        sections = shelves,
+        emptyMessage = emptyMessage().emptyToNull() ?: ""
+    ).also { close() }
+}
+
+private fun ChannelSectionPage.toList(): FfiListPage {
+    val items = (0 until itemCount()).mapNotNull { item(it)?.toModel() }
+    return FfiListPage(items, continuation().emptyToNull()).also { close() }
+}
+
+private fun PodcastPage.toModel(): FfiPodcastPage {
+    val title = title()
+    val author = authorName().emptyToNull() ?: ""
+    val thumbs = thumbsOf(thumbnailCount(), ::thumbnailURL, ::thumbnailWidth, ::thumbnailHeight)
+    val items = (0 until episodeCount()).mapNotNull { episode(it)?.toModel(title, author) }
+    return FfiPodcastPage(
+        title = title,
+        author = authorName().emptyToNull(),
+        artworkUrl = thumbs.maxByOrNull { it.width }?.url ?: thumbs.firstOrNull()?.url,
+        description = description().emptyToNull(),
+        items = items,
+        continuation = continuation().emptyToNull()
+    ).also { close() }
+}
+
+/**
+ * App gateway to mediyo-core (Go). Owns one process-lifetime [Session]:
+ * continuations are bound to the identity that minted them, so the session
+ * must not be recreated mid-scroll. All calls run on Dispatchers.IO because
+ * gomobile bindings block.
+ *
+ * Auth is anonymous visitor identity only: the persisted visitorData is
+ * seeded on start (no I/O); a fresh bootstrap runs only when nothing is
+ * stored. Media URLs still come from NewPipe, never from this core.
+ */
 @Singleton
 class MediyoBridge @Inject constructor(private val auth: AuthRepository) {
-    // Platform-owned visitorData for anonymous — fetched once and persisted
-    private var cachedAnonVisitor: String? = null
-    private val anonLock = Mutex()
+    private val lock = Mutex()
+    private var session: Session? = null
 
-    private suspend fun anonVisitor(): String {
-        cachedAnonVisitor?.let { if (it.isNotEmpty()) return it }
-        val a = auth.flow.first()
-        if (a.visitorData.isNotEmpty()) {
-            cachedAnonVisitor = a.visitorData
-            return a.visitorData
+    private suspend fun session(): Session = lock.withLock {
+        session?.let { return it }
+        val s = Session()
+        val saved = auth.flow.first()
+        if (saved.visitorData.isNotEmpty()) {
+            withContext(Dispatchers.IO) {
+                runCatching { s.seedVisitorData(saved.visitorData, "") }
+            }
+        } else {
+            withContext(Dispatchers.IO) {
+                runCatching { s.bootstrap() }
+            }
+            val vd = runCatching { s.visitorData() }.getOrDefault("")
+            if (vd.isNotEmpty()) auth.saveAnonVisitor(vd)
         }
-        // Fetch fresh visitorData once and persist even for anonymous
-        val tmp = MediyoSession()
-        return try {
-            val vd = tmp.fetchVisitorData()
-            cachedAnonVisitor = vd
-            auth.saveAnonVisitor(vd)
-            android.util.Log.d("MediyoBridge", "fetched anon visitor ${vd.take(20)}")
-            vd
-        } catch (e: Throwable) {
-            android.util.Log.e("MediyoBridge", "fetch anon visitor failed", e)
-            ""
-        } finally {
-            tmp.close()
-        }
+        session = s
+        s
     }
 
     suspend fun currentVisitorData(): String {
         val a = auth.flow.first()
-        return if (a.isLoggedIn) a.visitorData else anonLock.withLock { anonVisitor() }
-    }
-
-    suspend fun rotateVisitorData(): String {
-        return anonLock.withLock {
-            cachedAnonVisitor = null
-            val tmp = MediyoSession()
-            try {
-                val vd = tmp.fetchVisitorData()
-                cachedAnonVisitor = vd
-                auth.saveAnonVisitor(vd)
-                android.util.Log.d("MediyoBridge", "rotated visitor ${vd.take(20)}")
-                vd
-            } finally {
-                tmp.close()
-            }
+        if (a.visitorData.isNotEmpty()) return a.visitorData
+        return try {
+            val vd = withContext(Dispatchers.IO) { session().visitorData() }
+            if (vd.isNotEmpty()) vd else a.visitorData
+        } catch (_: Throwable) {
+            a.visitorData
         }
     }
 
-    fun clearAnonCache() {
-        cachedAnonVisitor = null
+    suspend fun rotateVisitorData(): String = withContext(Dispatchers.IO) {
+        val s = session()
+        runCatching { s.rotateVisitorData() }
+        val vd = runCatching { s.visitorData() }.getOrDefault("")
+        if (vd.isNotEmpty()) auth.saveAnonVisitor(vd)
+        android.util.Log.d("MediyoBridge", "rotated visitor ${vd.take(20)}")
+        vd
     }
 
-    private suspend fun session(): MediyoSession {
-        val a = auth.flow.first()
-        return if (a.isLoggedIn) {
-            MediyoSession.withAll(a.cookies, a.sapisid.ifEmpty { null }, a.visitorData.ifEmpty { "" }, a.pageId.ifEmpty { null })
-        } else {
-            val vd = anonLock.withLock { anonVisitor() }
-            if (vd.isNotEmpty()) MediyoSession.withAll("", null, vd, null) else MediyoSession()
-        }
-    }
-
+    // ── search (+ suggestions) ───────────────────────────────────────────
     suspend fun search(query: String): FfiSearchResponse = withContext(Dispatchers.IO) {
-        val s = session()
-        try { search(s, query) } finally { s.close() }
+        session().search(query).toModel()
     }
 
-    /** Search scoped to a library-provided filter (params from FfiSearchFilter). */
-    suspend fun searchFiltered(query: String, params: String): FfiSearchResponse = withContext(Dispatchers.IO) {
-        val s = session()
-        try { searchWithParams(s, query, params) } finally { s.close() }
-    }
+    suspend fun searchFiltered(query: String, params: String): FfiSearchResponse =
+        withContext(Dispatchers.IO) {
+            session().searchFiltered(query, params).toModel()
+        }
 
-    /** Next page of search results (works for plain and filtered searches). */
     suspend fun searchNext(token: String): FfiSearchResponse = withContext(Dispatchers.IO) {
-        val s = session()
-        try { searchContinuation(s, token) } finally { s.close() }
+        session().searchNext(token).toModel()
     }
 
-    /** Next page of the home feed shelves. */
-    suspend fun homeContinue(token: String): FfiHomePage = withContext(Dispatchers.IO) {
-        val s = session()
-        try { browseHomeContinue(s, token) } finally { s.close() }
+    suspend fun suggest(input: String): FfiSuggestResponse = withContext(Dispatchers.IO) {
+        val q = input.trim()
+        if (q.isEmpty()) return@withContext FfiSuggestResponse(emptyList(), emptyList())
+        val page = session().suggest(q)
+        try {
+            val texts = (0 until page.textCount()).mapNotNull {
+                val t = page.text(it) ?: return@mapNotNull null
+                FfiSuggestText(t.suggestionText(), t.query()).also { t.close() }
+            }
+            val entities = (0 until page.entityCount()).mapNotNull {
+                page.entity(it)?.toModel()
+            }
+            FfiSuggestResponse(texts, entities)
+        } finally {
+            page.close()
+        }
     }
 
-    /** Generic continuation for browse pages (playlist/album/artist/list items). */
-    suspend fun nextPage(token: String): FfiListPage = withContext(Dispatchers.IO) {
-        val s = session()
-        try { browseNextPage(s, token) } finally { s.close() }
+    // ── album / artist / playlist / podcast / channel ─────────────────────
+    suspend fun album(browseId: String): FfiAlbumPage = withContext(Dispatchers.IO) {
+        session().album(browseId).toModel()
     }
 
-    suspend fun home(): FfiHomePage = withContext(Dispatchers.IO) {
-        val s = session()
-        try { browseHome(s) } finally { s.close() }
+    suspend fun albumNext(token: String): FfiListPage = withContext(Dispatchers.IO) {
+        val p = session().albumNext(token)
+        try {
+            val items = (0 until p.trackCount()).mapNotNull { p.track(it)?.toModel() }
+            FfiListPage(items, p.continuation().emptyToNull())
+        } finally {
+            p.close()
+        }
     }
 
-    suspend fun explore(): uniffi.mediyo_ffi.FfiExplorePage = withContext(Dispatchers.IO) {
-        val s = session()
-        try { browseExplore(s) } finally { s.close() }
+    suspend fun artist(browseId: String): FfiArtistPage = withContext(Dispatchers.IO) {
+        session().artist(browseId).toModel()
+    }
+
+    suspend fun artistSection(browseId: String, params: String?, title: String?): FfiListPage =
+        withContext(Dispatchers.IO) {
+            session().artistSection(browseId, params ?: "", title ?: "").toList()
+        }
+
+    suspend fun artistSectionNext(token: String): FfiListPage = withContext(Dispatchers.IO) {
+        session().artistSectionNext(token).toList()
     }
 
     suspend fun playlist(browseId: String): FfiPlaylistPage = withContext(Dispatchers.IO) {
-        val s = session(); try { browsePlaylist(s, browseId) } finally { s.close() }
-    }
-    suspend fun album(browseId: String): FfiAlbumPage = withContext(Dispatchers.IO) {
-        val s = session(); try { browseAlbum(s, browseId) } finally { s.close() }
-    }
-    suspend fun artist(browseId: String): FfiArtistPage = withContext(Dispatchers.IO) {
-        val s = session(); try { browseArtist(s, browseId) } finally { s.close() }
-    }
-    suspend fun podcast(browseId: String): FfiListPage = withContext(Dispatchers.IO) {
-        val s = session(); try { browsePodcast(s, browseId) } finally { s.close() }
-    }
-    suspend fun listPage(browseId: String, params: String?): FfiListPage = withContext(Dispatchers.IO) {
-        val s = session(); try { browseListPage(s, browseId, params) } finally { s.close() }
-    }
-
-    suspend fun account(): uniffi.mediyo_ffi.FfiAccountInfo = withContext(Dispatchers.IO) {
-        val s = session(); try { uniffi.mediyo_ffi.accountInfo(s) } finally { s.close() }
+        val p = session().playlist(browseId)
+        try {
+            val tracks = (0 until p.trackCount()).mapNotNull { p.track(it)?.toModel() }
+            FfiPlaylistPage(
+                title = p.title(),
+                trackCount = p.trackCountText().emptyToNull(),
+                thumbnails = thumbsOf(p.thumbnailCount(), p::thumbnailURL, p::thumbnailWidth, p::thumbnailHeight),
+                tracks = tracks,
+                continuation = p.continuation().emptyToNull()
+            )
+        } finally {
+            p.close()
+        }
     }
 
-    // ── watch / queue (always-radio) ──────────────────────────────────────
-    suspend fun getQueue(videoId: String, playlistId: String?): FfiQueue = withContext(Dispatchers.IO) {
-        val s = session(); try { uniffi.mediyo_ffi.watchGetQueue(s, videoId, playlistId) } finally { s.close() }
+    suspend fun playlistNext(token: String): FfiListPage = withContext(Dispatchers.IO) {
+        val p = session().playlistNext(token)
+        try {
+            val items = (0 until p.trackCount()).mapNotNull { p.track(it)?.toModel() }
+            FfiListPage(items, p.continuation().emptyToNull())
+        } finally {
+            p.close()
+        }
     }
+
+    suspend fun podcast(browseId: String): FfiPodcastPage = withContext(Dispatchers.IO) {
+        session().podcastShow(browseId).toModel()
+    }
+
+    suspend fun podcastNext(token: String): FfiPodcastNext = withContext(Dispatchers.IO) {
+        val p = session().podcastNext(token)
+        try {
+            val title = p.title()
+            val author = p.authorName().ifEmpty { "" }
+            val items = (0 until p.episodeCount()).mapNotNull { p.episode(it)?.toModel(title, author) }
+            FfiPodcastNext(items, p.continuation().emptyToNull(), p.reloaded())
+        } finally {
+            p.close()
+        }
+    }
+
+    suspend fun channel(channelId: String): FfiChannelPage = withContext(Dispatchers.IO) {
+        session().channel(channelId).toModel()
+    }
+
+    suspend fun channelSection(browseId: String, params: String?, title: String?): FfiListPage =
+        withContext(Dispatchers.IO) {
+            session().channelSection(browseId, params ?: "", title ?: "").toList()
+        }
+
+    suspend fun channelSectionNext(token: String): FfiListPage = withContext(Dispatchers.IO) {
+        session().channelSectionNext(token).toList()
+    }
+
+    // ── watch / queue ────────────────────────────────────────────────────
+    suspend fun getQueue(videoId: String, playlistId: String?): FfiQueue =
+        withContext(Dispatchers.IO) {
+            session().queue(videoId, playlistId ?: "").toModel()
+        }
+
     suspend fun extendQueue(token: String): FfiQueue = withContext(Dispatchers.IO) {
-        val s = session(); try { uniffi.mediyo_ffi.watchExtendQueue(s, token) } finally { s.close() }
-    }
-    suspend fun getSong(videoId: String, playlistId: String?): FfiSong = withContext(Dispatchers.IO) {
-        val s = session(); try { uniffi.mediyo_ffi.watchGetSong(s, videoId, playlistId) } finally { s.close() }
-    }
-    suspend fun getLyrics(browseId: String): uniffi.mediyo_ffi.FfiLyrics = withContext(Dispatchers.IO) {
-        val s = session(); try { uniffi.mediyo_ffi.watchGetLyrics(s, browseId) } finally { s.close() }
+        session().queueExtend(token).toModel()
     }
 
-    // ── comments ───────────────────────────────────────────────────────────
+    // ── comments ─────────────────────────────────────────────────────────
     suspend fun commentsToken(videoId: String): String? = withContext(Dispatchers.IO) {
-        val s = session(); try { uniffi.mediyo_ffi.commentsToken(s, videoId) } finally { s.close() }
+        session().commentsToken(videoId).emptyToNull()
     }
+
     suspend fun commentsPage(token: String): FfiCommentsPage = withContext(Dispatchers.IO) {
-        val s = session(); try { uniffi.mediyo_ffi.commentsPage(s, token) } finally { s.close() }
+        session().commentsPage(token).toModel()
     }
+
     suspend fun commentsNextPage(token: String): FfiCommentsPage = withContext(Dispatchers.IO) {
-        val s = session(); try { uniffi.mediyo_ffi.commentsNextPage(s, token) } finally { s.close() }
+        session().commentsNext(token).toModel()
     }
+
+    suspend fun commentsReload(token: String): FfiCommentsPage = withContext(Dispatchers.IO) {
+        session().commentsReload(token).toModel()
+    }
+
     suspend fun commentsReplies(token: String): FfiCommentsPage = withContext(Dispatchers.IO) {
-        val s = session(); try { uniffi.mediyo_ffi.commentsReplies(s, token) } finally { s.close() }
+        session().commentsReplies(token).toModel()
     }
 }

@@ -2,7 +2,7 @@ package com.teamshryne.mediyo.data.repository
 
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import com.teamshryne.mediyo.domain.repository.CommentRepository
-import uniffi.mediyo_ffi.FfiCommentsPage
+import com.teamshryne.mediyo.data.mediyo.FfiCommentsPage
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -13,5 +13,6 @@ class CommentRepositoryImpl @Inject constructor(
     override suspend fun token(videoId: String): String? = bridge.commentsToken(videoId)
     override suspend fun page(token: String): FfiCommentsPage = bridge.commentsPage(token)
     override suspend fun nextPage(token: String): FfiCommentsPage = bridge.commentsNextPage(token)
+    override suspend fun reload(token: String): FfiCommentsPage = bridge.commentsReload(token)
     override suspend fun replies(token: String): FfiCommentsPage = bridge.commentsReplies(token)
 }

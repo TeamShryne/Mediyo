@@ -45,10 +45,10 @@ import com.teamshryne.mediyo.domain.repository.LikeRepository
 import com.teamshryne.mediyo.domain.repository.SavedCollectionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
-import uniffi.mediyo_ffi.FfiSearchResult
+import com.teamshryne.mediyo.data.mediyo.FfiSearchResult
 import javax.inject.Inject
 
-// ── Type helpers (Rust Category Debug strings: Song/Video/Album/Artist/Playlist/Episode/Podcast) ──
+// ── Type helpers (core category strings: Song/Video/Album/Artist/Playlist/Episode/Podcast) ──
 
 fun FfiSearchResult.isArtist(): Boolean = category.contains("Artist", true)
 fun FfiSearchResult.isAlbum(): Boolean = category.contains("Album", true)
@@ -76,10 +76,7 @@ fun openRoute(item: FfiSearchResult): String? = when {
     item.isAlbum() && item.browseId != null -> "album/${item.browseId}"
     item.isPlaylist() -> (item.playlistId ?: item.browseId)?.let { "playlist/$it" }
     item.isPodcast() && item.browseId != null -> "podcast/${item.browseId}"
-    item.browseId != null -> {
-        val p = item.browseParams?.takeIf { it.isNotBlank() }?.let { "?params=${android.net.Uri.encode(it)}" } ?: ""
-        "list/${item.browseId}$p"
-    }
+    item.browseId != null -> "channel/${item.browseId}"
     else -> null
 }
 
@@ -88,9 +85,6 @@ fun FfiSearchResult.libraryKind(): String? = when {
     isAlbum() -> com.teamshryne.mediyo.data.local.SavedCollectionEntity.ALBUM
     isPlaylist() -> com.teamshryne.mediyo.data.local.SavedCollectionEntity.PLAYLIST
     isPodcast() -> com.teamshryne.mediyo.data.local.SavedCollectionEntity.PODCAST
-    // Generic browseable lists (mixes, charts…) behave like public playlists.
-    browseId != null && !isArtist() && videoId == null ->
-        com.teamshryne.mediyo.data.local.SavedCollectionEntity.PLAYLIST
     else -> null
 }
 
@@ -198,7 +192,7 @@ class MediaMenuVm @Inject constructor(
         return searchFirst(name, "Album")?.browseId
     }
 
-    /** Fetch playable tracks for an album/playlist/podcast/list page. */
+    /** Fetch playable tracks for an album/playlist/podcast. */
     suspend fun fetchCollection(item: FfiSearchResult): List<Track> {
         val id = item.browseId ?: item.playlistId
             ?: throw IllegalArgumentException("Can't load this item")
@@ -206,7 +200,7 @@ class MediaMenuVm @Inject constructor(
             item.isAlbum() -> bridge.album(id).tracks.toDomainTracks()
             item.isPlaylist() -> bridge.playlist(id).tracks.toDomainTracks()
             item.isPodcast() -> bridge.podcast(id).items.toDomainTracks()
-            else -> bridge.listPage(id, item.browseParams).items.toDomainTracks()
+            else -> throw IllegalArgumentException("Can't play this ${item.typeLabel().lowercase()}")
         }
     }
 
@@ -415,7 +409,7 @@ private fun SongActions(
             MenuItem(
                 icon = Icons.Filled.OpenInNew,
                 label = "Open channel${item.channelName?.takeIf { it.isNotBlank() }?.let { " • $it" } ?: ""}",
-                onClick = { onDismiss(); nav?.navigate("list/$channelId") }
+                onClick = { onDismiss(); nav?.navigate("channel/$channelId") }
             )
         }
     if (canResolveAlbum) {

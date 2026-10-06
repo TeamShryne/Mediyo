@@ -77,7 +77,7 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
-            pickFirsts += listOf("**/libjnidispatch.so", "**/libmediyo_ffi.so")
+            pickFirsts += listOf("**/libjnidispatch.so")
         }
     }
 
@@ -110,7 +110,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.newpipe.extractor)
-    implementation("net.java.dev.jna:jna:5.14.0@aar")
+    implementation(files("libs/mediyo.aar"))
 
     val bom = libs.compose.bom
     implementation(platform(bom))

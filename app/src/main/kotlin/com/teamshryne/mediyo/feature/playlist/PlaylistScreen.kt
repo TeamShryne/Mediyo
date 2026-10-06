@@ -50,7 +50,7 @@ import javax.inject.Inject
     var loadingMore by mutableStateOf(false); var continuation by mutableStateOf<String?>(null)
     var title by mutableStateOf(""); var subtitle by mutableStateOf("")
     var thumb by mutableStateOf<String?>(null)
-    var tracks by mutableStateOf<List<uniffi.mediyo_ffi.FfiSearchResult>>(emptyList())
+    var tracks by mutableStateOf<List<com.teamshryne.mediyo.data.mediyo.FfiSearchResult>>(emptyList())
     fun isSavedFlow(id: String) = savedRepo.isSavedFlow(id)
     fun toggleSave(id: String) {
         viewModelScope.launch {
@@ -103,7 +103,7 @@ import javax.inject.Inject
         loadingMore = true
         viewModelScope.launch {
             try {
-                val p = bridge.nextPage(token)
+                val p = bridge.playlistNext(token)
                 android.util.Log.d("PlaylistVm","loadMore raw items=${p.items.size} cont=${p.continuation?.take(30)} firstVid=${p.items.firstOrNull()?.videoId}")
                 // Defensive: playlist continuations must be tracks (videoId != null).
                 // Similar-playlist carousels must not be appended as tracks.
@@ -138,7 +138,7 @@ fun PlaylistScreen(
     vm: PlaylistVm = hiltViewModel()
 ) {
     LaunchedEffect(browseId) { vm.load(browseId) }
-    var menuItem by remember { mutableStateOf<uniffi.mediyo_ffi.FfiSearchResult?>(null) }
+    var menuItem by remember { mutableStateOf<com.teamshryne.mediyo.data.mediyo.FfiSearchResult?>(null) }
     var showAddTrack by remember { mutableStateOf<Track?>(null) }
     val menuScope = rememberCoroutineScope()
     val menuVm: com.teamshryne.mediyo.core.design.MediaMenuVm = hiltViewModel()

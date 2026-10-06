@@ -1,13 +1,15 @@
 package com.teamshryne.mediyo.domain.repository
 
-import uniffi.mediyo_ffi.FfiComment
-import uniffi.mediyo_ffi.FfiCommentsPage
-import uniffi.mediyo_ffi.FfiCommentSortFilter
+import com.teamshryne.mediyo.data.mediyo.FfiComment
+import com.teamshryne.mediyo.data.mediyo.FfiCommentsPage
+import com.teamshryne.mediyo.data.mediyo.FfiCommentSortFilter
 
 interface CommentRepository {
     suspend fun token(videoId: String): String?
     suspend fun page(token: String): FfiCommentsPage
     suspend fun nextPage(token: String): FfiCommentsPage
+    /** Sort/filter switch: replaces the list (append tokens must not be used here). */
+    suspend fun reload(token: String): FfiCommentsPage
     suspend fun replies(token: String): FfiCommentsPage
 }
 
