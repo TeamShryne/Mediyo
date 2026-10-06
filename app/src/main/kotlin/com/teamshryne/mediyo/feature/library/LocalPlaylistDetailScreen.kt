@@ -80,6 +80,14 @@ fun LocalPlaylistDetailScreen(
     val tracks = remember(entries) { entries.map { it.toTrack() } }
     val heroThumb = remember(entries) { entries.firstOrNull()?.artworkUrl?.upscaledThumbUrl() }
     val listState = rememberLazyListState()
+    val listSearch = com.teamshryne.mediyo.core.design.rememberListSearchUiState()
+    val sq = listSearch.query.trim()
+    val matchTracks = remember(tracks, sq) {
+        if (sq.isBlank()) tracks
+        else tracks.filter { t ->
+            com.teamshryne.mediyo.core.design.matchesQuery(sq, t.title, t.artists.joinToString(), t.album)
+        }
+    }
 
     fun playAll(shuffled: Boolean) {
         if (tracks.isEmpty()) return
@@ -88,6 +96,7 @@ fun LocalPlaylistDetailScreen(
     }
 
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp)) {
+        if (sq.isBlank()) {
         item(key = "local_hero") {
             CollectionHero(
                 title = title,
@@ -105,6 +114,12 @@ fun LocalPlaylistDetailScreen(
                 onShuffle = { playAll(true) }
             )
         }
+        }
+        item(key = "list_filter") {
+            com.teamshryne.mediyo.core.design.ListSearchField(state = listSearch, placeholder = "Search playlist")
+            Spacer(Modifier.height(4.dp))
+        }
+        if (sq.isBlank()) {
         if (entries.isEmpty()) {
             item(key = "local_empty") {
                 Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
@@ -129,6 +144,30 @@ fun LocalPlaylistDetailScreen(
                     }
                 ) {
                     player?.playTracks(tracks, idx, PlayOrigin.LocalPlaylist(playlistId, title))
+                }
+            }
+        } else {
+            itemsIndexed(matchTracks, key = { idx, _ -> "local_${entries.getOrNull(idx)?.id ?: "track_$idx"}" }) { _, t ->
+                LocalTrackRow(
+                    track = t,
+                    isPlaying = playingId.videoId == t.videoId,
+                    number = tracks.indexOf(t) + 1,
+                    showArtwork = true,
+                    trailing = {
+                        TrackOverflowIcon(onClick = {
+                            menuTrack = t; menuEntryId = entries.getOrNull(tracks.indexOf(t))?.id
+                        })
+                    }
+                ) {
+                    player?.playTracks(tracks, tracks.indexOf(t).coerceAtLeast(0), PlayOrigin.LocalPlaylist(playlistId, title))
+                }
+            }
+            if (matchTracks.isEmpty()) {
+                item(key = "local_no_match") {
+                    com.teamshryne.mediyo.core.design.EmptyState(
+                        "No songs match \"$sq\"",
+                        "Try different keywords"
+                    )
                 }
             }
         }

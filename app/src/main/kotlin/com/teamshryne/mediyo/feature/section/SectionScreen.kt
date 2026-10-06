@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -157,6 +158,31 @@ fun SectionScreen(
             val listState = rememberLazyListState()
             val gridState = rememberLazyGridState()
             var fabVisible by remember { mutableStateOf(true) }
+            val listSearch = com.teamshryne.mediyo.core.design.rememberListSearchUiState()
+            val searchScope = rememberCoroutineScope()
+            val sq = listSearch.query.trim()
+            val matches = remember(vm.items, sq) {
+                if (sq.isBlank()) vm.items
+                else vm.items.filter { r ->
+                    com.teamshryne.mediyo.core.design.matchesQuery(sq, r.title, r.artists.joinToString(), r.category, r.info)
+                }
+            }
+            val hasMore = vm.continuation != null
+            fun searchRest() {
+                if (listSearch.searchingAll) return
+                listSearch.searchingAll = true
+                searchScope.launch {
+                    com.teamshryne.mediyo.core.design.loadAllPaged(
+                        hasMore = { vm.continuation != null },
+                        isLoading = { vm.loadingMore },
+                        loadMore = { vm.loadMore(kind) }
+                    )
+                    listSearch.searchingAll = false
+                }
+            }
+            androidx.compose.runtime.LaunchedEffect(sq, matches.isEmpty(), hasMore) {
+                if (sq.isNotBlank() && matches.isEmpty() && hasMore) searchRest()
+            }
 
             // Sentinel pagination: the shimmer "loading" row itself triggers
             // the next page when it scrolls into view; it composes away once
@@ -224,6 +250,11 @@ fun SectionScreen(
                                 }
                             }
                         }
+                        item(key = "list_filter") {
+                            com.teamshryne.mediyo.core.design.ListSearchField(state = listSearch, placeholder = "Search this list")
+                            Spacer(Modifier.height(4.dp))
+                        }
+                        if (sq.isBlank()) {
                         items(vm.items.size, key = { i ->
                             vm.items[i].let { it.videoId ?: it.browseId ?: it.playlistId }
                                 ?.let { "s_${it}_$i" } ?: "s_$i"
@@ -239,10 +270,44 @@ fun SectionScreen(
                                 ) { handle(r) }
                             }
                         }
-                        if (vm.continuation != null) {
+                        }
+                        if (vm.continuation != null && sq.isBlank()) {
                             item(key = "loading") {
                                 Column(Modifier.padding(vertical = 4.dp)) {
                                     repeat(3) { SectionRowPlaceholder() }
+                                }
+                            }
+                        }
+                        if (sq.isNotBlank()) {
+                            items(matches.size, key = { i ->
+                                val r = matches[i]
+                                "sm_${r.videoId ?: r.browseId ?: r.playlistId ?: i}_$i"
+                            }) { i ->
+                                val r = matches[i]
+                                Box {
+                                    TrackRow(
+                                        item = r,
+                                        isPlaying = playingId != null && playingId == r.videoId,
+                                        number = vm.items.indexOf(r) + 1,
+                                        showArtwork = false,
+                                        trailing = { TrackOverflowIcon(onClick = { menuItem = r }) }
+                                    ) { handle(r) }
+                                }
+                            }
+                            if (listSearch.searchingAll) {
+                                item(key = "searching_rest") {
+                                    com.teamshryne.mediyo.core.design.SearchingRestAnimation(vm.items.size)
+                                }
+                            } else if (hasMore) {
+                                item(key = "search_more") {
+                                    com.teamshryne.mediyo.core.design.SearchMoreRow(matches.size) { searchRest() }
+                                }
+                            } else if (matches.isEmpty()) {
+                                item(key = "no_match") {
+                                    com.teamshryne.mediyo.core.design.EmptyState(
+                                        "Nothing matches \"$sq\"",
+                                        "Try different keywords"
+                                    )
                                 }
                             }
                         }
@@ -264,11 +329,15 @@ fun SectionScreen(
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                             )
                         }
-                        items(vm.items.size, key = { i ->
-                            vm.items[i].let { it.videoId ?: it.browseId ?: it.playlistId }
+                        item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                            com.teamshryne.mediyo.core.design.ListSearchField(state = listSearch, placeholder = "Search this list")
+                        }
+                        val gridItems = if (sq.isBlank()) vm.items else matches
+                        items(gridItems.size, key = { i ->
+                            gridItems[i].let { it.videoId ?: it.browseId ?: it.playlistId }
                                 ?.let { "g_${it}_$i" } ?: "g_$i"
                         }) { i ->
-                            val r = vm.items[i]
+                            val r = gridItems[i]
                             SectionGridCard(
                                 item = r,
                                 isPlaying = playingId != null && playingId == r.videoId,
@@ -276,10 +345,28 @@ fun SectionScreen(
                                 onMenu = { menuItem = r }
                             )
                         }
-                        if (vm.continuation != null) {
+                        if (vm.continuation != null && sq.isBlank()) {
                             item(key = "loading", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
                                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                     repeat(2) { SectionGridPlaceholder() }
+                                }
+                            }
+                        }
+                        if (sq.isNotBlank()) {
+                            if (listSearch.searchingAll) {
+                                item(key = "searching_rest", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                                    com.teamshryne.mediyo.core.design.SearchingRestAnimation(vm.items.size)
+                                }
+                            } else if (hasMore) {
+                                item(key = "search_more", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                                    com.teamshryne.mediyo.core.design.SearchMoreRow(matches.size) { searchRest() }
+                                }
+                            } else if (matches.isEmpty()) {
+                                item(key = "no_match", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                                    com.teamshryne.mediyo.core.design.EmptyState(
+                                        "Nothing matches \"$sq\"",
+                                        "Try different keywords"
+                                    )
                                 }
                             }
                         }
@@ -300,6 +387,17 @@ fun SectionScreen(
                     navigationIcon = {
                         IconButton(onClick = { nav?.popBackStack() }) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = {
+                            searchScope.launch {
+                                if (songPage) listState.animateScrollToItem(0)
+                                else gridState.animateScrollToItem(0)
+                                listSearch.focus.requestFocus()
+                            }
+                        }) {
+                            Icon(Icons.Filled.Search, contentDescription = "Search this list")
                         }
                     }
                 )

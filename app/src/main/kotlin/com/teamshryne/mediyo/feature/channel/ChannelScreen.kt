@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -99,8 +100,19 @@ fun ChannelScreen(
             val playingId = player?.state?.collectAsState()?.value?.videoId
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
             val headerVisible = com.teamshryne.mediyo.core.design.rememberHeaderVisible(listState)
+            val listSearch = com.teamshryne.mediyo.core.design.rememberListSearchUiState()
+            val searchScope = rememberCoroutineScope()
+            val sq = listSearch.query.trim()
+            val allShelfItems = remember(vm.sections) { vm.sections.flatMap { it.items } }
+            val matches = remember(allShelfItems, sq) {
+                if (sq.isBlank()) allShelfItems
+                else allShelfItems.filter { r ->
+                    com.teamshryne.mediyo.core.design.matchesQuery(sq, r.title, r.artists.joinToString(), r.category, r.info)
+                }
+            }
             Box(Modifier.fillMaxSize()) {
             LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp)) {
+                if (sq.isBlank()) {
                 item(key = "hero") {
                     Box(Modifier.fillMaxWidth()) {
                         AsyncImage(
@@ -141,7 +153,12 @@ fun ChannelScreen(
                         }
                     }
                 }
-
+                }
+                item(key = "list_filter") {
+                    com.teamshryne.mediyo.core.design.ListSearchField(state = listSearch, placeholder = "Search this channel")
+                    Spacer(Modifier.height(4.dp))
+                }
+                if (sq.isBlank()) {
                 if (vm.emptyMessage != null && vm.sections.isEmpty()) {
                     item {
                         Text(
@@ -205,12 +222,42 @@ fun ChannelScreen(
                         }
                     }
                 }
+                } else {
+                items(matches.size, key = { i ->
+                    val r = matches[i]
+                    "cmatch_${r.videoId ?: r.browseId ?: i}_$i"
+                }) { i ->
+                    val r = matches[i]
+                    com.teamshryne.mediyo.core.design.FlatMatchRow(
+                        item = r,
+                        onClick = { handle(r, matches) }
+                    )
+                }
+                if (matches.isEmpty()) {
+                    item(key = "no_match") {
+                        com.teamshryne.mediyo.core.design.EmptyState(
+                            "Nothing matches \"$sq\"",
+                            "Try different keywords"
+                        )
+                    }
+                }
+                }
             }
                 com.teamshryne.mediyo.core.design.CollapsingTopBar(
                     title = vm.title.ifBlank { "Channel" },
                     visible = headerVisible,
                     onBack = { nav?.popBackStack() },
-                    modifier = Modifier.align(Alignment.TopCenter)
+                    modifier = Modifier.align(Alignment.TopCenter),
+                    actions = {
+                        IconButton(onClick = {
+                            searchScope.launch {
+                                listState.animateScrollToItem(0)
+                                listSearch.focus.requestFocus()
+                            }
+                        }) {
+                            Icon(Icons.Filled.Search, contentDescription = "Search this channel")
+                        }
+                    }
                 )
             }
 

@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.BookmarkRemove
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Radio
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -156,8 +157,33 @@ fun AlbumScreen(
             val playingId = player?.state?.collectAsState()?.value?.videoId
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
             val headerVisible = com.teamshryne.mediyo.core.design.rememberHeaderVisible(listState)
+            val listSearch = com.teamshryne.mediyo.core.design.rememberListSearchUiState()
+            val sq = listSearch.query.trim()
+            val matches = remember(vm.tracks, sq) {
+                if (sq.isBlank()) vm.tracks
+                else vm.tracks.filter { t ->
+                    com.teamshryne.mediyo.core.design.matchesQuery(sq, t.title, t.artists.joinToString(), t.album)
+                }
+            }
+            val hasMore = vm.continuation != null
+            fun searchRest() {
+                if (listSearch.searchingAll) return
+                listSearch.searchingAll = true
+                menuScope.launch {
+                    com.teamshryne.mediyo.core.design.loadAllPaged(
+                        hasMore = { vm.continuation != null },
+                        isLoading = { vm.loadingMore },
+                        loadMore = { vm.loadMore() }
+                    )
+                    listSearch.searchingAll = false
+                }
+            }
+            androidx.compose.runtime.LaunchedEffect(sq, matches.isEmpty(), hasMore) {
+                if (sq.isNotBlank() && matches.isEmpty() && hasMore) searchRest()
+            }
             Box(Modifier.fillMaxSize()) {
             LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp)) {
+                if (sq.isBlank()) {
                 item(key = "hero") {
                     Column(
                         Modifier
@@ -304,6 +330,12 @@ fun AlbumScreen(
                         }
                     }
                 }
+                }
+                item(key = "list_filter") {
+                    com.teamshryne.mediyo.core.design.ListSearchField(state = listSearch)
+                    Spacer(Modifier.height(4.dp))
+                }
+                if (sq.isBlank()) {
                 items(vm.tracks.size) { i ->
                     val t = vm.tracks[i]
                     TrackRow(
@@ -313,6 +345,34 @@ fun AlbumScreen(
                         t.videoId?.let { player?.playFromWithOrigin(vm.tracks, t, PlayOrigin.Album(browseId, vm.title)) }
                     }
                 }
+                } else {
+                items(matches.size, key = { i -> "match_${matches[i].videoId}_$i" }) { i ->
+                    val t = matches[i]
+                    TrackRow(
+                        item = t, isPlaying = playingId != null && playingId == t.videoId, number = vm.tracks.indexOf(t) + 1, showArtwork = false,
+                        trailing = { TrackOverflowIcon(onClick = { menuItem = t }) }
+                    ) {
+                        t.videoId?.let { player?.playFromWithOrigin(vm.tracks, t, PlayOrigin.Album(browseId, vm.title)) }
+                    }
+                }
+                if (listSearch.searchingAll) {
+                    item(key = "searching_rest") {
+                        com.teamshryne.mediyo.core.design.SearchingRestAnimation(vm.tracks.size)
+                    }
+                } else if (hasMore) {
+                    item(key = "search_more") {
+                        com.teamshryne.mediyo.core.design.SearchMoreRow(matches.size) { searchRest() }
+                    }
+                } else if (matches.isEmpty()) {
+                    item(key = "no_match") {
+                        com.teamshryne.mediyo.core.design.EmptyState(
+                            "No matches for \"$sq\"",
+                            "Try different keywords"
+                        )
+                    }
+                }
+                }
+                if (sq.isBlank()) {
                 vm.carousels.forEachIndexed { ci, c ->
                     item(key = "rel_$ci") {
                         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -344,13 +404,24 @@ fun AlbumScreen(
                         }
                     }
                 }
+                }
                 item(key = "album_footer") { LoadingFooter(vm.loadingMore) }
                 }
                 com.teamshryne.mediyo.core.design.CollapsingTopBar(
                     title = vm.title,
                     visible = headerVisible,
                     onBack = { nav?.popBackStack() },
-                    modifier = Modifier.align(Alignment.TopCenter)
+                    modifier = Modifier.align(Alignment.TopCenter),
+                    actions = {
+                        IconButton(onClick = {
+                            menuScope.launch {
+                                listState.animateScrollToItem(0)
+                                listSearch.focus.requestFocus()
+                            }
+                        }) {
+                            Icon(Icons.Filled.Search, contentDescription = "Search in album")
+                        }
+                    }
                 )
                 }
 
