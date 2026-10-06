@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -115,9 +116,19 @@ fun ArtistScreen(
             val playingId = player?.state?.collectAsState()?.value?.videoId
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
             val headerVisible = com.teamshryne.mediyo.core.design.rememberHeaderVisible(listState)
+            val listSearch = com.teamshryne.mediyo.core.design.rememberListSearchUiState()
+            val searchScope = rememberCoroutineScope()
+            val sq = listSearch.query.trim()
+            val matches = remember(vm.topSongs, sq) {
+                if (sq.isBlank()) vm.topSongs
+                else vm.topSongs.filter { t ->
+                    com.teamshryne.mediyo.core.design.matchesQuery(sq, t.title, t.artists.joinToString(), t.album)
+                }
+            }
             Box(Modifier.fillMaxSize()) {
             LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp)) {
                 // ── Hero ──
+                if (sq.isBlank()) {
                 item(key = "hero") {
                     Box(Modifier.fillMaxWidth()) {
                         AsyncImage(
@@ -207,7 +218,12 @@ fun ArtistScreen(
                         }
                     }
                 }
-
+                }
+                item(key = "list_filter") {
+                    com.teamshryne.mediyo.core.design.ListSearchField(state = listSearch, placeholder = "Search songs")
+                    Spacer(Modifier.height(4.dp))
+                }
+                if (sq.isBlank()) {
                 if (vm.topSongs.isNotEmpty()) {
                     item {
                         val preview = vm.previewSongs
@@ -236,7 +252,23 @@ fun ArtistScreen(
                         }
                     }
                 }
-
+                } else {
+                items(matches.size, key = { i -> "amatch_${matches[i].videoId}_$i" }) { i ->
+                    val t = matches[i]
+                    TrackRow(item = t, isPlaying = playingId != null && playingId == t.videoId, number = vm.topSongs.indexOf(t) + 1, showArtwork = true) {
+                        handle(t, vm.topSongs)
+                    }
+                }
+                if (matches.isEmpty()) {
+                    item(key = "no_match") {
+                        com.teamshryne.mediyo.core.design.EmptyState(
+                            "No songs match \"$sq\"",
+                            "Try different keywords"
+                        )
+                    }
+                }
+                }
+                if (sq.isBlank()) {
                 vm.carousels.forEachIndexed { ci, c ->
                     item(key = "shelf_$ci") {
                         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -274,13 +306,24 @@ fun ArtistScreen(
                         }
                     }
                 }
+                }
 
             }
                 com.teamshryne.mediyo.core.design.CollapsingTopBar(
                     title = vm.name,
                     visible = headerVisible,
                     onBack = { nav?.popBackStack() },
-                    modifier = Modifier.align(Alignment.TopCenter)
+                    modifier = Modifier.align(Alignment.TopCenter),
+                    actions = {
+                        IconButton(onClick = {
+                            searchScope.launch {
+                                listState.animateScrollToItem(0)
+                                listSearch.focus.requestFocus()
+                            }
+                        }) {
+                            Icon(Icons.Filled.Search, contentDescription = "Search songs")
+                        }
+                    }
                 )
             }
         }

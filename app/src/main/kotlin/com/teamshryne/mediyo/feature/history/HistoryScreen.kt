@@ -64,6 +64,14 @@ fun HistoryScreen(
     val heroThumb = remember(history) { history.firstOrNull()?.artworkUrl?.upscaledThumbUrl() }
     val allTracks = remember(history) { history.map { it.toTrack() } }
     val listState = rememberLazyListState()
+    val listSearch = com.teamshryne.mediyo.core.design.rememberListSearchUiState()
+    val sq = listSearch.query.trim()
+    val matchTracks = remember(allTracks, sq) {
+        if (sq.isBlank()) allTracks
+        else allTracks.filter { t ->
+            com.teamshryne.mediyo.core.design.matchesQuery(sq, t.title, t.artists.joinToString(), t.album)
+        }
+    }
 
     fun playAll(shuffled: Boolean) {
         if (allTracks.isEmpty()) return
@@ -72,6 +80,7 @@ fun HistoryScreen(
     }
 
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp)) {
+        if (sq.isBlank()) {
         item(key = "history_hero") {
             CollectionHero(
                 title = "History",
@@ -95,6 +104,12 @@ fun HistoryScreen(
                 onShuffle = { playAll(true) }
             )
         }
+        }
+        item(key = "list_filter") {
+            com.teamshryne.mediyo.core.design.ListSearchField(state = listSearch, placeholder = "Search history")
+            Spacer(Modifier.height(4.dp))
+        }
+        if (sq.isBlank()) {
         if (history.isEmpty()) {
             item(key = "history_empty") {
                 Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
@@ -122,6 +137,26 @@ fun HistoryScreen(
                         val pos = items.indexOf(e).coerceAtLeast(0)
                         player?.playTracks(sectionTracks, pos, PlayOrigin.History(label))
                     }
+                }
+            }
+        }
+        } else {
+            itemsIndexed(matchTracks, key = { _, t -> "hmatch_${t.videoId}" }) { _, t ->
+                LocalTrackRow(
+                    track = t,
+                    isPlaying = playingId == t.videoId,
+                    showArtwork = true,
+                    trailing = { TrackOverflowIcon(onClick = { menuTrack = t }) }
+                ) {
+                    player?.playTracks(allTracks, allTracks.indexOf(t).coerceAtLeast(0), PlayOrigin.History("Search"))
+                }
+            }
+            if (matchTracks.isEmpty()) {
+                item(key = "history_no_match") {
+                    com.teamshryne.mediyo.core.design.EmptyState(
+                        "Nothing matches \"$sq\"",
+                        "Try different keywords"
+                    )
                 }
             }
         }

@@ -55,6 +55,14 @@ fun LikedScreen(
     val tracks = remember(liked) { liked.map { it.toTrack() } }
     val heroThumb = remember(liked) { liked.firstOrNull()?.artworkUrl?.upscaledThumbUrl() }
     val listState = rememberLazyListState()
+    val listSearch = com.teamshryne.mediyo.core.design.rememberListSearchUiState()
+    val sq = listSearch.query.trim()
+    val matchTracks = remember(tracks, sq) {
+        if (sq.isBlank()) tracks
+        else tracks.filter { t ->
+            com.teamshryne.mediyo.core.design.matchesQuery(sq, t.title, t.artists.joinToString(), t.album)
+        }
+    }
 
     fun playAll(shuffled: Boolean) {
         if (tracks.isEmpty()) return
@@ -63,6 +71,7 @@ fun LikedScreen(
     }
 
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp)) {
+        if (sq.isBlank()) {
         item(key = "liked_hero") {
             CollectionHero(
                 title = "Liked songs",
@@ -86,6 +95,12 @@ fun LikedScreen(
                 onShuffle = { playAll(true) }
             )
         }
+        }
+        item(key = "list_filter") {
+            com.teamshryne.mediyo.core.design.ListSearchField(state = listSearch, placeholder = "Search liked songs")
+            Spacer(Modifier.height(4.dp))
+        }
+        if (sq.isBlank()) {
         if (liked.isEmpty()) {
             item(key = "liked_empty") {
                 Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
@@ -106,6 +121,26 @@ fun LikedScreen(
                     trailing = { TrackOverflowIcon(onClick = { menuTrack = t }) }
                 ) {
                     player?.playTracks(tracks, idx, PlayOrigin.Liked(tracks.size))
+                }
+            }
+        } else {
+            itemsIndexed(matchTracks, key = { _, t -> "liked_${t.videoId ?: t.title}" }) { _, t ->
+                LocalTrackRow(
+                    track = t,
+                    isPlaying = playingId != null && playingId == t.videoId,
+                    number = tracks.indexOf(t) + 1,
+                    showArtwork = true,
+                    trailing = { TrackOverflowIcon(onClick = { menuTrack = t }) }
+                ) {
+                    player?.playTracks(tracks, tracks.indexOf(t).coerceAtLeast(0), PlayOrigin.Liked(tracks.size))
+                }
+            }
+            if (matchTracks.isEmpty()) {
+                item(key = "liked_no_match") {
+                    com.teamshryne.mediyo.core.design.EmptyState(
+                        "No liked songs match \"$sq\"",
+                        "Try different keywords"
+                    )
                 }
             }
         }
