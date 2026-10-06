@@ -191,7 +191,7 @@ private fun TabStylePreview(style: TabStyle) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Box(Modifier.size(11.dp).clip(CircleShape).background(if (i == 1) active else idle))
                     if (i == 1) Box(Modifier.size(5.dp).clip(CircleShape).background(active))
-                    else Spacer(Modifier.size(5.dp))
+                    else Box(Modifier.size(5.dp))
                 }
             }
         }

@@ -295,23 +295,30 @@ fun SearchScreen(
                                 enter = fadeIn() + expandHorizontally(expandFrom = Alignment.Start),
                                 exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.Start)
                             ) {
-                                AssistChip(
+                                // Themed clear-filter pill (plain Surface: full
+                                // control of the fill without chip-color APIs).
+                                Surface(
                                     onClick = { scope.launch { vm.runSearch(null) } },
-                                    label = { Text("Clear") },
-                                    leadingIcon = {
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = MaterialTheme.colorScheme.primary
+                                ) {
+                                    Row(
+                                        Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
                                         Icon(
                                             Icons.Filled.Close, null,
+                                            tint = MaterialTheme.colorScheme.onPrimary,
                                             modifier = Modifier.size(16.dp)
                                         )
-                                    },
-                                    shape = RoundedCornerShape(20.dp),
-                                    colors = AssistChipDefaults.assistChipColors(
-                                        containerColor = MaterialTheme.colorScheme.primary,
-                                        labelColor = MaterialTheme.colorScheme.onPrimary,
-                                        leadingIconColor = MaterialTheme.colorScheme.onPrimary
-                                    ),
-                                    border = null
-                                )
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(
+                                            "Clear",
+                                            color = MaterialTheme.colorScheme.onPrimary,
+                                            style = MaterialTheme.typography.labelLarge
+                                        )
+                                    }
+                                }
                             }
                         }
                         items(vm.filters, key = { it.label + "|" + (it.params ?: "") }) { f ->
