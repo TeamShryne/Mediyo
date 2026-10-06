@@ -70,7 +70,7 @@ private fun sectionRoute(browseId: String, params: String?, title: String): Stri
     return sb.toString()
 }
 
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun ChannelScreen(
     browseId: String,

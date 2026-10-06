@@ -84,7 +84,7 @@ private fun fmtChapter(s: Long): String =
     if (s >= 3600) "%d:%02d:%02d".format(s / 3600, (s % 3600) / 60, s % 60)
     else "%d:%02d".format(s / 60, s % 60)
 
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun EpisodeScreen(
     episodeId: String,
