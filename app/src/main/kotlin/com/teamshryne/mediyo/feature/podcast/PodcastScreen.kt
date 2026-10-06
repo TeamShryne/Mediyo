@@ -137,6 +137,7 @@ import javax.inject.Inject
 fun episodeRouteId(r: FfiSearchResult): String =
     r.detailId.ifBlank { r.videoId.orEmpty() }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun PodcastScreen(
     browseId: String,
@@ -152,7 +153,15 @@ fun PodcastScreen(
         else -> {
             val playingId = player?.state?.collectAsState()?.value?.videoId
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+            val headerVisible = com.teamshryne.mediyo.core.design.rememberHeaderVisible(listState, 170.dp)
             LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp)) {
+                stickyHeader(key = "topbar") {
+                    com.teamshryne.mediyo.core.design.CollapsingTopBar(
+                        title = if (vm.title.isNotBlank()) vm.title else "Podcast",
+                        visible = headerVisible,
+                        onBack = { nav?.popBackStack() }
+                    )
+                }
                 item(key = "podcast_header") {
                     Column(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                         Row(

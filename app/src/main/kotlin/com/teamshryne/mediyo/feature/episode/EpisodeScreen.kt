@@ -84,6 +84,7 @@ private fun fmtChapter(s: Long): String =
     if (s >= 3600) "%d:%02d:%02d".format(s / 3600, (s % 3600) / 60, s % 60)
     else "%d:%02d".format(s / 60, s % 60)
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun EpisodeScreen(
     episodeId: String,
@@ -100,7 +101,16 @@ fun EpisodeScreen(
         else -> {
             val playingId = player?.state?.collectAsState()?.value?.videoId
             val track = remember(p) { vm.trackOf(p) }
-            LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp)) {
+            val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+            val headerVisible = com.teamshryne.mediyo.core.design.rememberHeaderVisible(listState, 200.dp)
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp)) {
+                stickyHeader(key = "topbar") {
+                    com.teamshryne.mediyo.core.design.CollapsingTopBar(
+                        title = p.title,
+                        visible = headerVisible,
+                        onBack = { nav?.popBackStack() }
+                    )
+                }
                 item(key = "episode_header") {
                     Column(Modifier.fillMaxWidth()) {
                         Row(

@@ -70,6 +70,7 @@ private fun sectionRoute(browseId: String, params: String?, title: String): Stri
     return sb.toString()
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun ChannelScreen(
     browseId: String,
@@ -96,7 +97,16 @@ fun ChannelScreen(
         vm.error != null -> ErrorState(vm.error ?: "Failed to load") { vm.load(browseId) }
         else -> {
             val playingId = player?.state?.collectAsState()?.value?.videoId
-            LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp)) {
+            val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+            val headerVisible = com.teamshryne.mediyo.core.design.rememberHeaderVisible(listState, 140.dp)
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp)) {
+                stickyHeader(key = "topbar") {
+                    com.teamshryne.mediyo.core.design.CollapsingTopBar(
+                        title = vm.title.ifBlank { "Channel" },
+                        visible = headerVisible,
+                        onBack = { nav?.popBackStack() }
+                    )
+                }
                 item {
                     Box(Modifier.fillMaxWidth()) {
                         AsyncImage(

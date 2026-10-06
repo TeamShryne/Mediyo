@@ -84,6 +84,7 @@ private fun sectionRoute(browseId: String, params: String?, title: String): Stri
     return sb.toString()
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun ArtistScreen(
     browseId: String,
@@ -113,7 +114,15 @@ fun ArtistScreen(
         else -> {
             val playingId = player?.state?.collectAsState()?.value?.videoId
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+            val headerVisible = com.teamshryne.mediyo.core.design.rememberHeaderVisible(listState, 220.dp)
             LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp)) {
+                stickyHeader(key = "topbar") {
+                    com.teamshryne.mediyo.core.design.CollapsingTopBar(
+                        title = vm.name,
+                        visible = headerVisible,
+                        onBack = { nav?.popBackStack() }
+                    )
+                }
                 // ── Hero ──
                 item {
                     Box(Modifier.fillMaxWidth()) {
