@@ -55,6 +55,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -198,46 +200,27 @@ private fun AppShell() {
         }
     }
 
+    val bg = MaterialTheme.colorScheme.background
+    val tabScrim = remember(bg) {
+        Brush.verticalGradient(listOf(Color.Transparent, bg.copy(alpha = 0.65f), bg))
+    }
+    val pillScrim = remember {
+        Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.45f)))
+    }
+    // Overlays float above content: content reserves only the opaque
+    // footprints, so scrolling content glides visibly behind the fades.
+    val barReserve = if (showTabBar && tabBarH > 0) with(density) { tabBarH.toDp() } else 0.dp
+    val pillSpace = if (playerState.title.isNotEmpty()) pillReserve else 0.dp
+
     Box(Modifier.fillMaxSize()) {
         Scaffold(
-            containerColor = MaterialTheme.colorScheme.background,
-            // bottomBar holds ONLY the tab bar (with its own background per
-            // style). The mini player floats in an overlay below — its side
-            // and bottom gaps are genuinely transparent, showing the page
-            // behind instead of a solid strip. Tab-bar height is measured,
-            // never hardcoded, so the pill clears it on every device.
-            bottomBar = {
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        // Edge-to-edge (decorFitsSystemWindows=false): keep the
-                        // bar above the system gesture/3-button nav area on
-                        // every device, whatever its inset height is.
-                        .windowInsetsPadding(
-                            WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)
-                        )
-                ) {
-                    if (showTabBar) {
-                        Box(Modifier.fillMaxWidth().onSizeChanged { tabBarH = it.height }) {
-                            MediyoTabBar(
-                                style = tabStyle,
-                                tabs = tabs,
-                                currentRoute = currentRoute,
-                                onSelect = ::selectTab
-                            )
-                        }
-                    }
-                }
-            }
+            containerColor = bg
         ) { pad ->
             Box(
                 Modifier
                     .fillMaxSize()
                     .padding(pad)
-                    // Reserve the floating pill's space so list ends stop
-                    // above it; mid-scroll content still glides behind the
-                    // pill's transparent gaps.
-                    .padding(bottom = if (playerState.title.isNotEmpty()) pillReserve else 0.dp)
+                    .padding(bottom = barReserve + pillSpace)
             ) {
                 NavHost(
                     navController = nav,
@@ -293,6 +276,31 @@ private fun AppShell() {
             }
         }
 
+        // Tab bar overlay — gradient scrim fading transparent → opaque
+        // top to bottom, so page content stays visible above the bar
+        // (including the empty area around the dock style).
+        if (showTabBar) {
+            Box(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    .background(tabScrim)
+                    .windowInsetsPadding(
+                        WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)
+                    )
+            ) {
+                // 28dp fade zone above the bar: content shows through.
+                Column(Modifier.padding(top = 28.dp)) {
+                    Box(Modifier.fillMaxWidth().onSizeChanged { tabBarH = it.height }) {
+                        MediyoTabBar(
+                            style = tabStyle,
+                            tabs = tabs,
+                            currentRoute = currentRoute,
+                            onSelect = ::selectTab
+                        )
+                    }
+                }
+            }
+        }
+
         // Floating mini player — overlays page content with transparent
         // surroundings (no solid strip around the pill). Lifts above the
         // measured tab-bar height + an 8dp gap, or floats on the system
@@ -314,29 +322,35 @@ private fun AppShell() {
             exit = slideOutVertically { it } + fadeOut(),
             modifier = Modifier.align(Alignment.BottomCenter)
         ) {
-            // Outer box positions the pill (offsets excluded from the
-            // measurement); inner box measures the pill alone so content
-            // reserves exactly the right space.
+            // Offset lifts the scrim above the tab bar; the scrim itself
+            // covers only the pill + a fade zone, with a subtle dark tint.
             Box(
-                modifier = Modifier
-                    .padding(horizontal = 4.dp)
-                    .windowInsetsPadding(
-                        WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)
-                    )
-                    .padding(
-                        bottom = (if (showTabBar && tabBarH > 0) {
-                            with(density) { tabBarH.toDp() }
-                        } else 0.dp) + 8.dp
-                    )
+                modifier = Modifier.padding(
+                    bottom = (if (showTabBar && tabBarH > 0) {
+                        with(density) { tabBarH.toDp() }
+                    } else 0.dp) + 8.dp
+                )
             ) {
-                Box(Modifier.onSizeChanged { pillH = it.height }) {
-                    MiniPlayer(
-                        state = playerState,
-                        onToggle = playerVm::toggle,
-                        onNext = playerVm::next,
-                        onExpand = { if (playerState.title.isNotEmpty()) showFullPlayer = true },
-                        sleepBadge = sleepBadge
-                    )
+                Box(
+                    modifier = Modifier.fillMaxWidth()
+                        .background(pillScrim)
+                        .windowInsetsPadding(
+                            WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)
+                        )
+                        .padding(top = 24.dp)
+                ) {
+                    Box(
+                        Modifier.fillMaxWidth().padding(horizontal = 4.dp)
+                            .onSizeChanged { pillH = it.height }
+                    ) {
+                        MiniPlayer(
+                            state = playerState,
+                            onToggle = playerVm::toggle,
+                            onNext = playerVm::next,
+                            onExpand = { if (playerState.title.isNotEmpty()) showFullPlayer = true },
+                            sleepBadge = sleepBadge
+                        )
+                    }
                 }
             }
         }
@@ -440,7 +454,7 @@ private fun MediyoTabBar(
 @Composable
 private fun ClassicTabBar(tabs: List<Tab>, currentRoute: String?, onSelect: (Tab) -> Unit) {
     NavigationBar(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Transparent,
         tonalElevation = 0.dp
     ) {
         tabs.forEach { t ->
@@ -464,7 +478,7 @@ private fun ClassicTabBar(tabs: List<Tab>, currentRoute: String?, onSelect: (Tab
 @Composable
 private fun DockedTabBar(tabs: List<Tab>, currentRoute: String?, onSelect: (Tab) -> Unit) {
     Box(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background),
+        Modifier.fillMaxWidth(),
         contentAlignment = Alignment.Center
     ) {
         Surface(
@@ -511,7 +525,7 @@ private fun DockedTabBar(tabs: List<Tab>, currentRoute: String?, onSelect: (Tab)
 @Composable
 private fun MinimalTabBar(tabs: List<Tab>, currentRoute: String?, onSelect: (Tab) -> Unit) {
     NavigationBar(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Transparent,
         tonalElevation = 0.dp
     ) {
         tabs.forEach { t ->
@@ -526,7 +540,7 @@ private fun MinimalTabBar(tabs: List<Tab>, currentRoute: String?, onSelect: (Tab
                             Modifier.padding(top = 5.dp).size(5.dp).clip(CircleShape)
                                 .background(
                                     if (sel) MaterialTheme.colorScheme.primary
-                                    else androidx.compose.ui.graphics.Color.Transparent
+                                    else Color.Transparent
                                 )
                         )
                     }
@@ -537,7 +551,7 @@ private fun MinimalTabBar(tabs: List<Tab>, currentRoute: String?, onSelect: (Tab
                     selectedTextColor = MaterialTheme.colorScheme.onSurface,
                     unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    indicatorColor = androidx.compose.ui.graphics.Color.Transparent
+                    indicatorColor = Color.Transparent
                 )
             )
         }
@@ -547,7 +561,7 @@ private fun MinimalTabBar(tabs: List<Tab>, currentRoute: String?, onSelect: (Tab
 @Composable
 private fun CapsuleTabBar(tabs: List<Tab>, currentRoute: String?, onSelect: (Tab) -> Unit) {
     Box(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)
+        Modifier.fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
         Surface(
@@ -567,7 +581,7 @@ private fun CapsuleTabBar(tabs: List<Tab>, currentRoute: String?, onSelect: (Tab
                         onClick = { onSelect(t) },
                         shape = CircleShape,
                         color = if (sel) MaterialTheme.colorScheme.primary
-                        else androidx.compose.ui.graphics.Color.Transparent,
+                        else Color.Transparent,
                         modifier = Modifier.weight(1f).animateContentSize()
                     ) {
                         Row(
