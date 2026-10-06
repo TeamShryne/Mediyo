@@ -111,7 +111,8 @@ fun LikedScreen(
                     }
                 }
             }
-        } else {
+        }
+        if (liked.isNotEmpty()) {
             itemsIndexed(tracks, key = { _, t -> t.videoId ?: t.title }) { idx, t ->
                 LocalTrackRow(
                     track = t,
@@ -123,6 +124,7 @@ fun LikedScreen(
                     player?.playTracks(tracks, idx, PlayOrigin.Liked(tracks.size))
                 }
             }
+        }
         } else {
             itemsIndexed(matchTracks, key = { _, t -> "liked_${t.videoId ?: t.title}" }) { _, t ->
                 LocalTrackRow(
