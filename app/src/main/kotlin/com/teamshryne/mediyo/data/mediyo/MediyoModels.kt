@@ -75,11 +75,17 @@ data class FfiCarousel(
 data class FfiAlbumPage(
     val title: String,
     val artist: String?,
+    val artistId: String?,
+    val artistAvatar: String?,
+    val kind: String?,
     val year: String?,
+    val stats: String?,
+    val description: String?,
     val thumbnails: List<FfiThumbnail>,
     val tracks: List<FfiSearchResult>,
     val carousels: List<FfiCarousel>,
-    val continuation: String?
+    val continuation: String?,
+    val radioPlaylistId: String? = null
 )
 
 data class FfiArtistPage(
