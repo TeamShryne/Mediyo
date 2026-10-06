@@ -103,12 +103,7 @@ fun ArtistScreen(
                     player?.playFrom(shelf, r)
                 }
             }
-            r.browseId != null && r.category.contains("Album", true) -> nav?.navigate("album/${r.browseId}")
-            r.browseId != null && r.category.contains("Artist", true) -> nav?.navigate("artist/${r.browseId}")
-            r.browseId != null && r.category.contains("Playlist", true) -> nav?.navigate("playlist/${r.browseId}")
-            r.browseId != null && r.category.contains("Podcast", true) -> nav?.navigate("podcast/${r.browseId}")
-            r.browseId != null && r.pageType.contains("USER_CHANNEL", true) -> nav?.navigate("channel/${r.browseId}")
-            r.browseId != null -> nav?.navigate("channel/${r.browseId}")
+            else -> com.teamshryne.mediyo.core.design.openRoute(r)?.let { nav?.navigate(it) }
         }
     }
 

@@ -325,6 +325,7 @@ private fun AppShell() {
                 onShowSleepTimer = { showSleepSheet = true },
                 onGoToArtist = { showFullPlayer = false; nav.navigate("artist/$it") },
                 onOpenChannel = { showFullPlayer = false; nav.navigate("channel/$it") },
+                onOpenPodcast = { showFullPlayer = false; nav.navigate("podcast/$it") },
                 playerVm = playerVm
             )
         }

@@ -61,7 +61,9 @@ data class PlayerState(
     val liked: Boolean = false,
     val queueSize: Int = 0,
     val queueIndex: Int = -1,
-    val originLabel: String = "Mediyo"
+    val originLabel: String = "Mediyo",
+    /** Podcast show id when the queue came from a podcast (episodes). */
+    val podcastId: String? = null
 )
 
 data class QueueEntry(
@@ -120,13 +122,14 @@ class PlayerViewModel @Inject constructor(
                         artwork = cur.artworkUrl,
                         queueSize = qs.entries.size,
                         queueIndex = qs.index,
-                        originLabel = qs.origin.label()
+                        originLabel = qs.origin.label(),
+                        podcastId = (qs.origin as? PlayOrigin.Podcast)?.id
                     )
                 } else {
                     _state.value = _state.value.copy(
                         videoId = null, title = "", artist = "", artistIds = emptyList(), artistNames = emptyList(), channelName = null, channelId = null, artwork = null,
                         isPlaying = false, isBuffering = false,
-                        queueSize = 0, queueIndex = -1, originLabel = qs.origin.label()
+                        queueSize = 0, queueIndex = -1, originLabel = qs.origin.label(), podcastId = null
                     )
                     // nothing left to play → stop audio and remove notification so we don't leave ghost playback
                     try { player.stop(); player.clearMediaItems() } catch (_: Throwable) {}
