@@ -80,7 +80,7 @@ fun CollapsingTopBar(
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.9f)
+                containerColor = MaterialTheme.colorScheme.background
             ),
             windowInsets = WindowInsets(0, 0, 0, 0),
             scrollBehavior = scrollBehavior
