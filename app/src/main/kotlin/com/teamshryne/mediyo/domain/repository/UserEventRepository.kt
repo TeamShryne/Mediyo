@@ -66,4 +66,5 @@ interface UserEventRepository {
     suspend fun since(since: Long): List<UserEventEntity>
     suspend fun countByTypeSince(type: String, since: Long): Int
     suspend fun clearAll()
+    suspend fun clearType(type: String)
 }

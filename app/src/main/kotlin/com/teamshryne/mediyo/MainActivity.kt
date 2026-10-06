@@ -64,6 +64,7 @@ import com.teamshryne.mediyo.feature.album.AlbumScreen
 import com.teamshryne.mediyo.feature.artist.ArtistScreen
 import com.teamshryne.mediyo.feature.channel.ChannelScreen
 import com.teamshryne.mediyo.feature.comments.CommentsBottomSheet
+import com.teamshryne.mediyo.feature.episode.EpisodeScreen
 import com.teamshryne.mediyo.feature.history.HistoryScreen
 import com.teamshryne.mediyo.feature.home.HomeScreen
 import com.teamshryne.mediyo.feature.library.LibraryScreen
@@ -266,6 +267,7 @@ private fun AppShell() {
                 composable("album/{id}") { AlbumScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
                 composable("artist/{id}") { ArtistScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
                 composable("podcast/{id}") { PodcastScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
+                composable("episode/{id}") { EpisodeScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
                 composable("channel/{id}") { ChannelScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
                 composable(
                     route = "section/{kind}/{id}?params={params}&title={title}",

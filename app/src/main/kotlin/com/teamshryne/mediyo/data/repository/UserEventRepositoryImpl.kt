@@ -60,4 +60,5 @@ class UserEventRepositoryImpl @Inject constructor(
     override suspend fun since(since: Long): List<UserEventEntity> = dao.since(since)
     override suspend fun countByTypeSince(type: String, since: Long): Int = dao.countByTypeSince(type, since)
     override suspend fun clearAll() = dao.clearAll()
+    override suspend fun clearType(type: String) = dao.clearType(type)
 }

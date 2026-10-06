@@ -66,28 +66,41 @@ import javax.inject.Inject
     var loadingMore by mutableStateOf(false)
     var continuation by mutableStateOf<String?>(null)
     var items by mutableStateOf<List<com.teamshryne.mediyo.data.mediyo.FfiSearchResult>>(emptyList())
-    fun load(kind: String, id: String, params: String?) {
-        loading = true; error = null; continuation = null
+    private var lastToken: String? = null
+    fun load(kind: String, id: String, params: String?, title: String?) {
+        loading = true; error = null; continuation = null; lastToken = null
         viewModelScope.launch { events.log(com.teamshryne.mediyo.domain.repository.UserEventTypes.VIEW_SECTION, browseId = id, meta = params?.take(200)) }
         viewModelScope.launch {
             try {
-                val p = if (kind == "channel") bridge.channelSection(id, params, null)
-                else bridge.artistSection(id, params, null)
+                val p = if (kind == "channel") bridge.channelSection(id, params, title)
+                else bridge.artistSection(id, params, title)
                 items = p.items; continuation = p.continuation.takeIf { p.items.isNotEmpty() }
             } catch (e: Throwable) { error = e.message } finally { loading = false }
         }
     }
     fun loadMore(kind: String) {
-        val token = continuation ?: return
+        val token = continuation?.takeIf { it.isNotEmpty() } ?: return
         if (loadingMore || loading) return
+        // Loop guard: a repeated token means the server has nothing new.
+        if (token == lastToken) {
+            continuation = null
+            return
+        }
         loadingMore = true
         viewModelScope.launch {
             try {
                 val p = if (kind == "channel") bridge.channelSectionNext(token)
                 else bridge.artistSectionNext(token)
-                val before = items.size
-                items = items.appendUnique(p.items)
-                continuation = if (p.items.isEmpty() || items.size == before) null else p.continuation
+                lastToken = token
+                if (p.reloaded) {
+                    // Sort/filter-style token: the page replaces the list.
+                    items = p.items
+                    continuation = p.continuation
+                } else {
+                    val before = items.size
+                    items = items.appendUnique(p.items)
+                    continuation = if (p.items.isEmpty() || items.size == before) null else p.continuation
+                }
             } catch (_: Throwable) { continuation = null } finally { loadingMore = false }
         }
     }
@@ -104,7 +117,7 @@ fun SectionScreen(
     player: com.teamshryne.mediyo.feature.player.PlayerViewModel? = null,
     vm: SectionVm = hiltViewModel()
 ) {
-    LaunchedEffect(kind, browseId, params) { vm.load(kind, browseId, params) }
+    LaunchedEffect(kind, browseId, params, title) { vm.load(kind, browseId, params, title) }
     var menuItem by remember { mutableStateOf<com.teamshryne.mediyo.data.mediyo.FfiSearchResult?>(null) }
     var showAddTrack by remember { mutableStateOf<Track?>(null) }
     val menuScope = rememberCoroutineScope()
@@ -136,7 +149,7 @@ fun SectionScreen(
 
     when {
         vm.loading -> SectionShimmer()
-        vm.error != null && vm.items.isEmpty() -> ErrorState(vm.error ?: "Failed to load") { vm.load(kind, browseId, params) }
+        vm.error != null && vm.items.isEmpty() -> ErrorState(vm.error ?: "Failed to load") { vm.load(kind, browseId, params, title) }
         vm.items.isEmpty() -> EmptyState("Nothing here", "This section came back empty")
         else -> {
             // Song pages (Popular, Videos) as a list; collection pages
