@@ -225,7 +225,7 @@ private fun PhonePreview(config: PlayerBgConfig) {
             Spacer(Modifier.weight(1f))
             Box(
                 Modifier.size(118.dp).clip(RoundedCornerShape(20.dp))
-            {
+            ) {
                 FauxArtwork(Modifier.fillMaxSize())
             }
             Spacer(Modifier.height(12.dp))
