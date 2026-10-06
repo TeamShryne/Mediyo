@@ -154,7 +154,6 @@ fun PodcastScreen(
         else -> {
             val playingId = player?.state?.collectAsState()?.value?.videoId
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-            val headerVisible = com.teamshryne.mediyo.core.design.rememberHeaderVisible(listState)
             val listSearch = com.teamshryne.mediyo.core.design.rememberListSearchUiState()
             val searchScope = rememberCoroutineScope()
             val sq = listSearch.query.trim()
@@ -278,9 +277,16 @@ fun PodcastScreen(
                     }
                 }
                 }
-                item(key = "list_filter") {
-                    com.teamshryne.mediyo.core.design.ListSearchField(state = listSearch, placeholder = "Search episodes")
-                    Spacer(Modifier.height(4.dp))
+                stickyHeader(key = "search_header") {
+                    com.teamshryne.mediyo.core.design.DetailSearchHeader(
+                        listState = listState,
+                        title = if (vm.title.isNotBlank()) vm.title else "Podcast",
+                        search = listSearch,
+                        searching = listSearch.searchingAll,
+                        resultCount = matches.size,
+                        onBack = { nav?.popBackStack() },
+                        placeholder = "Search episodes"
+                    )
                 }
                 if (sq.isBlank()) {
                 items(vm.items.size, key = { i ->
@@ -337,24 +343,10 @@ fun PodcastScreen(
                     }
                 }
                 }
+                if (sq.isBlank()) {
                 item(key = "podcast_footer") { LoadingFooter(vm.loadingMore) }
                 }
-                com.teamshryne.mediyo.core.design.CollapsingTopBar(
-                    title = if (vm.title.isNotBlank()) vm.title else "Podcast",
-                    visible = headerVisible,
-                    onBack = { nav?.popBackStack() },
-                    modifier = Modifier.align(Alignment.TopCenter),
-                    actions = {
-                        IconButton(onClick = {
-                            searchScope.launch {
-                                listState.animateScrollToItem(0)
-                                listSearch.focus.requestFocus()
-                            }
-                        }) {
-                            Icon(Icons.Filled.Search, contentDescription = "Search episodes")
-                        }
-                    }
-                )
+                }
                 }
 
             InfiniteScrollHandler(

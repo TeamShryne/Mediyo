@@ -99,9 +99,7 @@ fun ChannelScreen(
         else -> {
             val playingId = player?.state?.collectAsState()?.value?.videoId
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-            val headerVisible = com.teamshryne.mediyo.core.design.rememberHeaderVisible(listState)
             val listSearch = com.teamshryne.mediyo.core.design.rememberListSearchUiState()
-            val searchScope = rememberCoroutineScope()
             val sq = listSearch.query.trim()
             val allShelfItems = remember(vm.sections) { vm.sections.flatMap { it.items } }
             val matches = remember(allShelfItems, sq) {
@@ -154,9 +152,16 @@ fun ChannelScreen(
                     }
                 }
                 }
-                item(key = "list_filter") {
-                    com.teamshryne.mediyo.core.design.ListSearchField(state = listSearch, placeholder = "Search this channel")
-                    Spacer(Modifier.height(4.dp))
+                stickyHeader(key = "search_header") {
+                    com.teamshryne.mediyo.core.design.DetailSearchHeader(
+                        listState = listState,
+                        title = vm.title.ifBlank { "Channel" },
+                        search = listSearch,
+                        searching = false,
+                        resultCount = matches.size,
+                        onBack = { nav?.popBackStack() },
+                        placeholder = "Search this channel"
+                    )
                 }
                 if (sq.isBlank()) {
                 if (vm.emptyMessage != null && vm.sections.isEmpty()) {
@@ -243,22 +248,6 @@ fun ChannelScreen(
                 }
                 }
             }
-                com.teamshryne.mediyo.core.design.CollapsingTopBar(
-                    title = vm.title.ifBlank { "Channel" },
-                    visible = headerVisible,
-                    onBack = { nav?.popBackStack() },
-                    modifier = Modifier.align(Alignment.TopCenter),
-                    actions = {
-                        IconButton(onClick = {
-                            searchScope.launch {
-                                listState.animateScrollToItem(0)
-                                listSearch.focus.requestFocus()
-                            }
-                        }) {
-                            Icon(Icons.Filled.Search, contentDescription = "Search this channel")
-                        }
-                    }
-                )
             }
 
             menuItem?.let { m ->

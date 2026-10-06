@@ -107,7 +107,7 @@ import javax.inject.Inject
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun SectionScreen(
     kind: String,
@@ -227,18 +227,13 @@ fun SectionScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(top = 72.dp, bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp)
                     ) {
-                        item(key = "section_count", contentType = "header") {
-                            Row(
-                                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    "${vm.items.size} songs",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = MaterialTheme.colorScheme.secondary,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                if (playable) {
+                        if (playable) {
+                            item(key = "section_play", contentType = "header") {
+                                Row(
+                                    Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.End
+                                ) {
                                     FilledTonalButton(
                                         onClick = { playAll(shuffle = false) },
                                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
@@ -250,9 +245,16 @@ fun SectionScreen(
                                 }
                             }
                         }
-                        item(key = "list_filter") {
-                            com.teamshryne.mediyo.core.design.ListSearchField(state = listSearch, placeholder = "Search this list")
-                            Spacer(Modifier.height(4.dp))
+                        stickyHeader(key = "search_header") {
+                            com.teamshryne.mediyo.core.design.DetailSearchHeader(
+                                listState = listState,
+                                title = heading,
+                                search = listSearch,
+                                searching = listSearch.searchingAll,
+                                resultCount = matches.size,
+                                onBack = { nav?.popBackStack() },
+                                placeholder = "Search this list"
+                            )
                         }
                         if (sq.isBlank()) {
                         items(vm.items.size, key = { i ->
@@ -322,14 +324,6 @@ fun SectionScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                            Text(
-                                "${vm.items.size} items",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.secondary,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                            )
-                        }
-                        item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
                             com.teamshryne.mediyo.core.design.ListSearchField(state = listSearch, placeholder = "Search this list")
                         }
                         val gridItems = if (sq.isBlank()) vm.items else matches
@@ -387,17 +381,6 @@ fun SectionScreen(
                     navigationIcon = {
                         IconButton(onClick = { nav?.popBackStack() }) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = {
-                            searchScope.launch {
-                                if (songPage) listState.animateScrollToItem(0)
-                                else gridState.animateScrollToItem(0)
-                                listSearch.focus.requestFocus()
-                            }
-                        }) {
-                            Icon(Icons.Filled.Search, contentDescription = "Search this list")
                         }
                     }
                 )
