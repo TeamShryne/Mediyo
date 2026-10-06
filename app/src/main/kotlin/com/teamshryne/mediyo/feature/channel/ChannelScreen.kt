@@ -52,7 +52,7 @@ import javax.inject.Inject
                 val p = bridge.channel(id)
                 title = p.title; subs = p.subscriberCount
                 avatar = p.avatarUrl; banner = p.bannerUrl
-                emptyMessage = p.emptyMessage.ifBlank { null }
+                emptyMessage = p.emptyMessage?.ifBlank { null }
                 sections = p.sections
             } catch (e: Throwable) { error = e.message } finally { loading = false }
         }

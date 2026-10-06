@@ -126,7 +126,8 @@ fun PodcastScreen(
                         SectionHeader(
                             if (vm.title.isNotBlank()) vm.title else "Podcast",
                             Modifier.weight(1f).padding(bottom = 0.dp)
-                        )                        val saveFlow = remember(browseId) { vm.isSavedFlow(browseId) }
+                        )
+                        val saveFlow = remember(browseId) { vm.isSavedFlow(browseId) }
                         val isSaved by saveFlow.collectAsState(initial = false)
                         IconButton(onClick = { vm.toggleSave(browseId) }) {
                             Icon(
