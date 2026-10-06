@@ -1,5 +1,10 @@
 package com.teamshryne.mediyo.feature.search
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -13,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.History
@@ -276,23 +282,50 @@ fun SearchScreen(
                         onMenu = { menuItem = it }
                     )
                 }
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    item {
-                        FilterChip(
-                            selected = vm.selectedFilter == null,
-                            onClick = { if (vm.selectedFilter != null) scope.launch { vm.runSearch(null) } },
-                            label = { Text("All") },
-                            shape = RoundedCornerShape(20.dp)
-                        )
-                    }
-                    items(vm.filters, key = { it.label + "|" + (it.params ?: "") }) { f ->
-                        val isSel = vm.selectedFilter?.let { it.label == f.label && it.params == f.params } == true
-                        FilterChip(
-                            selected = isSel,
-                            onClick = { if (!isSel) scope.launch { vm.runSearch(f) } },
-                            label = { Text(f.label.replaceFirstChar { it.uppercase() }) },
-                            shape = RoundedCornerShape(20.dp)
-                        )
+                // Filter chips appear only once a search has run — no "All"
+                // chip. Nothing selected = all results; picking a chip scopes
+                // the results and reveals a themed clear-filter pill.
+                val showChips = vm.hasSearched && vm.filters.isNotEmpty()
+                if (showChips) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        item(key = "clear_filter") {
+                            val active = vm.selectedFilter != null
+                            AnimatedVisibility(
+                                visible = active,
+                                enter = fadeIn() + expandHorizontally(expandFrom = Alignment.Start),
+                                exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.Start)
+                            ) {
+                                AssistChip(
+                                    onClick = { scope.launch { vm.runSearch(null) } },
+                                    label = { Text("Clear") },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Filled.Close, null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    },
+                                    shape = RoundedCornerShape(20.dp),
+                                    colors = AssistChipDefaults.assistChipColors(
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        labelColor = MaterialTheme.colorScheme.onPrimary,
+                                        leadingIconColor = MaterialTheme.colorScheme.onPrimary
+                                    ),
+                                    border = null
+                                )
+                            }
+                        }
+                        items(vm.filters, key = { it.label + "|" + (it.params ?: "") }) { f ->
+                            val isSel = vm.selectedFilter?.let { it.label == f.label && it.params == f.params } == true
+                            FilterChip(
+                                selected = isSel,
+                                onClick = {
+                                    if (isSel) scope.launch { vm.runSearch(null) }
+                                    else scope.launch { vm.runSearch(f) }
+                                },
+                                label = { Text(f.label.replaceFirstChar { it.uppercase() }) },
+                                shape = RoundedCornerShape(20.dp)
+                            )
+                        }
                     }
                 }
             }

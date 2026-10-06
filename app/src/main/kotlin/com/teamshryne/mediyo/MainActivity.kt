@@ -10,9 +10,17 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,7 +28,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
@@ -32,16 +42,22 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -55,6 +71,7 @@ import androidx.navigation.navArgument
 import com.teamshryne.mediyo.BuildConfig
 import com.teamshryne.mediyo.core.design.MediyoTheme
 import com.teamshryne.mediyo.core.design.popEnter
+import com.teamshryne.mediyo.data.appearance.TabStyle
 import com.teamshryne.mediyo.core.design.popExit
 import com.teamshryne.mediyo.core.design.pushEnter
 import com.teamshryne.mediyo.core.design.pushExit
@@ -79,6 +96,8 @@ import com.teamshryne.mediyo.feature.podcast.PodcastScreen
 import com.teamshryne.mediyo.feature.profile.ProfileScreen
 import com.teamshryne.mediyo.feature.queue.QueueScreen
 import com.teamshryne.mediyo.feature.search.SearchScreen
+import com.teamshryne.mediyo.feature.settings.AppearanceScreen
+import com.teamshryne.mediyo.feature.settings.AppearanceVm
 import com.teamshryne.mediyo.feature.settings.LyricsSettingsScreen
 import com.teamshryne.mediyo.feature.settings.SettingsScreen
 import com.teamshryne.mediyo.feature.update.UpdateDialog
@@ -163,79 +182,49 @@ private fun AppShell() {
         else -> tabs.firstOrNull { it.route == currentRoute }?.label ?: "Mediyo"
     }
 
+    val appearanceVm: AppearanceVm = hiltViewModel()
+    val tabStyle by appearanceVm.style.collectAsState()
+    val density = LocalDensity.current
+    var tabBarH by remember { mutableIntStateOf(0) }
+    var pillH by remember { mutableIntStateOf(0) }
+    // Space the floating pill needs: measured live, 82dp estimate on the
+    // very first frame so content never jumps once measured.
+    val pillReserve = (if (pillH > 0) with(density) { pillH.toDp() } else 82.dp) + 8.dp
+    fun selectTab(t: Tab) {
+        nav.navigate(t.route) {
+            launchSingleTop = true
+            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+            restoreState = true
+        }
+    }
+
     Box(Modifier.fillMaxSize()) {
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
-            // bottomBar stacks MiniPlayer ABOVE the tab bar in one Column, so
-            // placement is derived from layout — never a hardcoded dp lift.
-            // Both show/hide instantly (plain `if`, no AnimatedVisibility size
-            // animation): the entering screen lays out correctly on its FIRST
-            // frame instead of resizing over ~220ms ("jump before opening").
-            // Scaffold's `pad` then always equals the real combined height, so
-            // content never slides under the player/tab bar on any device.
+            // bottomBar holds ONLY the tab bar (with its own background per
+            // style). The mini player floats in an overlay below — its side
+            // and bottom gaps are genuinely transparent, showing the page
+            // behind instead of a solid strip. Tab-bar height is measured,
+            // never hardcoded, so the pill clears it on every device.
             bottomBar = {
                 Column(
                     Modifier
                         .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.background)
                         // Edge-to-edge (decorFitsSystemWindows=false): keep the
-                        // bar/player above the system gesture/3-button nav area
-                        // on every device, whatever its inset height is.
+                        // bar above the system gesture/3-button nav area on
+                        // every device, whatever its inset height is.
                         .windowInsetsPadding(
                             WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)
                         )
                 ) {
-                    val sleepBadge = when {
-                        !sleepState.isActive -> null
-                        sleepState.mode.name == "TIMER" -> {
-                            val s = sleepState.remainingMs / 1000
-                            val txt = if (s >= 3600) "%d:%02d:%02d".format(s/3600, (s%3600)/60, s%60) else "%02d:%02d".format(s/60, s%60)
-                            "Sleep • $txt"
-                        }
-                        sleepState.mode.name == "END_OF_TRACK" -> "Sleep after track"
-                        sleepState.mode.name == "END_OF_QUEUE" -> "Sleep after queue"
-                        else -> null
-                    }
-                    MiniPlayer(
-                        state = playerState,
-                        onToggle = playerVm::toggle,
-                        onNext = playerVm::next,
-                        onExpand = { if (playerState.title.isNotEmpty()) showFullPlayer = true },
-                        sleepBadge = sleepBadge,
-                        // 8dp visual gap between the floating pill and the tab
-                        // bar; 0 when the bar is hidden (system inset above
-                        // already separates the pill from the screen edge).
-                        modifier = Modifier.padding(
-                            bottom = if (showTabBar && playerState.title.isNotEmpty()) 8.dp else 0.dp
-                        )
-                    )
                     if (showTabBar) {
-                        NavigationBar(
-                            containerColor = MaterialTheme.colorScheme.background,
-                            tonalElevation = 0.dp
-                        ) {
-                            tabs.forEach { t ->
-                                NavigationBarItem(
-                                    selected = currentRoute == t.route,
-                                    onClick = {
-                                        android.util.Log.d("MediyoNav", "tab ${t.route} from $currentRoute")
-                                        nav.navigate(t.route) {
-                                            launchSingleTop = true
-                                            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                                            restoreState = true
-                                        }
-                                    },
-                                    icon = { Icon(t.icon, contentDescription = t.label) },
-                                    label = { Text(t.label) },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = MaterialTheme.colorScheme.onSurface,
-                                        selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        indicatorColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                                    )
-                                )
-                            }
+                        Box(Modifier.fillMaxWidth().onSizeChanged { tabBarH = it.height }) {
+                            MediyoTabBar(
+                                style = tabStyle,
+                                tabs = tabs,
+                                currentRoute = currentRoute,
+                                onSelect = ::selectTab
+                            )
                         }
                     }
                 }
@@ -245,6 +234,10 @@ private fun AppShell() {
                 Modifier
                     .fillMaxSize()
                     .padding(pad)
+                    // Reserve the floating pill's space so list ends stop
+                    // above it; mid-scroll content still glides behind the
+                    // pill's transparent gaps.
+                    .padding(bottom = if (playerState.title.isNotEmpty()) pillReserve else 0.dp)
             ) {
                 NavHost(
                     navController = nav,
@@ -295,6 +288,55 @@ private fun AppShell() {
                     val vid = back.arguments?.getString("videoId") ?: ""
                     CommentsBottomSheet(videoId = vid, onDismiss = { nav.popBackStack() })
                 }
+                composable("settings/appearance") { AppearanceScreen(nav) }
+                }
+            }
+        }
+
+        // Floating mini player — overlays page content with transparent
+        // surroundings (no solid strip around the pill). Lifts above the
+        // measured tab-bar height + an 8dp gap, or floats on the system
+        // inset alone when the bar is hidden.
+        val sleepBadge = when {
+            !sleepState.isActive -> null
+            sleepState.mode.name == "TIMER" -> {
+                val s = sleepState.remainingMs / 1000
+                val txt = if (s >= 3600) "%d:%02d:%02d".format(s/3600, (s%3600)/60, s%60) else "%02d:%02d".format(s/60, s%60)
+                "Sleep • $txt"
+            }
+            sleepState.mode.name == "END_OF_TRACK" -> "Sleep after track"
+            sleepState.mode.name == "END_OF_QUEUE" -> "Sleep after queue"
+            else -> null
+        }
+        AnimatedVisibility(
+            visible = playerState.title.isNotEmpty(),
+            enter = slideInVertically { it } + fadeIn(),
+            exit = slideOutVertically { it } + fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter)
+        ) {
+            // Outer box positions the pill (offsets excluded from the
+            // measurement); inner box measures the pill alone so content
+            // reserves exactly the right space.
+            Box(
+                modifier = Modifier
+                    .padding(horizontal = 4.dp)
+                    .windowInsetsPadding(
+                        WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)
+                    )
+                    .padding(
+                        bottom = (if (showTabBar && tabBarH > 0) {
+                            with(density) { tabBarH.toDp() }
+                        } else 0.dp) + 8.dp
+                    )
+            ) {
+                Box(Modifier.onSizeChanged { pillH = it.height }) {
+                    MiniPlayer(
+                        state = playerState,
+                        onToggle = playerVm::toggle,
+                        onNext = playerVm::next,
+                        onExpand = { if (playerState.title.isNotEmpty()) showFullPlayer = true },
+                        sleepBadge = sleepBadge
+                    )
                 }
             }
         }
@@ -373,6 +415,185 @@ private fun AppShell() {
                 onAddFive = { playerVm.extendSleepTimer() },
                 onDismiss = { showSleepSheet = false }
             )
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tab bar styles (Settings → Appearance)
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+private fun MediyoTabBar(
+    style: TabStyle,
+    tabs: List<Tab>,
+    currentRoute: String?,
+    onSelect: (Tab) -> Unit
+) {
+    when (style) {
+        TabStyle.Classic -> ClassicTabBar(tabs, currentRoute, onSelect)
+        TabStyle.Docked -> DockedTabBar(tabs, currentRoute, onSelect)
+        TabStyle.Minimal -> MinimalTabBar(tabs, currentRoute, onSelect)
+        TabStyle.Capsule -> CapsuleTabBar(tabs, currentRoute, onSelect)
+    }
+}
+
+@Composable
+private fun ClassicTabBar(tabs: List<Tab>, currentRoute: String?, onSelect: (Tab) -> Unit) {
+    NavigationBar(
+        containerColor = MaterialTheme.colorScheme.background,
+        tonalElevation = 0.dp
+    ) {
+        tabs.forEach { t ->
+            NavigationBarItem(
+                selected = currentRoute == t.route,
+                onClick = { onSelect(t) },
+                icon = { Icon(t.icon, contentDescription = t.label) },
+                label = { Text(t.label) },
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = MaterialTheme.colorScheme.onSurface,
+                    selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    indicatorColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                )
+            )
+        }
+    }
+}
+
+@Composable
+private fun DockedTabBar(tabs: List<Tab>, currentRoute: String?, onSelect: (Tab) -> Unit) {
+    Box(
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shadowElevation = 10.dp,
+            tonalElevation = 0.dp,
+            modifier = Modifier.padding(vertical = 8.dp)
+        ) {
+            Row(
+                Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                tabs.forEach { t ->
+                    val sel = currentRoute == t.route
+                    if (sel) {
+                        Surface(
+                            onClick = { onSelect(t) },
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.animateContentSize()
+                        ) {
+                            Row(
+                                Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(t.icon, null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(20.dp))
+                                Text(t.label, color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge)
+                            }
+                        }
+                    } else {
+                        androidx.compose.material3.IconButton(onClick = { onSelect(t) }, modifier = Modifier.size(44.dp)) {
+                            Icon(t.icon, t.label, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MinimalTabBar(tabs: List<Tab>, currentRoute: String?, onSelect: (Tab) -> Unit) {
+    NavigationBar(
+        containerColor = MaterialTheme.colorScheme.background,
+        tonalElevation = 0.dp
+    ) {
+        tabs.forEach { t ->
+            val sel = currentRoute == t.route
+            NavigationBarItem(
+                selected = sel,
+                onClick = { onSelect(t) },
+                icon = {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(t.icon, contentDescription = t.label)
+                        Box(
+                            Modifier.padding(top = 5.dp).size(5.dp).clip(CircleShape)
+                                .background(
+                                    if (sel) MaterialTheme.colorScheme.primary
+                                    else androidx.compose.ui.graphics.Color.Transparent
+                                )
+                        )
+                    }
+                },
+                label = { Text(t.label) },
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = MaterialTheme.colorScheme.onSurface,
+                    selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    indicatorColor = androidx.compose.ui.graphics.Color.Transparent
+                )
+            )
+        }
+    }
+}
+
+@Composable
+private fun CapsuleTabBar(tabs: List<Tab>, currentRoute: String?, onSelect: (Tab) -> Unit) {
+    Box(
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 0.dp,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                Modifier.padding(4.dp).fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                tabs.forEach { t ->
+                    val sel = currentRoute == t.route
+                    Surface(
+                        onClick = { onSelect(t) },
+                        shape = CircleShape,
+                        color = if (sel) MaterialTheme.colorScheme.primary
+                        else androidx.compose.ui.graphics.Color.Transparent,
+                        modifier = Modifier.weight(1f).animateContentSize()
+                    ) {
+                        Row(
+                            Modifier.padding(vertical = 9.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                t.icon, null,
+                                tint = if (sel) MaterialTheme.colorScheme.onPrimary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            if (sel) {
+                                Spacer(Modifier.size(6.dp))
+                                Text(
+                                    t.label,
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

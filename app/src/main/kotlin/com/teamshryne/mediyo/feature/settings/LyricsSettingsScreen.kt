@@ -93,23 +93,6 @@ fun LyricsSettingsScreen(
             contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            item {
-                Card(
-                    modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
-                ) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Provider priority", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        Text(
-                            "Use the arrows to reorder. The app tries enabled providers top-to-bottom until one returns synced lyrics. Use the switches to turn providers on or off. First success is cached.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-
             item { SectionHeader("Priority order") }
 
             itemsIndexed(order, key = { _, s -> s.id }) { idx, source ->
@@ -126,41 +109,14 @@ fun LyricsSettingsScreen(
             }
 
             item {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                OutlinedButton(
+                    onClick = { vm.reset() },
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth()
                 ) {
-                    OutlinedButton(
-                        onClick = { vm.reset() },
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(Icons.Filled.Refresh, null, Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Reset to default")
-                    }
-                }
-            }
-
-            item {
-                Card(
-                    modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
-                ) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("How it works", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                        Text(
-                            "• Better Lyrics gives word-by-word timings with a karaoke glow.\n" +
-                                "• Lyrics Plus serves cached Apple word-sync from multiple sources.\n" +
-                                "• Paxsenix resolves Apple syllable-sync via iTunes lookup.\n" +
-                                "• Kugou covers far more songs with line-by-line timings.\n" +
-                                "• LRCLIB covers far more songs with line-by-line timings.\n" +
-                                "• Changing the order affects the next fetch; cached lyrics stay until cleared or the track is re-queued.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    Icon(Icons.Filled.Refresh, null, Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Reset to default")
                 }
             }
         }
