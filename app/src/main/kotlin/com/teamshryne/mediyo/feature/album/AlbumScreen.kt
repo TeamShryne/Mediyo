@@ -156,7 +156,6 @@ fun AlbumScreen(
             val dominant = rememberDominantColors(vm.thumb)
             val playingId = player?.state?.collectAsState()?.value?.videoId
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-            val headerVisible = com.teamshryne.mediyo.core.design.rememberHeaderVisible(listState)
             val listSearch = com.teamshryne.mediyo.core.design.rememberListSearchUiState()
             val sq = listSearch.query.trim()
             val matches = remember(vm.tracks, sq) {
@@ -331,9 +330,15 @@ fun AlbumScreen(
                     }
                 }
                 }
-                item(key = "list_filter") {
-                    com.teamshryne.mediyo.core.design.ListSearchField(state = listSearch)
-                    Spacer(Modifier.height(4.dp))
+                stickyHeader(key = "search_header") {
+                    com.teamshryne.mediyo.core.design.DetailSearchHeader(
+                        listState = listState,
+                        title = vm.title,
+                        search = listSearch,
+                        searching = listSearch.searchingAll,
+                        resultCount = matches.size,
+                        onBack = { nav?.popBackStack() }
+                    )
                 }
                 if (sq.isBlank()) {
                 items(vm.tracks.size) { i ->
@@ -405,24 +410,10 @@ fun AlbumScreen(
                     }
                 }
                 }
+                if (sq.isBlank()) {
                 item(key = "album_footer") { LoadingFooter(vm.loadingMore) }
                 }
-                com.teamshryne.mediyo.core.design.CollapsingTopBar(
-                    title = vm.title,
-                    visible = headerVisible,
-                    onBack = { nav?.popBackStack() },
-                    modifier = Modifier.align(Alignment.TopCenter),
-                    actions = {
-                        IconButton(onClick = {
-                            menuScope.launch {
-                                listState.animateScrollToItem(0)
-                                listSearch.focus.requestFocus()
-                            }
-                        }) {
-                            Icon(Icons.Filled.Search, contentDescription = "Search in album")
-                        }
-                    }
-                )
+                }
                 }
 
             InfiniteScrollHandler(

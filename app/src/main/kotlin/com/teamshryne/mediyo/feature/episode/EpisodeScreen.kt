@@ -102,9 +102,17 @@ fun EpisodeScreen(
             val playingId = player?.state?.collectAsState()?.value?.videoId
             val track = remember(p) { vm.trackOf(p) }
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-            val headerVisible = com.teamshryne.mediyo.core.design.rememberHeaderVisible(listState)
+            val listSearch = com.teamshryne.mediyo.core.design.rememberListSearchUiState()
+            val sq = listSearch.query.trim()
+            val matchChapters = remember(p.chapters, sq) {
+                if (sq.isBlank()) p.chapters
+                else p.chapters.filter { c ->
+                    com.teamshryne.mediyo.core.design.matchesQuery(sq, c.text)
+                }
+            }
             Box(Modifier.fillMaxSize()) {
             LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp)) {
+                if (sq.isBlank()) {
                 item(key = "hero") {
                     Column(Modifier.fillMaxWidth()) {
                         Row(
@@ -171,6 +179,19 @@ fun EpisodeScreen(
                         }
                     }
                 }
+                }
+                stickyHeader(key = "search_header") {
+                    com.teamshryne.mediyo.core.design.DetailSearchHeader(
+                        listState = listState,
+                        title = p.title,
+                        search = listSearch,
+                        searching = false,
+                        resultCount = matchChapters.size,
+                        onBack = { nav?.popBackStack() },
+                        placeholder = "Search chapters"
+                    )
+                }
+                if (sq.isBlank()) {
                 if (p.chapters.isNotEmpty()) {
                     item(key = "chapters_header") {
                         SectionHeader("Chapters", Modifier.padding(top = 22.dp))
@@ -212,13 +233,40 @@ fun EpisodeScreen(
                         }
                     }
                 }
+                } else {
+                items(matchChapters.size, key = { "match_$it" }) { i ->
+                    val c = matchChapters[i]
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .clickable { player?.let { vm.playFrom(track, c.startSeconds * 1000, p.showId, it) } }
+                            .padding(horizontal = 20.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            fmtChapter(c.startSeconds),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.width(56.dp)
+                        )
+                        Text(
+                            c.text,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 2, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+                if (matchChapters.isEmpty()) {
+                    item(key = "no_match") {
+                        com.teamshryne.mediyo.core.design.EmptyState(
+                            "No chapters match \"$sq\"",
+                            "Try different keywords"
+                        )
+                    }
+                }
+                }
             }
-                com.teamshryne.mediyo.core.design.CollapsingTopBar(
-                    title = p.title,
-                    visible = headerVisible,
-                    onBack = { nav?.popBackStack() },
-                    modifier = Modifier.align(Alignment.TopCenter)
-                )
             }
         }
     }

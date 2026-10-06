@@ -41,8 +41,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.ImeAction
@@ -74,11 +72,10 @@ suspend fun loadAllPaged(
     }
 }
 
-/** Per-screen in-list search state: query + focus + full-load progress. */
+/** Per-screen in-list search state: query + full-load progress. */
 @Stable
 class ListSearchUiState {
     var query by mutableStateOf("")
-    val focus = FocusRequester()
     /** A full load-all sweep is running (drives the waiting animation). */
     var searchingAll by mutableStateOf(false)
 
@@ -99,6 +96,7 @@ fun ListSearchField(
     placeholder: String = "Search in this list",
     modifier: Modifier = Modifier
 ) {
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     OutlinedTextField(
         value = state.query,
         onValueChange = { state.updateQuery(it) },
@@ -114,7 +112,7 @@ fun ListSearchField(
         singleLine = true,
         shape = RoundedCornerShape(28.dp),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-        keyboardActions = KeyboardActions(onSearch = { state.focus.freeFocus() }),
+        keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
         colors = OutlinedTextFieldDefaults.colors(
             unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
@@ -124,7 +122,6 @@ fun ListSearchField(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
-            .focusRequester(state.focus)
     )
 }
 
