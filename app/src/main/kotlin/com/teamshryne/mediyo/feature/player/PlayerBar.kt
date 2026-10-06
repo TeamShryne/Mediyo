@@ -55,15 +55,17 @@ import com.teamshryne.mediyo.core.design.DominantColors
 import com.teamshryne.mediyo.core.design.GlowingLoadingTitle
 import com.teamshryne.mediyo.core.design.MarqueeText
 import com.teamshryne.mediyo.core.design.MediaMenuVm
+import com.teamshryne.mediyo.core.design.PlayerBgConfig
+import com.teamshryne.mediyo.core.design.PlayerBackground
 import com.teamshryne.mediyo.core.design.TrackMenuSheet
 import com.teamshryne.mediyo.core.design.formatTime
-import com.teamshryne.mediyo.core.design.immersiveBrush
 import com.teamshryne.mediyo.core.design.rememberDominantColors
 import com.teamshryne.mediyo.domain.model.ART_HERO_PX
 import com.teamshryne.mediyo.domain.model.ART_ROW_PX
 import com.teamshryne.mediyo.domain.model.thumbSized
 import com.teamshryne.mediyo.feature.lyrics.LyricsViewModel
 import com.teamshryne.mediyo.feature.lyrics.SyncedLyricsView
+import com.teamshryne.mediyo.feature.settings.AppearanceVm
 import kotlinx.coroutines.launch
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -157,6 +159,15 @@ fun FullPlayer(
     playerVm: PlayerViewModel? = null
 ) {
     val dominant: DominantColors = rememberDominantColors(state.artwork)
+    // Player backdrop (Settings → Appearance → Player background).
+    val appearanceVm: AppearanceVm = hiltViewModel()
+    val bgStyle by appearanceVm.bgStyle.collectAsState()
+    val bgBlur by appearanceVm.bgBlur.collectAsState()
+    val bgDim by appearanceVm.bgDim.collectAsState()
+    val bgGlow by appearanceVm.bgGlow.collectAsState()
+    val bgDepth by appearanceVm.bgDepth.collectAsState()
+    val bgTint by appearanceVm.bgTint.collectAsState()
+    val bgConfig = PlayerBgConfig(bgStyle, bgBlur, bgDim, bgGlow, bgDepth, bgTint)
     var showAddSheet by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     val menuScope = rememberCoroutineScope()
@@ -205,13 +216,25 @@ fun FullPlayer(
     Box(
         Modifier
             .fillMaxSize()
-            .background(immersiveBrush(dominant))
             .clickable(
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() },
                 onClick = {} // consume clicks
             )
     ) {
+        PlayerBackground(
+            config = bgConfig,
+            dominant = dominant,
+            artwork = {
+                AsyncImage(
+                    model = state.artwork?.thumbSized(ART_HERO_PX),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            },
+            modifier = Modifier.fillMaxSize()
+        )
         Column(
             Modifier
                 .fillMaxSize()

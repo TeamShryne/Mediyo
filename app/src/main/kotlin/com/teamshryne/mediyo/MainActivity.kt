@@ -100,6 +100,8 @@ import com.teamshryne.mediyo.feature.queue.QueueScreen
 import com.teamshryne.mediyo.feature.search.SearchScreen
 import com.teamshryne.mediyo.feature.settings.AppearanceScreen
 import com.teamshryne.mediyo.feature.settings.AppearanceVm
+import com.teamshryne.mediyo.feature.settings.PlayerBackgroundScreen
+import com.teamshryne.mediyo.feature.settings.TabBarStyleScreen
 import com.teamshryne.mediyo.feature.settings.LyricsSettingsScreen
 import com.teamshryne.mediyo.feature.settings.SettingsScreen
 import com.teamshryne.mediyo.feature.update.UpdateDialog
@@ -272,6 +274,8 @@ private fun AppShell() {
                     CommentsBottomSheet(videoId = vid, onDismiss = { nav.popBackStack() })
                 }
                 composable("settings/appearance") { AppearanceScreen(nav) }
+                composable("settings/appearance/tabs") { TabBarStyleScreen(nav) }
+                composable("settings/appearance/player") { PlayerBackgroundScreen(nav) }
                 }
             }
         }
