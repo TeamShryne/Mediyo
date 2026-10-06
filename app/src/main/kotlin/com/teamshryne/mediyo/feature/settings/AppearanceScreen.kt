@@ -58,7 +58,7 @@ class AppearanceVm @Inject constructor(
     private val prefs: AppearancePrefs
 ) : ViewModel() {
     val style: StateFlow<TabStyle> = prefs.tabStyleFlow
-        .stateIn(viewModelScope, SharingStarted.Eagerly, TabStyle.Classic)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, TabStyle.Docked)
 
     fun select(style: TabStyle) {
         viewModelScope.launch { prefs.setTabStyle(style) }
