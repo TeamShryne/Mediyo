@@ -199,7 +199,7 @@ fun SectionScreen(
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(top = 72.dp, bottom = 24.dp)
+                        contentPadding = PaddingValues(top = 72.dp, bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp)
                     ) {
                         item(key = "section_count", contentType = "header") {
                             Row(
@@ -252,7 +252,7 @@ fun SectionScreen(
                         state = gridState,
                         columns = GridCells.Adaptive(minSize = 140.dp),
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 72.dp, bottom = 24.dp),
+                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 72.dp, bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
@@ -422,7 +422,7 @@ private fun SectionGridPlaceholder() {
 private fun SectionShimmer() {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 72.dp, bottom = 24.dp)
+        contentPadding = PaddingValues(top = 72.dp, bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp)
     ) {
         items(10) { SectionRowPlaceholder() }
     }

@@ -100,7 +100,7 @@ fun EpisodeScreen(
         else -> {
             val playingId = player?.state?.collectAsState()?.value?.videoId
             val track = remember(p) { vm.trackOf(p) }
-            LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+            LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp)) {
                 item(key = "episode_header") {
                     Column(Modifier.fillMaxWidth()) {
                         Row(

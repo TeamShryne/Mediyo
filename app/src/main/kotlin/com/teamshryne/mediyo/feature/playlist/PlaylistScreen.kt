@@ -157,7 +157,7 @@ fun PlaylistScreen(
             val dominant = rememberDominantColors(vm.thumb)
             val playingId = player?.state?.collectAsState()?.value?.videoId
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-            LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp)) {
                 item {
                     Column(
                         Modifier

@@ -347,7 +347,7 @@ fun LibraryScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 24.dp)
+        contentPadding = PaddingValues(bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp)
     ) {
         // Header — title + summary + actions + filter chips, docked at the top
         // at all times via stickyHeader (same pattern as Search). Outer

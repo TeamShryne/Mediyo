@@ -64,7 +64,7 @@ fun TabBarStyleScreen(
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
+            contentPadding = PaddingValues(top = 12.dp, bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(TabStyle.entries, key = { it.id }) { style ->

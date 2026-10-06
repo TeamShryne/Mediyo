@@ -229,7 +229,7 @@ fun SearchScreen(
         state = listState,
         modifier = Modifier.fillMaxSize(),
         // Outer Scaffold padding already clears the status bar — 4dp only.
-        contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(top = 4.dp, bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         item(key = "search_header") {

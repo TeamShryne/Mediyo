@@ -45,6 +45,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -71,6 +72,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.teamshryne.mediyo.BuildConfig
+import com.teamshryne.mediyo.core.design.LocalOverlayBottom
 import com.teamshryne.mediyo.core.design.MediyoTheme
 import com.teamshryne.mediyo.core.design.popEnter
 import com.teamshryne.mediyo.data.appearance.TabStyle
@@ -220,13 +222,18 @@ private fun AppShell() {
             1f to Color.Black.copy(alpha = 0.3f)
         )
     }
-    // Overlays float above content: content reserves only the opaque
-    // footprints, so scrolling content glides visibly behind the fades.
+    // Full-bleed content: overlays float above it (positioned from the
+    // measured bar/pill heights — never hardcoded). Lists consume
+    // overlayBottom below so last items stay reachable.
     val barReserve = if (showTabBar && tabBarH > 0) with(density) { tabBarH.toDp() } else 0.dp
-    // The pill reserve tucks 20dp under the pill so the fade bands always
-    // overlap real content; screens end lists with 24dp padding, so the
-    // last item still clears the pill.
-    val pillSpace = if (playerState.title.isNotEmpty()) pillReserve - 20.dp else 0.dp
+    // Scrollable clearance for lists: overlays float over full-bleed
+    // content, so screens add this to their list bottom padding — the last
+    // item stays reachable while content lives behind the bars (visible
+    // through their translucency). BarReserve/pillReserve still position
+    // the overlays themselves (see below).
+    val sysBottom = with(density) { WindowInsets.safeDrawing.getBottom(density).toDp() }
+    val pillPart = if (playerState.title.isNotEmpty()) pillReserve else 0.dp
+    val overlayBottom = sysBottom + barReserve + pillPart
 
     Box(Modifier.fillMaxSize()) {
         Scaffold(
@@ -236,8 +243,8 @@ private fun AppShell() {
                 Modifier
                     .fillMaxSize()
                     .padding(pad)
-                    .padding(bottom = barReserve + pillSpace)
             ) {
+                CompositionLocalProvider(LocalOverlayBottom provides overlayBottom) {
                 NavHost(
                     navController = nav,
                     startDestination = Tab.Home.route,
@@ -290,6 +297,7 @@ private fun AppShell() {
                 composable("settings/appearance") { AppearanceScreen(nav) }
                 composable("settings/appearance/tabs") { TabBarStyleScreen(nav) }
                 composable("settings/appearance/player") { PlayerBackgroundScreen(nav) }
+                }
                 }
             }
         }
@@ -472,7 +480,7 @@ private fun MediyoTabBar(
 @Composable
 private fun ClassicTabBar(tabs: List<Tab>, currentRoute: String?, onSelect: (Tab) -> Unit) {
     NavigationBar(
-        containerColor = Color.Transparent,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.85f),
         tonalElevation = 0.dp
     ) {
         tabs.forEach { t ->
@@ -501,7 +509,7 @@ private fun DockedTabBar(tabs: List<Tab>, currentRoute: String?, onSelect: (Tab)
     ) {
         Surface(
             shape = CircleShape,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.9f),
             shadowElevation = 10.dp,
             tonalElevation = 0.dp,
             modifier = Modifier.padding(vertical = 8.dp)
@@ -543,7 +551,7 @@ private fun DockedTabBar(tabs: List<Tab>, currentRoute: String?, onSelect: (Tab)
 @Composable
 private fun MinimalTabBar(tabs: List<Tab>, currentRoute: String?, onSelect: (Tab) -> Unit) {
     NavigationBar(
-        containerColor = Color.Transparent,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.85f),
         tonalElevation = 0.dp
     ) {
         tabs.forEach { t ->
@@ -584,7 +592,7 @@ private fun CapsuleTabBar(tabs: List<Tab>, currentRoute: String?, onSelect: (Tab
     ) {
         Surface(
             shape = CircleShape,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.9f),
             tonalElevation = 0.dp,
             modifier = Modifier.fillMaxWidth()
         ) {
