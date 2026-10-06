@@ -59,11 +59,19 @@ private fun categoryOf(c: Long): String = when (c.toInt()) {
     else -> "Unknown"
 }
 
-/** Artist/discography card kinds that address an album-style page. */
-private fun cardCategoryOf(kind: String): String = when {
-    kind.equals("Single", true) || kind.equals("EP", true) -> "Album"
-    kind.isBlank() -> "Unknown"
-    else -> kind
+/**
+ * Card category from the destination page type — the authoritative signal.
+ * Card "kinds" are subtitle text (years, subscriber counts), not categories,
+ * so keying UI routing off them sends artists to channel pages.
+ */
+private fun categoryForCard(pageType: String, videoId: String?): String = when {
+    videoId != null -> "Video"
+    pageType.contains("USER_CHANNEL") -> "Profile"
+    pageType.contains("ARTIST") -> "Artist"
+    pageType.contains("ALBUM") -> "Album"
+    pageType.contains("PLAYLIST") -> "Playlist"
+    pageType.contains("PODCAST") -> "Podcast"
+    else -> "Unknown"
 }
 
 private fun SearchResult.toModel(top: Boolean = false): FfiSearchResult {
@@ -95,7 +103,7 @@ private fun SearchResult.toModel(top: Boolean = false): FfiSearchResult {
 private fun PlaylistTrack.toModel(): FfiSearchResult = result().toModel()
 
 private fun ArtistCard.toModel(): FfiSearchResult {
-    val kind = cardCategoryOf(kind())
+    val kind = categoryForCard(pageType(), videoID().emptyToNull())
     return FfiSearchResult(
         title = title(),
         videoId = videoID().emptyToNull(),
@@ -128,7 +136,7 @@ private fun ChannelCard.toModel(): FfiSearchResult {
         browseId = if (v != null) null else b,
         browseParams = params().emptyToNull(),
         playlistId = playlistID().emptyToNull(),
-        category = kind().ifBlank { if (v != null) "Video" else "Playlist" },
+        category = categoryForCard(pageType(), v),
         year = null,
         duration = null,
         explicit = false,
@@ -264,7 +272,7 @@ private fun AlbumPage.toModel(): FfiAlbumPage {
                 browseId = relatedItemBrowseID(s, i).emptyToNull(),
                 browseParams = relatedItemParams(s, i).emptyToNull(),
                 playlistId = null,
-                category = cardCategoryOf(relatedItemKind(s, i)),
+                category = categoryForCard(relatedItemPageType(s, i), null),
                 year = relatedItemYear(s, i).emptyToNull(),
                 duration = null,
                 explicit = false,

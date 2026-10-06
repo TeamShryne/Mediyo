@@ -208,16 +208,13 @@ fun SearchScreen(
     fun open(r: FfiSearchResult) {
         vm.logTap(r)
         when {
+            r.videoId != null && r.category.contains("Episode", true) ->
+                nav.navigate("episode/${r.detailId.ifBlank { r.videoId }}")
             r.videoId != null -> {
                 val track = r.toDomainTrack()
                 player.playTrack(track, PlayOrigin.Search(vm.lastQuery.ifEmpty { vm.query }, vm.selectedLabel))
             }
-            r.browseId != null && r.category.contains("Album", true) -> nav.navigate("album/${r.browseId}")
-            r.browseId != null && r.category.contains("Artist", true) -> nav.navigate("artist/${r.browseId}")
-            r.browseId != null && r.category.contains("Playlist", true) -> nav.navigate("playlist/${r.browseId}")
-            r.browseId != null && r.category.contains("Podcast", true) -> nav.navigate("podcast/${r.browseId}")
-            r.browseId != null -> nav.navigate("channel/${r.browseId}")
-            r.playlistId != null -> nav.navigate("playlist/${r.playlistId}")
+            else -> com.teamshryne.mediyo.core.design.openRoute(r)?.let { nav.navigate(it) }
         }
     }
 

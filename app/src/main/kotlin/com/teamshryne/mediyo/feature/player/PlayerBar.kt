@@ -153,6 +153,7 @@ fun FullPlayer(
     onShowSleepTimer: () -> Unit = {},
     onGoToArtist: (String) -> Unit = {},
     onOpenChannel: (String) -> Unit = {},
+    onOpenPodcast: (String) -> Unit = {},
     playerVm: PlayerViewModel? = null
 ) {
     val dominant: DominantColors = rememberDominantColors(state.artwork)
@@ -303,9 +304,19 @@ fun FullPlayer(
                             val artShape = RoundedCornerShape(18.dp)
                             val artPainter = rememberAsyncImagePainter(
                                 model = state.artwork.thumbSized(ART_HERO_PX),
-                                contentScale = ContentScale.Crop
+                                contentScale = ContentScale.Fit
                             )
                             val artReady = artPainter.state is AsyncImagePainter.State.Success
+                            // Any aspect ratio is fine: fit the box to the loaded
+                            // image (16:9 episode art, square album art, ...) so
+                            // artwork is fully visible instead of center-cropped.
+                            val artRatio = (artPainter.state as? AsyncImagePainter.State.Success)
+                                ?.painter?.intrinsicSize?.let { size ->
+                                    if (size.width > 0 && size.height > 0 &&
+                                        size.width != Float.POSITIVE_INFINITY &&
+                                        size.height != Float.POSITIVE_INFINITY
+                                    ) size.width / size.height else 1f
+                                }?.coerceIn(0.5f, 2f) ?: 1f
                             val artAlpha by animateFloatAsState(
                                 targetValue = if (artReady) 1f else 0f,
                                 animationSpec = tween(350),
@@ -314,7 +325,7 @@ fun FullPlayer(
                             Box(
                                 Modifier
                                     .fillMaxWidth()
-                                    .aspectRatio(1f)
+                                    .aspectRatio(artRatio)
                                     .then(
                                         if (artReady) {
                                             Modifier
@@ -326,7 +337,7 @@ fun FullPlayer(
                                 Image(
                                     painter = artPainter,
                                     contentDescription = state.title,
-                                    contentScale = ContentScale.Crop,
+                                    contentScale = ContentScale.Fit,
                                     modifier = Modifier.fillMaxSize().alpha(artAlpha)
                                 )
                                 if (!artReady) {
@@ -352,7 +363,9 @@ fun FullPlayer(
                                         names = state.artistNames.takeIf { it.isNotEmpty() }
                                             ?: if (state.artist.isBlank()) emptyList() else state.artist.split(",").map { it.trim() }.filter { it.isNotEmpty() },
                                         artistIds = state.artistIds,
-                                        onGoToArtist = onGoToArtist
+                                        podcastId = state.podcastId,
+                                        onGoToArtist = onGoToArtist,
+                                        onOpenPodcast = onOpenPodcast
                                     )
                                 }
                                 Spacer(Modifier.width(8.dp))
@@ -575,6 +588,8 @@ private fun ArtistLinks(
     names: List<String>,
     artistIds: List<String>,
     onGoToArtist: (String) -> Unit,
+    podcastId: String? = null,
+    onOpenPodcast: (String) -> Unit = {},
     menuVm: MediaMenuVm = hiltViewModel()
 ) {
     if (names.isEmpty()) return
@@ -599,6 +614,11 @@ private fun ArtistLinks(
                     interactionSource = interaction
                 ) {
                     scope.launch {
+                        // Podcast episodes credit the show creator: open the show.
+                        if (podcastId != null) {
+                            onOpenPodcast(podcastId)
+                            return@launch
+                        }
                         val direct = artistIds.getOrNull(i)?.takeIf { it.isNotBlank() }
                         if (direct != null) {
                             onGoToArtist(direct)

@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -116,9 +115,9 @@ fun EpisodeScreen(
                             model = p.artworkUrl,
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
-                            modifier = Modifier.padding(horizontal = 48.dp)
+                            modifier = Modifier.padding(horizontal = 20.dp)
                                 .fillMaxWidth()
-                                .aspectRatio(1f)
+                                .aspectRatio(16f / 9f)
                                 .clip(RoundedCornerShape(14.dp))
                                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                         )
@@ -152,33 +151,6 @@ fun EpisodeScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 20.dp).padding(top = 4.dp)
                         )
-                        if (p.played || p.progress > 0) {
-                            Row(
-                                Modifier.padding(horizontal = 20.dp).padding(top = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    Icons.Filled.CheckCircle,
-                                    contentDescription = null,
-                                    tint = if (p.played) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Text(
-                                    if (p.played) "Played" else "Played ${p.progress}%",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            if (!p.played && p.progress > 0) {
-                                LinearProgressIndicator(
-                                    progress = { p.progress.coerceIn(0, 100) / 100f },
-                                    modifier = Modifier.padding(horizontal = 20.dp).padding(top = 8.dp)
-                                        .fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
-                                )
-                            }
-                        }
                         Spacer(Modifier.height(16.dp))
                         Row(
                             Modifier.fillMaxWidth().padding(horizontal = 20.dp),

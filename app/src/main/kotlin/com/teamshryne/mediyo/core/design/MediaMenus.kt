@@ -55,11 +55,17 @@ fun FfiSearchResult.isAlbum(): Boolean = category.contains("Album", true)
 fun FfiSearchResult.isPlaylist(): Boolean = category.contains("Playlist", true)
 fun FfiSearchResult.isPodcast(): Boolean = category.contains("Podcast", true)
 fun FfiSearchResult.isEpisode(): Boolean = category.contains("Episode", true)
+
+/** Uploader/channel pages: never an artist, album, playlist or podcast. */
+fun FfiSearchResult.isChannel(): Boolean =
+    videoId == null && browseId != null &&
+        (category.contains("Profile", true) || category.contains("Unknown", true))
+
 fun FfiSearchResult.isSongLike(): Boolean = videoId != null
 
-/** Browseable collections (albums, playlists, podcasts, generic lists). */
+/** Browseable collections (albums, playlists, podcasts). */
 fun FfiSearchResult.isCollection(): Boolean =
-    isAlbum() || isPlaylist() || isPodcast() || (browseId != null && !isArtist() && videoId == null)
+    isAlbum() || isPlaylist() || isPodcast()
 
 fun FfiSearchResult.typeLabel(): String = when {
     isArtist() -> "Artist"
@@ -70,14 +76,35 @@ fun FfiSearchResult.typeLabel(): String = when {
     else -> category
 }
 
-/** Open destination for a browseable item, mirroring each screen's open() logic. */
-fun openRoute(item: FfiSearchResult): String? = when {
-    item.isArtist() && item.browseId != null -> "artist/${item.browseId}"
-    item.isAlbum() && item.browseId != null -> "album/${item.browseId}"
-    item.isPlaylist() -> (item.playlistId ?: item.browseId)?.let { "playlist/$it" }
-    item.isPodcast() && item.browseId != null -> "podcast/${item.browseId}"
-    item.browseId != null -> "channel/${item.browseId}"
-    else -> null
+/**
+ * Open destination for any item. Page type is checked first — it is the
+ * authoritative signal (card "kinds" are subtitle text, not categories).
+ * Video-less unknowns fall back to the channel page, which reports its own
+ * empty state instead of dead-ending.
+ */
+fun openRoute(item: FfiSearchResult): String? {
+    if (item.videoId != null && item.isEpisode()) {
+        val id = item.detailId.ifBlank { item.videoId }
+        return "episode/$id"
+    }
+    val b = item.browseId
+    if (b != null) {
+        val pt = item.pageType
+        return when {
+            pt.contains("USER_CHANNEL") -> "channel/$b"
+            pt.contains("ARTIST") -> "artist/$b"
+            pt.contains("ALBUM") -> "album/$b"
+            pt.contains("PLAYLIST") -> "playlist/$b"
+            pt.contains("PODCAST") -> "podcast/$b"
+            item.isArtist() -> "artist/$b"
+            item.isAlbum() -> "album/$b"
+            item.isPlaylist() -> "playlist/$b"
+            item.isPodcast() -> "podcast/$b"
+            else -> "channel/$b"
+        }
+    }
+    item.playlistId?.let { return "playlist/$it" }
+    return null
 }
 
 /** Library kind for a savable public collection, null when not savable. */
@@ -248,6 +275,7 @@ fun MediaMenuSheet(
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             when {
                 item.isArtist() -> ArtistActions(item, nav, onDismiss, onPlayTracks, onEnqueueTracks, vm, scope)
+                item.isChannel() -> ChannelActions(item, nav, onDismiss)
                 item.isCollection() -> CollectionActions(item, nav, onDismiss, onPlayTracks, onEnqueueTracks, vm, scope)
                 else -> SongActions(item, nav, onDismiss, onAddToPlaylist, onPlayNext, onAddToQueue, onComments, vm, scope)
             }
@@ -513,7 +541,23 @@ private fun ArtistActions(
     )
 }
 
-// ── Album / playlist / podcast / list ────────────────────────────────────────
+// ── Channel ──────────────────────────────────────────────────────────────────
+
+@Composable
+private fun ChannelActions(
+    item: FfiSearchResult,
+    nav: androidx.navigation.NavController?,
+    onDismiss: () -> Unit
+) {
+    val route = openRoute(item)
+    MenuItem(
+        icon = Icons.Filled.OpenInNew, label = "Open channel",
+        enabled = route != null,
+        onClick = { if (route != null) { onDismiss(); nav?.navigate(route) } }
+    )
+}
+
+// ── Album / playlist / podcast ───────────────────────────────────────────────
 
 @Composable
 private fun CollectionActions(
