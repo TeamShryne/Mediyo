@@ -115,14 +115,8 @@ fun ArtistScreen(
             val playingId = player?.state?.collectAsState()?.value?.videoId
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
             val headerVisible = com.teamshryne.mediyo.core.design.rememberHeaderVisible(listState)
+            Box(Modifier.fillMaxSize()) {
             LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp)) {
-                stickyHeader(key = "topbar") {
-                    com.teamshryne.mediyo.core.design.CollapsingTopBar(
-                        title = vm.name,
-                        visible = headerVisible,
-                        onBack = { nav?.popBackStack() }
-                    )
-                }
                 // ── Hero ──
                 item(key = "hero") {
                     Box(Modifier.fillMaxWidth()) {
@@ -281,6 +275,13 @@ fun ArtistScreen(
                     }
                 }
 
+            }
+                com.teamshryne.mediyo.core.design.CollapsingTopBar(
+                    title = vm.name,
+                    visible = headerVisible,
+                    onBack = { nav?.popBackStack() },
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
             }
         }
     }

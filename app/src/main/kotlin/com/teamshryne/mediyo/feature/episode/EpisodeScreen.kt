@@ -103,14 +103,8 @@ fun EpisodeScreen(
             val track = remember(p) { vm.trackOf(p) }
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
             val headerVisible = com.teamshryne.mediyo.core.design.rememberHeaderVisible(listState)
+            Box(Modifier.fillMaxSize()) {
             LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp)) {
-                stickyHeader(key = "topbar") {
-                    com.teamshryne.mediyo.core.design.CollapsingTopBar(
-                        title = p.title,
-                        visible = headerVisible,
-                        onBack = { nav?.popBackStack() }
-                    )
-                }
                 item(key = "hero") {
                     Column(Modifier.fillMaxWidth()) {
                         Row(
@@ -218,6 +212,13 @@ fun EpisodeScreen(
                         }
                     }
                 }
+            }
+                com.teamshryne.mediyo.core.design.CollapsingTopBar(
+                    title = p.title,
+                    visible = headerVisible,
+                    onBack = { nav?.popBackStack() },
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
             }
         }
     }

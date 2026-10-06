@@ -159,14 +159,8 @@ fun PlaylistScreen(
             val playingId = player?.state?.collectAsState()?.value?.videoId
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
             val headerVisible = com.teamshryne.mediyo.core.design.rememberHeaderVisible(listState)
+            Box(Modifier.fillMaxSize()) {
             LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp)) {
-                stickyHeader(key = "topbar") {
-                    com.teamshryne.mediyo.core.design.CollapsingTopBar(
-                        title = vm.title,
-                        visible = headerVisible,
-                        onBack = { nav?.popBackStack() }
-                    )
-                }
                 item(key = "hero") {
                     Column(
                         Modifier
@@ -315,7 +309,14 @@ fun PlaylistScreen(
                     }
                 }
                 item(key = "playlist_footer") { LoadingFooter(vm.loadingMore) }
-            }
+                }
+                com.teamshryne.mediyo.core.design.CollapsingTopBar(
+                    title = vm.title,
+                    visible = headerVisible,
+                    onBack = { nav?.popBackStack() },
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
+                }
 
             InfiniteScrollHandler(
                 listState = listState,
