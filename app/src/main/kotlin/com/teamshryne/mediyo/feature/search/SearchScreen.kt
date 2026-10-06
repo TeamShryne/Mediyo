@@ -153,10 +153,11 @@ class SearchVm @Inject constructor(
                 results = res.results
                 // Filtered responses don't always echo the chip cloud — never
                 // let an empty chip list wipe the chips the user just tapped.
-                // They also echo a leading param-less "clear filter" chip with
-                // an empty label (acts exactly like All); drop blank labels
-                // so no empty chip is rendered next to the hardcoded All chip.
-                val clean = res.filters.filter { it.label.isNotBlank() }
+                // They also echo a param-less "Clear filters" reset chip (blank
+                // or not); real filter chips always carry params, and a
+                // param-less chip acts exactly like All, so drop them — our
+                // own Clear pill handles resetting.
+                val clean = res.filters.filter { it.label.isNotBlank() && !it.params.isNullOrBlank() }
                 if (clean.isNotEmpty()) filters = clean
                 continuation = res.continuation.takeIf { res.results.isNotEmpty() }
                 events.log(UserEventTypes.SEARCH, label = q, meta = "filter=$selectedLabel;count=${res.results.size}")
