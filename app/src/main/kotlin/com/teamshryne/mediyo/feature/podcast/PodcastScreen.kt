@@ -137,7 +137,7 @@ import javax.inject.Inject
 fun episodeRouteId(r: FfiSearchResult): String =
     r.detailId.ifBlank { r.videoId.orEmpty() }
 
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun PodcastScreen(
     browseId: String,
