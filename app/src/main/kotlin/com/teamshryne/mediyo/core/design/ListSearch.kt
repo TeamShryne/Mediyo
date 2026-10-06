@@ -36,6 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,7 +52,6 @@ import coil.compose.AsyncImage
 import com.teamshryne.mediyo.data.mediyo.FfiSearchResult
 import com.teamshryne.mediyo.domain.model.bestThumbUrl
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.snapshotFlow
 
 /** Case-insensitive match across whichever fields a screen filters on. */
 fun matchesQuery(query: String, vararg fields: String?): Boolean {
@@ -133,7 +133,7 @@ fun ListSearchField(
  * to sweep the rest of the list.
  */
 @Composable
-fun SearchMoreRow(matchCount: Int, onSearchMore: () -> Unit, modifier: Modifier = Modifier) {
+fun SearchMoreRow(matchCount: Int, modifier: Modifier = Modifier, onSearchMore: () -> Unit) {
     Row(
         modifier.fillMaxWidth()
             .clickable(onClick = onSearchMore)
