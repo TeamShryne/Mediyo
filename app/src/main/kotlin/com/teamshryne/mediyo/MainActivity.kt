@@ -203,11 +203,22 @@ private fun AppShell() {
     }
 
     val bg = MaterialTheme.colorScheme.background
+    // Scrims stay transparent through the first half, ramping to opaque
+    // only near the bar — content shows through the upper area.
     val tabScrim = remember(bg) {
-        Brush.verticalGradient(listOf(Color.Transparent, bg.copy(alpha = 0.65f), bg))
+        Brush.verticalGradient(
+            0f to Color.Transparent,
+            0.55f to Color.Transparent,
+            0.85f to bg.copy(alpha = 0.6f),
+            1f to bg
+        )
     }
     val pillScrim = remember {
-        Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.45f)))
+        Brush.verticalGradient(
+            0f to Color.Transparent,
+            0.55f to Color.Transparent,
+            1f to Color.Black.copy(alpha = 0.38f)
+        )
     }
     // Overlays float above content: content reserves only the opaque
     // footprints, so scrolling content glides visibly behind the fades.
@@ -291,8 +302,8 @@ private fun AppShell() {
                         WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)
                     )
             ) {
-                // 28dp fade zone above the bar: content shows through.
-                Column(Modifier.padding(top = 28.dp)) {
+                // 52dp fade zone above the bar: content shows through.
+                Column(Modifier.padding(top = 52.dp)) {
                     Box(Modifier.fillMaxWidth().onSizeChanged { tabBarH = it.height }) {
                         MediyoTabBar(
                             style = tabStyle,
@@ -341,7 +352,7 @@ private fun AppShell() {
                         .windowInsetsPadding(
                             WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)
                         )
-                        .padding(top = 24.dp)
+                        .padding(top = 40.dp)
                 ) {
                     Box(
                         Modifier.fillMaxWidth().padding(horizontal = 4.dp)
