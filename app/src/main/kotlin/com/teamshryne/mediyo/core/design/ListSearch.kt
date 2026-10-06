@@ -82,7 +82,7 @@ class ListSearchUiState {
     /** A full load-all sweep is running (drives the waiting animation). */
     var searchingAll by mutableStateOf(false)
 
-    fun setQuery(q: String) {
+    fun updateQuery(q: String) {
         if (query == q) return
         query = q
         searchingAll = false
@@ -101,12 +101,12 @@ fun ListSearchField(
 ) {
     OutlinedTextField(
         value = state.query,
-        onValueChange = { state.setQuery(it) },
+        onValueChange = { state.updateQuery(it) },
         placeholder = { Text(placeholder, color = MaterialTheme.colorScheme.onSurfaceVariant) },
         leadingIcon = { Icon(Icons.Filled.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
         trailingIcon = if (state.query.isNotEmpty()) {
             {
-                IconButton(onClick = { state.setQuery("") }) {
+                IconButton(onClick = { state.updateQuery("") }) {
                     Icon(Icons.Filled.Close, "Clear search", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
