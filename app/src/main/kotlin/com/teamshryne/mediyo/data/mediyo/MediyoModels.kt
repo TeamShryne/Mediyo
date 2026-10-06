@@ -39,7 +39,13 @@ data class FfiSearchResult(
     /** Raw UC browseId for "Open channel" (a channel page, never an artist page). */
     val channelId: String?,
     /** Raw MUSIC_PAGE_TYPE_* of the destination; used for open() fallback routing. */
-    val pageType: String = ""
+    val pageType: String = "",
+    /** Podcast episode detail id (MPED…); used for the episode screen. */
+    val detailId: String = "",
+    /** Episode-only: fully played marker. */
+    val played: Boolean = false,
+    /** Episode-only: listen progress percent. */
+    val progress: Int = 0
 )
 
 data class FfiSearchFilter(
@@ -93,12 +99,25 @@ data class FfiPlaylistPage(
     val trackCount: String?,
     val thumbnails: List<FfiThumbnail>,
     val tracks: List<FfiSearchResult>,
-    val continuation: String?
+    val continuation: String?,
+    val radioPlaylistId: String? = null,
+    val owner: String? = null,
+    val ownerAvatar: String? = null,
+    val description: String? = null,
+    val totalDuration: String? = null
 )
 
 data class FfiListPage(
     val items: List<FfiSearchResult>,
-    val continuation: String?
+    val continuation: String?,
+    /** True when the page replaces (sort/filter reload), not appends. */
+    val reloaded: Boolean = false
+)
+
+data class FfiPodcastOption(
+    val label: String,
+    val selected: Boolean,
+    val token: String
 )
 
 data class FfiPodcastPage(
@@ -107,7 +126,9 @@ data class FfiPodcastPage(
     val artworkUrl: String?,
     val description: String?,
     val items: List<FfiSearchResult>,
-    val continuation: String?
+    val continuation: String?,
+    val sorts: List<FfiPodcastOption> = emptyList(),
+    val filters: List<FfiPodcastOption> = emptyList()
 )
 
 data class FfiQueueItem(
@@ -157,6 +178,27 @@ data class FfiChannelPage(
     val bannerUrl: String?,
     val sections: List<FfiCarousel>,
     val emptyMessage: String?
+)
+
+data class FfiChapter(
+    val text: String,
+    val startSeconds: Long
+)
+
+data class FfiEpisodePage(
+    val id: String,
+    val videoId: String?,
+    val title: String,
+    val showName: String?,
+    val showId: String?,
+    val date: String?,
+    val stats: String?,
+    val description: String?,
+    val duration: String?,
+    val artworkUrl: String?,
+    val played: Boolean,
+    val progress: Int,
+    val chapters: List<FfiChapter>
 )
 
 data class FfiSuggestText(

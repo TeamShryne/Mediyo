@@ -1,26 +1,39 @@
 package com.teamshryne.mediyo.feature.podcast
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.BookmarkRemove
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import coil.compose.AsyncImage
 import com.teamshryne.mediyo.core.design.ErrorState
 import com.teamshryne.mediyo.core.design.InfiniteScrollHandler
 import com.teamshryne.mediyo.core.design.LoadingFooter
-import com.teamshryne.mediyo.core.design.SectionHeader
 import com.teamshryne.mediyo.core.design.appendUnique
-import com.teamshryne.mediyo.core.design.TrackRow
+import com.teamshryne.mediyo.data.mediyo.FfiPodcastOption
+import com.teamshryne.mediyo.data.mediyo.FfiSearchResult
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
+import com.teamshryne.mediyo.domain.model.PlayOrigin
 import com.teamshryne.mediyo.domain.model.bestThumbUrl
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
@@ -33,10 +46,13 @@ import javax.inject.Inject
 ) : ViewModel() {
     var loading by mutableStateOf(true); var error by mutableStateOf<String?>(null)
     var loadingMore by mutableStateOf(false); var continuation by mutableStateOf<String?>(null)
-    var items by mutableStateOf<List<com.teamshryne.mediyo.data.mediyo.FfiSearchResult>>(emptyList())
+    var items by mutableStateOf<List<FfiSearchResult>>(emptyList())
     var title by mutableStateOf("")
     var author by mutableStateOf<String?>(null)
     var thumb by mutableStateOf<String?>(null)
+    var description by mutableStateOf<String?>(null)
+    var sorts by mutableStateOf<List<FfiPodcastOption>>(emptyList())
+    var filters by mutableStateOf<List<FfiPodcastOption>>(emptyList())
     fun isSavedFlow(id: String) = savedRepo.isSavedFlow(id)
     fun toggleSave(id: String) {
         viewModelScope.launch {
@@ -62,7 +78,9 @@ import javax.inject.Inject
                 title = p.title.ifBlank { "Podcast" }
                 author = p.author
                 thumb = p.artworkUrl
-                // Background refresh of the library snapshot when this podcast is saved.
+                description = p.description
+                sorts = p.sorts
+                filters = p.filters
                 try {
                     if (savedRepo.isSaved(id)) {
                         savedRepo.save(
@@ -76,8 +94,24 @@ import javax.inject.Inject
             } catch (e: Throwable) { error = e.message } finally { loading = false }
         }
     }
+
+    /** Sort / played-filter switch: replaces the episode list. */
+    fun applyOption(token: String) {
+        if (loadingMore || loading) return
+        loadingMore = true
+        viewModelScope.launch {
+            try {
+                val p = bridge.podcastNext(token)
+                items = p.items
+                continuation = p.continuation
+                if (p.sorts.isNotEmpty()) sorts = p.sorts
+                if (p.filters.isNotEmpty()) filters = p.filters
+            } catch (e: Throwable) { error = e.message } finally { loadingMore = false }
+        }
+    }
+
     fun loadMore() {
-        val token = continuation ?: return
+        val token = continuation?.takeIf { it.isNotEmpty() } ?: return
         if (loadingMore || loading) return
         loadingMore = true
         viewModelScope.launch {
@@ -94,10 +128,15 @@ import javax.inject.Inject
                     }
                 }
                 continuation = p.continuation
+                if (p.sorts.isNotEmpty()) sorts = p.sorts
+                if (p.filters.isNotEmpty()) filters = p.filters
             } catch (_: Throwable) { continuation = null } finally { loadingMore = false }
         }
     }
 }
+
+fun episodeRouteId(r: FfiSearchResult): String =
+    r.detailId.ifBlank { r.videoId.orEmpty() }
 
 @Composable
 fun PodcastScreen(
@@ -110,39 +149,122 @@ fun PodcastScreen(
 
     when {
         vm.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
-        vm.error != null -> ErrorState(vm.error ?: "Failed to load") { vm.load(browseId) }
+        vm.error != null && vm.items.isEmpty() -> ErrorState(vm.error ?: "Failed to load") { vm.load(browseId) }
         else -> {
             val playingId = player?.state?.collectAsState()?.value?.videoId
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-            LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp)) {
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
                 item(key = "podcast_header") {
-                    Row(
-                        Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(onClick = { nav?.popBackStack() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    Column(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(onClick = { nav?.popBackStack() }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                            }
+                            Spacer(Modifier.weight(1f))
+                            val saveFlow = remember(browseId) { vm.isSavedFlow(browseId) }
+                            val isSaved by saveFlow.collectAsState(initial = false)
+                            IconButton(onClick = { vm.toggleSave(browseId) }) {
+                                Icon(
+                                    if (isSaved) Icons.Filled.BookmarkRemove else Icons.Filled.BookmarkAdd,
+                                    contentDescription = if (isSaved) "Remove from library" else "Add to library"
+                                )
+                            }
                         }
-                        SectionHeader(
-                            if (vm.title.isNotBlank()) vm.title else "Podcast",
-                            Modifier.weight(1f).padding(bottom = 0.dp)
-                        )
-                        val saveFlow = remember(browseId) { vm.isSavedFlow(browseId) }
-                        val isSaved by saveFlow.collectAsState(initial = false)
-                        IconButton(onClick = { vm.toggleSave(browseId) }) {
-                            Icon(
-                                if (isSaved) Icons.Filled.BookmarkRemove else Icons.Filled.BookmarkAdd,
-                                contentDescription = if (isSaved) "Remove from library" else "Add to library"
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            AsyncImage(
+                                model = vm.thumb,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.size(120.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                            )
+                            Spacer(Modifier.width(16.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    if (vm.title.isNotBlank()) vm.title else "Podcast",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 3, overflow = TextOverflow.Ellipsis
+                                )
+                                vm.author?.takeIf { it.isNotBlank() }?.let {
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        it,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1, overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                Text(
+                                    "${vm.items.size} episodes",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        vm.description?.takeIf { it.isNotBlank() }?.let { desc ->
+                            var expanded by remember(browseId) { mutableStateOf(false) }
+                            Text(
+                                desc,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = if (expanded) Int.MAX_VALUE else 3,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(horizontal = 20.dp).padding(top = 12.dp)
+                                    .clickable { expanded = !expanded }
                             )
                         }
+                        if (vm.sorts.isNotEmpty() || vm.filters.isNotEmpty()) {
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(vm.sorts, key = { "s:${it.label}" }) { o ->
+                                    FilterChip(
+                                        selected = o.selected,
+                                        onClick = { if (!o.selected) vm.applyOption(o.token) },
+                                        label = { Text(o.label) },
+                                        shape = RoundedCornerShape(20.dp)
+                                    )
+                                }
+                                items(vm.filters, key = { "f:${it.label}" }) { o ->
+                                    FilterChip(
+                                        selected = o.selected,
+                                        onClick = { if (!o.selected) vm.applyOption(o.token) },
+                                        label = { Text(o.label) },
+                                        shape = RoundedCornerShape(20.dp)
+                                    )
+                                }
+                            }
+                        } else {
+                            Spacer(Modifier.height(12.dp))
+                        }
                     }
-                    Spacer(Modifier.height(8.dp))
                 }
-                items(vm.items.size) { i ->
+                items(vm.items.size, key = { i ->
                     val r = vm.items[i]
-                    TrackRow(item = r, isPlaying = playingId != null && playingId == r.videoId, showArtwork = true) {
-                        if (player != null) player.playFromWithOrigin(vm.items, r, com.teamshryne.mediyo.domain.model.PlayOrigin.Podcast(browseId))
-                    }
+                    "ep_${r.videoId ?: r.detailId.ifBlank { null } ?: i}_$i"
+                }) { i ->
+                    val r = vm.items[i]
+                    EpisodeRow(
+                        item = r,
+                        isPlaying = playingId != null && playingId == r.videoId,
+                        onClick = {
+                            if (playingId != null && playingId == r.videoId) player?.toggle()
+                            else player?.playFromWithOrigin(vm.items, r, PlayOrigin.Podcast(browseId))
+                        },
+                        onOpen = {
+                            val id = episodeRouteId(r)
+                            if (id.isNotBlank()) nav?.navigate("episode/$id")
+                        }
+                    )
                 }
                 item(key = "podcast_footer") { LoadingFooter(vm.loadingMore) }
             }
@@ -152,6 +274,81 @@ fun PodcastScreen(
                 itemCount = vm.items.size + 2,
                 enabled = vm.continuation != null && !vm.loading && !vm.loadingMore
             ) { vm.loadMore() }
+        }
+    }
+}
+
+@Composable
+private fun EpisodeRow(
+    item: FfiSearchResult,
+    isPlaying: Boolean,
+    onClick: () -> Unit,
+    onOpen: () -> Unit
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AsyncImage(
+            model = item.thumbnails.bestThumbUrl(),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.size(56.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (item.played) {
+                    Icon(
+                        Icons.Filled.CheckCircle, contentDescription = "Played",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                }
+                Text(
+                    item.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Spacer(Modifier.height(2.dp))
+            Text(
+                listOfNotNull(item.info?.takeIf { it.isNotBlank() }, item.duration?.takeIf { it.isNotBlank() })
+                    .joinToString("  •  "),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
+            if (!item.played && item.progress > 0) {
+                Spacer(Modifier.height(6.dp))
+                LinearProgressIndicator(
+                    progress = { (item.progress.coerceIn(0, 100)) / 100f },
+                    modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)),
+                )
+            }
+        }
+        IconButton(onClick = onOpen, modifier = Modifier.size(36.dp)) {
+            Icon(
+                Icons.Filled.ChevronRight, contentDescription = "Episode details",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        IconButton(
+            onClick = onClick,
+            modifier = Modifier.size(40.dp)
+        ) {
+            Icon(
+                Icons.Filled.PlayArrow, contentDescription = "Play",
+                tint = MaterialTheme.colorScheme.primary
+            )
         }
     }
 }

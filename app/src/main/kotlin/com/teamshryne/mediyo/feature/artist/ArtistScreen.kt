@@ -25,11 +25,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import com.teamshryne.mediyo.core.design.ErrorState
-import com.teamshryne.mediyo.core.design.InfiniteScrollHandler
-import com.teamshryne.mediyo.core.design.LoadingFooter
 import com.teamshryne.mediyo.core.design.MediaCard
 import com.teamshryne.mediyo.core.design.TrackRow
-import com.teamshryne.mediyo.core.design.appendUnique
 import com.teamshryne.mediyo.core.design.SectionHeader
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import com.teamshryne.mediyo.domain.model.bestThumbUrl
@@ -44,15 +41,16 @@ import com.teamshryne.mediyo.data.mediyo.FfiSearchResult
     private val events: com.teamshryne.mediyo.domain.repository.UserEventRepository
 ) : ViewModel() {
     var loading by mutableStateOf(true); var error by mutableStateOf<String?>(null)
-    var loadingMore by mutableStateOf(false); var continuation by mutableStateOf<String?>(null)
     var name by mutableStateOf(""); var subs by mutableStateOf<String?>(null)
     var thumb by mutableStateOf<String?>(null)
     var browseId by mutableStateOf<String?>(null)
     var topSongs by mutableStateOf<List<FfiSearchResult>>(emptyList())
     var topSongsViewAll by mutableStateOf<com.teamshryne.mediyo.data.mediyo.FfiViewAll?>(null)
     var carousels by mutableStateOf<List<com.teamshryne.mediyo.data.mediyo.FfiCarousel>>(emptyList())
+    /** Inline preview; the full Popular list lives behind the view-all page. */
+    val previewSongs: List<FfiSearchResult> get() = topSongs.take(4)
     fun load(id: String) {
-        loading = true; error = null; continuation = null
+        loading = true; error = null
         browseId = id
         viewModelScope.launch { events.log(com.teamshryne.mediyo.domain.repository.UserEventTypes.VIEW_ARTIST, browseId = id) }
         viewModelScope.launch {
@@ -61,7 +59,6 @@ import com.teamshryne.mediyo.data.mediyo.FfiSearchResult
                 name = p.name; subs = p.subscriberCount
                 thumb = p.thumbnails.bestThumbUrl()
                 topSongs = p.topSongs; topSongsViewAll = p.topSongsViewAll; carousels = p.carousels
-                continuation = p.continuation.takeIf { p.topSongs.isNotEmpty() }
             } catch (e: Throwable) { error = e.message } finally { loading = false }
         }
     }
@@ -71,25 +68,6 @@ import com.teamshryne.mediyo.data.mediyo.FfiSearchResult
         val id = browseId ?: return
         viewModelScope.launch {
             artistRepo.toggle(id, name, thumb, subs)
-        }
-    }
-    fun loadMore() {
-        if (loadingMore || loading) return
-        val token = continuation
-        val va = topSongsViewAll
-        if (token == null && va == null) return
-        loadingMore = true
-        viewModelScope.launch {
-            try {
-                val p = if (token != null) bridge.artistSectionNext(token)
-                else bridge.artistSection(va!!.browseId, va.params, "Popular")
-                    .also { topSongsViewAll = null }
-                val before = topSongs.size
-                topSongs = topSongs.appendUnique(p.items)
-                continuation = if (p.items.isEmpty() || topSongs.size == before) null else p.continuation
-            } catch (_: Throwable) {
-                if (token != null) continuation = null else topSongsViewAll = null
-            } finally { loadingMore = false }
         }
     }
 }
@@ -234,6 +212,7 @@ fun ArtistScreen(
 
                 if (vm.topSongs.isNotEmpty()) {
                     item {
+                        val preview = vm.previewSongs
                         SectionHeader(
                             "Popular",
                             Modifier.padding(top = 22.dp),
@@ -252,8 +231,8 @@ fun ArtistScreen(
                             }
                         )
                     }
-                    items(vm.topSongs.size) { i ->
-                        val t = vm.topSongs[i]
+                    items(vm.previewSongs.size) { i ->
+                        val t = vm.previewSongs[i]
                         TrackRow(item = t, isPlaying = playingId != null && playingId == t.videoId, number = i + 1, showArtwork = true) {
                             handle(t, vm.topSongs)
                         }
@@ -298,14 +277,7 @@ fun ArtistScreen(
                     }
                 }
 
-                item(key = "artist_footer") { LoadingFooter(vm.loadingMore) }
             }
-
-            InfiniteScrollHandler(
-                listState = listState,
-                itemCount = vm.topSongs.size + vm.carousels.size + 1,
-                enabled = (vm.continuation != null || vm.topSongsViewAll != null) && !vm.loading
-            ) { vm.loadMore() }
         }
     }
 }

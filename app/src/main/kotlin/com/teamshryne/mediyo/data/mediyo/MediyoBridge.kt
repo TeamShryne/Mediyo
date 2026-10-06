@@ -30,7 +30,9 @@ import javax.inject.Singleton
 data class FfiPodcastNext(
     val items: List<FfiSearchResult>,
     val continuation: String?,
-    val reloaded: Boolean
+    val reloaded: Boolean,
+    val sorts: List<FfiPodcastOption> = emptyList(),
+    val filters: List<FfiPodcastOption> = emptyList()
 )
 
 private fun String.emptyToNull(): String? = ifEmpty { null }
@@ -163,7 +165,10 @@ private fun PodcastEpisode.toModel(showTitle: String, author: String): FfiSearch
         isTopResult = false,
         channelName = null,
         channelId = null,
-        pageType = episodePageType()
+        pageType = episodePageType(),
+        detailId = detailID(),
+        played = played(),
+        progress = progress().toInt()
     ).also { close() }
 }
 
@@ -300,7 +305,7 @@ private fun ArtistSectionPage.toList(): FfiListPage {
     val items = ArrayList<FfiSearchResult>(trackCount().toInt() + cardCount().toInt())
     (0 until trackCount()).mapNotNullTo(items) { track(it)?.toModel() }
     (0 until cardCount()).mapNotNullTo(items) { card(it)?.toModel() }
-    return FfiListPage(items, continuation().emptyToNull()).also { close() }
+    return FfiListPage(items, continuation().emptyToNull(), reloaded()).also { close() }
 }
 
 private fun ChannelPage.toModel(): FfiChannelPage {
@@ -326,18 +331,41 @@ private fun ChannelSectionPage.toList(): FfiListPage {
     return FfiListPage(items, continuation().emptyToNull()).also { close() }
 }
 
+private fun podcastOptions(
+    sortCount: Long, sortLabel: (Long) -> String?, sortSelected: (Long) -> Boolean, sortToken: (Long) -> String?,
+    filterCount: Long, filterLabel: (Long) -> String?, filterSelected: (Long) -> Boolean, filterToken: (Long) -> String?
+): Pair<List<FfiPodcastOption>, List<FfiPodcastOption>> {
+    val sorts = (0 until sortCount).mapNotNull { i ->
+        val t = sortToken(i) ?: return@mapNotNull null
+        if (t.isEmpty()) return@mapNotNull null
+        FfiPodcastOption(sortLabel(i) ?: "", sortSelected(i), t)
+    }
+    val filters = (0 until filterCount).mapNotNull { i ->
+        val t = filterToken(i) ?: return@mapNotNull null
+        if (t.isEmpty()) return@mapNotNull null
+        FfiPodcastOption(filterLabel(i) ?: "", filterSelected(i), t)
+    }
+    return sorts to filters
+}
+
 private fun PodcastPage.toModel(): FfiPodcastPage {
     val title = title()
     val author = authorName().emptyToNull() ?: ""
     val thumbs = thumbsOf(thumbnailCount(), ::thumbnailURL, ::thumbnailWidth, ::thumbnailHeight)
     val items = (0 until episodeCount()).mapNotNull { episode(it)?.toModel(title, author) }
+    val (sorts, filters) = podcastOptions(
+        sortCount(), ::sortLabel, ::sortSelected, ::sortToken,
+        filterCount(), ::filterLabel, ::filterSelected, ::filterToken
+    )
     return FfiPodcastPage(
         title = title,
         author = authorName().emptyToNull(),
         artworkUrl = thumbs.maxByOrNull { it.width }?.url ?: thumbs.firstOrNull()?.url,
         description = description().emptyToNull(),
         items = items,
-        continuation = continuation().emptyToNull()
+        continuation = continuation().emptyToNull(),
+        sorts = sorts,
+        filters = filters
     ).also { close() }
 }
 
@@ -464,7 +492,12 @@ class MediyoBridge @Inject constructor(private val auth: AuthRepository) {
                 trackCount = p.trackCountText().emptyToNull(),
                 thumbnails = thumbsOf(p.thumbnailCount(), p::thumbnailURL, p::thumbnailWidth, p::thumbnailHeight),
                 tracks = tracks,
-                continuation = p.continuation().emptyToNull()
+                continuation = p.continuation().emptyToNull(),
+                radioPlaylistId = p.radioPlaylistID().emptyToNull(),
+                owner = p.owner().emptyToNull(),
+                ownerAvatar = p.ownerAvatar().emptyToNull(),
+                description = p.description().emptyToNull(),
+                totalDuration = p.totalDuration().emptyToNull()
             )
         } finally {
             p.close()
@@ -491,7 +524,40 @@ class MediyoBridge @Inject constructor(private val auth: AuthRepository) {
             val title = p.title()
             val author = p.authorName().ifEmpty { "" }
             val items = (0 until p.episodeCount()).mapNotNull { p.episode(it)?.toModel(title, author) }
-            FfiPodcastNext(items, p.continuation().emptyToNull(), p.reloaded())
+            val (sorts, filters) = podcastOptions(
+                p.sortCount(), p::sortLabel, p::sortSelected, p::sortToken,
+                p.filterCount(), p::filterLabel, p::filterSelected, p::filterToken
+            )
+            FfiPodcastNext(items, p.continuation().emptyToNull(), p.reloaded(), sorts, filters)
+        } finally {
+            p.close()
+        }
+    }
+
+    suspend fun episode(episodeId: String): FfiEpisodePage = withContext(Dispatchers.IO) {
+        val p = session().episode(episodeId)
+        try {
+            val thumbs = thumbsOf(p.thumbnailCount(), p::thumbnailURL, p::thumbnailWidth, p::thumbnailHeight)
+            val chapters = (0 until p.chapterCount()).mapNotNull { i ->
+                val t = p.chapterText(i)
+                if (t.isEmpty()) return@mapNotNull null
+                FfiChapter(t, p.chapterStartSeconds(i))
+            }
+            FfiEpisodePage(
+                id = p.id(),
+                videoId = p.videoID().emptyToNull(),
+                title = p.title(),
+                showName = p.showName().emptyToNull(),
+                showId = p.showID().emptyToNull(),
+                date = p.date().emptyToNull(),
+                stats = p.stats().emptyToNull(),
+                description = p.description().emptyToNull(),
+                duration = p.duration().emptyToNull(),
+                artworkUrl = thumbs.maxByOrNull { it.width }?.url ?: thumbs.firstOrNull()?.url,
+                played = p.played(),
+                progress = p.progress().toInt(),
+                chapters = chapters
+            )
         } finally {
             p.close()
         }

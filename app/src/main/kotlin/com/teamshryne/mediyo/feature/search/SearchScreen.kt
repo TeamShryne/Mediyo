@@ -15,6 +15,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -72,10 +73,36 @@ class SearchVm @Inject constructor(
     /** Live completions for the current query (core Suggest endpoint). */
     var suggestTexts by mutableStateOf<List<FfiSuggestText>>(emptyList())
     var suggestEntities by mutableStateOf<List<FfiSearchResult>>(emptyList())
+    /** Recent submitted queries, from logged search events. */
+    var recents by mutableStateOf<List<String>>(emptyList())
     private var suggestJob: kotlinx.coroutines.Job? = null
 
     private var lastQueryInternal = ""
     val lastQuery: String get() = lastQueryInternal
+
+    init {
+        loadRecents()
+    }
+
+    fun loadRecents() {
+        viewModelScope.launch {
+            try {
+                recents = events.byType(UserEventTypes.SEARCH, 200)
+                    .mapNotNull { it.label?.trim()?.takeIf { q -> q.isNotEmpty() } }
+                    .distinct()
+                    .take(8)
+            } catch (_: Throwable) { }
+        }
+    }
+
+    fun clearRecents() {
+        viewModelScope.launch {
+            try {
+                events.clearType(UserEventTypes.SEARCH)
+                recents = emptyList()
+            } catch (_: Throwable) { }
+        }
+    }
 
     /** Called on every keystroke: updates the query and refreshes suggestions. */
     fun onQueryChange(q: String) {
@@ -84,6 +111,7 @@ class SearchVm @Inject constructor(
         if (q.isBlank()) {
             suggestTexts = emptyList()
             suggestEntities = emptyList()
+            loadRecents()
             return
         }
         suggestJob = viewModelScope.launch {
@@ -126,6 +154,7 @@ class SearchVm @Inject constructor(
                 if (clean.isNotEmpty()) filters = clean
                 continuation = res.continuation.takeIf { res.results.isNotEmpty() }
                 events.log(UserEventTypes.SEARCH, label = q, meta = "filter=$selectedLabel;count=${res.results.size}")
+                loadRecents()
             } catch (e: Throwable) {
                 error = e.message ?: "Search failed"
                 results = emptyList()
@@ -273,8 +302,53 @@ fun SearchScreen(
         }
 
         when {
-            !vm.hasSearched -> item(key = "search_idle") {
-                EmptyState("Search Mediyo", "Find songs, artists, albums and playlists")
+            !vm.hasSearched -> if (vm.query.isBlank()) {
+                if (vm.recents.isNotEmpty()) {
+                    item(key = "recent_header") {
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Recent searches",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = { vm.clearRecents() }) { Text("Clear") }
+                        }
+                    }
+                    items(vm.recents, key = { "recent_$it" }) { q ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    vm.query = q
+                                    vm.runSearch(null)
+                                }
+                                .padding(horizontal = 20.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Filled.History, null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.width(16.dp))
+                            Text(
+                                q,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                } else {
+                    item(key = "search_idle") {
+                        EmptyState("Search Mediyo", "Find songs, artists, albums and playlists")
+                    }
+                }
             }
             vm.loading -> items(7, key = { "skel_$it" }) {
                 Row(
@@ -619,11 +693,19 @@ private fun SuggestDropdown(
                 )
             }
         }
-        entities.take(3).forEach { r ->
+        if (texts.isNotEmpty() && entities.isNotEmpty()) {
             HorizontalDivider(
-                Modifier.padding(horizontal = 12.dp),
+                Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerHighest
             )
+            Text(
+                "Top results",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+            )
+        }
+        entities.take(3).forEach { r ->
             TopResultMiniRow(item = r, onClick = { onEntity(r) }, onMenu = { onMenu(r) })
         }
     }

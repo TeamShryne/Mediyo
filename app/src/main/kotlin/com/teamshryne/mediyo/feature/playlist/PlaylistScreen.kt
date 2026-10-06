@@ -1,6 +1,7 @@
 package com.teamshryne.mediyo.feature.playlist
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -10,6 +11,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.BookmarkRemove
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -48,7 +51,10 @@ import javax.inject.Inject
 ) : ViewModel() {
     var loading by mutableStateOf(true); var error by mutableStateOf<String?>(null)
     var loadingMore by mutableStateOf(false); var continuation by mutableStateOf<String?>(null)
-    var title by mutableStateOf(""); var subtitle by mutableStateOf("")
+    var title by mutableStateOf(""); var stats by mutableStateOf("")
+    var owner by mutableStateOf<String?>(null); var ownerAvatar by mutableStateOf<String?>(null)
+    var description by mutableStateOf<String?>(null)
+    var radioPlaylistId by mutableStateOf<String?>(null)
     var thumb by mutableStateOf<String?>(null)
     var tracks by mutableStateOf<List<com.teamshryne.mediyo.data.mediyo.FfiSearchResult>>(emptyList())
     fun isSavedFlow(id: String) = savedRepo.isSavedFlow(id)
@@ -59,9 +65,9 @@ import javax.inject.Inject
                     browseId = id,
                     kind = com.teamshryne.mediyo.data.local.SavedCollectionEntity.PLAYLIST,
                     title = title,
-                    subtitle = subtitle.ifBlank { null },
+                    subtitle = owner,
                     artworkUrl = thumb,
-                    trackCountText = subtitle.ifBlank { null }
+                    trackCountText = stats.ifBlank { null }
                 )
             } catch (_: Throwable) { }
         }
@@ -73,59 +79,60 @@ import javax.inject.Inject
         viewModelScope.launch {
             try {
                 val p = bridge.playlist(id)
-                android.util.Log.d("PlaylistVm","load ok id=$id title=${p.title} tracks=${p.tracks.size} header=${p.trackCount} cont=${p.continuation?.take(30)}")
-                title = p.title; subtitle = p.trackCount ?: ""
+                title = p.title
+                stats = listOfNotNull(p.trackCount, p.totalDuration).joinToString("  •  ")
+                owner = p.owner; ownerAvatar = p.ownerAvatar
+                description = p.description
+                radioPlaylistId = p.radioPlaylistId
                 thumb = p.thumbnails.bestThumbUrl(); tracks = p.tracks
                 continuation = p.continuation.takeIf { p.tracks.isNotEmpty() }
-                android.util.Log.d("PlaylistVm","load done cont=${continuation?.take(30)}")
                 // Background refresh of the library snapshot when this playlist is saved.
                 try {
                     if (savedRepo.isSaved(id)) {
                         savedRepo.save(
                             browseId = id,
                             kind = com.teamshryne.mediyo.data.local.SavedCollectionEntity.PLAYLIST,
-                            title = p.title,
+                            title = p.title, subtitle = p.owner,
                             artworkUrl = p.thumbnails.bestThumbUrl(),
                             trackCountText = p.trackCount
                         )
                     }
                 } catch (_: Throwable) { }
             } catch (e: Throwable) {
-                android.util.Log.e("PlaylistVm","load error $id", e)
                 error = e.message
             } finally { loading = false }
         }
     }
     fun loadMore() {
-        val token = continuation ?: run { android.util.Log.d("PlaylistVm","loadMore no token"); return }
+        val token = continuation?.takeIf { it.isNotEmpty() } ?: return
         if (loadingMore || loading) return
-        android.util.Log.d("PlaylistVm","loadMore token=${token.take(30)} before=${tracks.size}")
         loadingMore = true
         viewModelScope.launch {
             try {
                 val p = bridge.playlistNext(token)
-                android.util.Log.d("PlaylistVm","loadMore raw items=${p.items.size} cont=${p.continuation?.take(30)} firstVid=${p.items.firstOrNull()?.videoId}")
                 // Defensive: playlist continuations must be tracks (videoId != null).
-                // Similar-playlist carousels must not be appended as tracks.
                 val filtered = p.items.filter { it.videoId != null }
-                android.util.Log.d("PlaylistVm","loadMore filtered=${filtered.size} before=${tracks.size}")
                 val before = tracks.size
                 tracks = tracks.appendUnique(filtered)
-                android.util.Log.d("PlaylistVm","loadMore after=${tracks.size} added=${tracks.size - before}")
-                if (filtered.isEmpty()) {
-                    android.util.Log.d("PlaylistVm","loadMore filtered empty -> cont null")
-                    continuation = null
-                } else {
-                    continuation = if (tracks.size == before) {
-                        android.util.Log.d("PlaylistVm","loadMore no new unique -> cont null")
-                        null
-                    } else p.continuation
-                    android.util.Log.d("PlaylistVm","loadMore nextCont=${continuation?.take(30)}")
-                }
-            } catch (e: Throwable) {
-                android.util.Log.e("PlaylistVm","loadMore error", e)
+                continuation = if (filtered.isEmpty() || tracks.size == before) null else p.continuation
+            } catch (_: Throwable) {
                 continuation = null
             } finally { loadingMore = false }
+        }
+    }
+
+    /** Start the playlist's radio mix (first track as seed). */
+    fun playRadio(player: com.teamshryne.mediyo.feature.player.PlayerViewModel?) {
+        val pid = radioPlaylistId ?: return
+        val seed = tracks.firstOrNull { it.videoId != null }?.videoId ?: return
+        viewModelScope.launch {
+            try {
+                val q = bridge.getQueue(seed, pid)
+                val radio = q.items.map { it.toDomainTrack() }.filter { it.videoId != null }
+                if (radio.isNotEmpty()) {
+                    player?.playTracks(radio, 0, com.teamshryne.mediyo.domain.model.PlayOrigin.Radio(seed))
+                }
+            } catch (_: Throwable) { }
         }
     }
 }
@@ -196,14 +203,53 @@ fun PlaylistScreen(
                             modifier = Modifier.padding(horizontal = 20.dp)
                         )
                         Spacer(Modifier.height(6.dp))
-                        if (vm.subtitle.isNotBlank()) {
+                        vm.owner?.takeIf { it.isNotBlank() }?.let { owner ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center,
+                                modifier = Modifier.padding(horizontal = 20.dp)
+                            ) {
+                                AsyncImage(
+                                    model = vm.ownerAvatar,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.size(20.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    owner,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            Spacer(Modifier.height(6.dp))
+                        }
+                        if (vm.stats.isNotBlank()) {
                             Text(
-                                vm.subtitle,
+                                vm.stats,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            Spacer(Modifier.height(6.dp))
                         }
-                        Spacer(Modifier.height(18.dp))
+                        vm.description?.takeIf { it.isNotBlank() }?.let { desc ->
+                            var expanded by remember(browseId) { mutableStateOf(false) }
+                            Text(
+                                desc,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                maxLines = if (expanded) Int.MAX_VALUE else 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(horizontal = 32.dp)
+                                    .clickable { expanded = !expanded }
+                            )
+                            Spacer(Modifier.height(6.dp))
+                        }
+                        Spacer(Modifier.height(12.dp))
                         Row(
                             Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -215,6 +261,13 @@ fun PlaylistScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                if (vm.radioPlaylistId != null) {
+                                    OutlinedIconButton(
+                                        onClick = { vm.playRadio(player) },
+                                        shape = CircleShape,
+                                        modifier = Modifier.size(52.dp)
+                                    ) { Icon(Icons.Filled.Radio, contentDescription = "Start radio", modifier = Modifier.size(26.dp)) }
+                                }
                                 FilledIconButton(
                                     onClick = {
                                         val first = vm.tracks.firstOrNull() ?: return@FilledIconButton
