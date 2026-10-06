@@ -1,8 +1,11 @@
 package com.teamshryne.mediyo.feature.album
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -10,6 +13,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.BookmarkRemove
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -47,9 +52,14 @@ import javax.inject.Inject
 ) : ViewModel() {
     var loading by mutableStateOf(true); var error by mutableStateOf<String?>(null)
     var loadingMore by mutableStateOf(false); var continuation by mutableStateOf<String?>(null)
-    var title by mutableStateOf(""); var artist by mutableStateOf(""); var year by mutableStateOf("")
+    var title by mutableStateOf(""); var artist by mutableStateOf("")
+    var artistId by mutableStateOf<String?>(null); var artistAvatar by mutableStateOf<String?>(null)
+    var kindYear by mutableStateOf(""); var stats by mutableStateOf<String?>(null)
+    var description by mutableStateOf<String?>(null)
+    var radioPlaylistId by mutableStateOf<String?>(null)
     var thumb by mutableStateOf<String?>(null)
     var tracks by mutableStateOf<List<com.teamshryne.mediyo.data.mediyo.FfiSearchResult>>(emptyList())
+    var carousels by mutableStateOf<List<com.teamshryne.mediyo.data.mediyo.FfiCarousel>>(emptyList())
     fun isSavedFlow(id: String) = savedRepo.isSavedFlow(id)
     fun toggleSave(id: String) {
         viewModelScope.launch {
@@ -71,8 +81,13 @@ import javax.inject.Inject
         viewModelScope.launch {
             try {
                 val p = bridge.album(id)
-                title = p.title; artist = p.artist ?: ""; year = p.year ?: ""
-                thumb = p.thumbnails.bestThumbUrl(); tracks = p.tracks
+                title = p.title; artist = p.artist ?: ""
+                artistId = p.artistId; artistAvatar = p.artistAvatar
+                kindYear = listOfNotNull(p.kind, p.year).joinToString("  •  ")
+                stats = p.stats
+                description = p.description
+                radioPlaylistId = p.radioPlaylistId
+                thumb = p.thumbnails.bestThumbUrl(); tracks = p.tracks; carousels = p.carousels
                 continuation = p.continuation.takeIf { p.tracks.isNotEmpty() }
                 // Background refresh of the library snapshot when this album is saved.
                 try {
@@ -90,7 +105,7 @@ import javax.inject.Inject
         }
     }
     fun loadMore() {
-        val token = continuation ?: return
+        val token = continuation?.takeIf { it.isNotEmpty() } ?: return
         if (loadingMore || loading) return
         loadingMore = true
         viewModelScope.launch {
@@ -100,6 +115,21 @@ import javax.inject.Inject
                 tracks = tracks.appendUnique(p.items)
                 continuation = if (p.items.isEmpty() || tracks.size == before) null else p.continuation
             } catch (_: Throwable) { continuation = null } finally { loadingMore = false }
+        }
+    }
+
+    /** Start the album's radio mix (first track as seed). */
+    fun playRadio(player: com.teamshryne.mediyo.feature.player.PlayerViewModel?) {
+        val pid = radioPlaylistId ?: return
+        val seed = tracks.firstOrNull { it.videoId != null }?.videoId ?: return
+        viewModelScope.launch {
+            try {
+                val q = bridge.getQueue(seed, pid)
+                val radio = q.items.map { it.toDomainTrack() }.filter { it.videoId != null }
+                if (radio.isNotEmpty()) {
+                    player?.playTracks(radio, 0, com.teamshryne.mediyo.domain.model.PlayOrigin.Radio(seed))
+                }
+            } catch (_: Throwable) { }
         }
     }
 }
@@ -170,12 +200,64 @@ fun AlbumScreen(
                             modifier = Modifier.padding(horizontal = 20.dp)
                         )
                         Spacer(Modifier.height(6.dp))
-                        Text(
-                            listOf(vm.artist, vm.year).filter { it.isNotBlank() }.joinToString("  •  "),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.height(18.dp))
+                        if (vm.kindYear.isNotBlank()) {
+                            Text(
+                                vm.kindYear,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(Modifier.height(6.dp))
+                        }
+                        if (vm.artist.isNotBlank()) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center,
+                                modifier = Modifier.padding(horizontal = 20.dp)
+                                    .clickable(enabled = vm.artistId != null) {
+                                        vm.artistId?.let { nav?.navigate("artist/$it") }
+                                    }
+                            ) {
+                                AsyncImage(
+                                    model = vm.artistAvatar,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.size(24.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    vm.artist,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            Spacer(Modifier.height(6.dp))
+                        }
+                        if (!vm.stats.isNullOrBlank()) {
+                            Text(
+                                vm.stats!!,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(Modifier.height(6.dp))
+                        }
+                        vm.description?.takeIf { it.isNotBlank() }?.let { desc ->
+                            var expanded by remember(browseId) { mutableStateOf(false) }
+                            Text(
+                                desc,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                maxLines = if (expanded) Int.MAX_VALUE else 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(horizontal = 32.dp)
+                                    .clickable { expanded = !expanded }
+                            )
+                            Spacer(Modifier.height(6.dp))
+                        }
+                        Spacer(Modifier.height(12.dp))
                         Row(
                             Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -187,6 +269,13 @@ fun AlbumScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                if (vm.radioPlaylistId != null) {
+                                    OutlinedIconButton(
+                                        onClick = { vm.playRadio(player) },
+                                        shape = CircleShape,
+                                        modifier = Modifier.size(52.dp)
+                                    ) { Icon(Icons.Filled.Radio, contentDescription = "Start radio", modifier = Modifier.size(26.dp)) }
+                                }
                                 FilledIconButton(
                                     onClick = {
                                         val first = vm.tracks.firstOrNull() ?: return@FilledIconButton
@@ -221,6 +310,37 @@ fun AlbumScreen(
                         t.videoId?.let { player?.playFromWithOrigin(vm.tracks, t, PlayOrigin.Album(browseId, vm.title)) }
                     }
                 }
+                vm.carousels.forEachIndexed { ci, c ->
+                    item(key = "rel_$ci") {
+                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                            com.teamshryne.mediyo.core.design.SectionHeader(
+                                c.title,
+                                Modifier.padding(top = 18.dp)
+                            )
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                items(c.items) { r ->
+                                    com.teamshryne.mediyo.core.design.MediaCard(
+                                        title = r.title,
+                                        subtitle = r.artists.joinToString().ifBlank { r.info ?: r.category },
+                                        artworkUrl = r.thumbnails.bestThumbUrl(),
+                                        round = false,
+                                        onClick = {
+                                            when {
+                                                r.browseId != null && r.category.contains("Album", true) -> nav?.navigate("album/${r.browseId}")
+                                                r.browseId != null && r.category.contains("Artist", true) -> nav?.navigate("artist/${r.browseId}")
+                                                r.browseId != null && r.category.contains("Playlist", true) -> nav?.navigate("playlist/${r.browseId}")
+                                                r.browseId != null -> nav?.navigate("channel/${r.browseId}")
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
                 item(key = "album_footer") { LoadingFooter(vm.loadingMore) }
             }
 
@@ -231,11 +351,7 @@ fun AlbumScreen(
             ) { vm.loadMore() }
 
             menuItem?.let { m ->
-                // Album rows carry no artist of their own — attribute the album artist
-                // so Show artist (and like/add-to-playlist metadata) works per track.
-                val track = m.toDomainTrack().let { t ->
-                    if (t.artists.isEmpty() && vm.artist.isNotBlank()) t.copy(artists = listOf(vm.artist)) else t
-                }
+                val track = m.toDomainTrack()
                 com.teamshryne.mediyo.core.design.TrackMenuSheet(
                     track = track, show = true, onDismiss = { menuItem = null },
                     onLike = { player?.toggleLike(track) },

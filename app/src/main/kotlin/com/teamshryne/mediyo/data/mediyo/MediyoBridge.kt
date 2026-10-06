@@ -233,7 +233,29 @@ private fun SearchPage.toModel(): FfiSearchResponse {
 
 private fun AlbumPage.toModel(): FfiAlbumPage {
     val artists = (0 until artistCount()).map { artistName(it) }
-    val tracks = (0 until trackCount()).mapNotNull { track(it)?.toModel() }
+    val artistIds = (0 until artistCount()).map { artistID(it) }
+    val headerThumbs = thumbsOf(thumbnailCount(), ::thumbnailURL, ::thumbnailWidth, ::thumbnailHeight)
+    val tracks = (0 until trackCount()).mapNotNull { i ->
+        val t = track(i) ?: return@mapNotNull null
+        try {
+            var r = t.result().toModel()
+            // Album rows often omit what the header already states: credit the
+            // album artists, name the album, and reuse its artwork so queue and
+            // player rows never come out blank.
+            if (r.artists.isEmpty() && artists.isNotEmpty()) {
+                r = r.copy(artists = artists, artistIds = artistIds)
+            }
+            if (r.album.isNullOrBlank()) {
+                r = r.copy(album = title(), albumId = id().emptyToNull())
+            }
+            if (r.thumbnails.isEmpty() && headerThumbs.isNotEmpty()) {
+                r = r.copy(thumbnails = headerThumbs)
+            }
+            r
+        } finally {
+            t.close()
+        }
+    }
     val shelves = (0 until relatedCount()).map { s ->
         val items = (0 until relatedItemCount(s)).mapNotNull { i ->
             FfiSearchResult(
@@ -268,11 +290,18 @@ private fun AlbumPage.toModel(): FfiAlbumPage {
     return FfiAlbumPage(
         title = title(),
         artist = artists.firstOrNull(),
+        artistId = artistIds.firstOrNull()?.emptyToNull(),
+        artistAvatar = artistAvatar().emptyToNull(),
+        kind = kind().emptyToNull(),
         year = year().emptyToNull(),
-        thumbnails = thumbsOf(thumbnailCount(), ::thumbnailURL, ::thumbnailWidth, ::thumbnailHeight),
+        stats = listOfNotNull(totalDuration().emptyToNull(), trackCountText().emptyToNull())
+            .joinToString("  •  ").emptyToNull(),
+        description = description().emptyToNull(),
+        thumbnails = headerThumbs,
         tracks = tracks,
         carousels = shelves,
-        continuation = continuation().emptyToNull()
+        continuation = continuation().emptyToNull(),
+        radioPlaylistId = radioPlaylistID().emptyToNull()
     ).also { close() }
 }
 
