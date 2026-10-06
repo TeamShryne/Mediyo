@@ -1,12 +1,15 @@
 package com.teamshryne.mediyo.feature.update
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -14,6 +17,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -23,6 +27,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -68,28 +73,42 @@ fun UpdatesSettingsScreen(
             item {
                 Card(
                     modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
                 ) {
-                    Column(
+                    Row(
                         Modifier.padding(16.dp).fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        Text("Installed version", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                        Text(
-                            "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            if (BuildConfig.DEBUG) {
-                                "App updates are disabled in debug builds."
-                            } else {
-                                "Updates come from GitHub releases and are verified before installing."
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest
+                        ) {
+                            Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Filled.SystemUpdate, null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                            Text("Mediyo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        when (val s = state) {
+                            is UpdateViewModel.State.Checking -> CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.5.dp)
+                            is UpdateViewModel.State.UpToDate ->
+                                Icon(Icons.Filled.CheckCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                            is UpdateViewModel.State.Error ->
+                                Icon(Icons.Filled.ErrorOutline, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(22.dp))
+                            else -> Unit
+                        }
                     }
                 }
             }
@@ -102,21 +121,18 @@ fun UpdatesSettingsScreen(
                     Button(
                         onClick = { vm.manualCheck() },
                         enabled = !BuildConfig.DEBUG && state !is UpdateViewModel.State.Checking,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(Icons.Filled.Refresh, null, modifier = Modifier.padding(end = 8.dp))
+                        Icon(Icons.Filled.Refresh, null, modifier = Modifier.padding(end = 8.dp).size(18.dp))
                         Text(if (BuildConfig.DEBUG) "Updates disabled in debug" else "Check for updates")
                     }
-                    when (val s = state) {
-                        is UpdateViewModel.State.Checking -> CircularProgressIndicator()
-                        is UpdateViewModel.State.UpToDate -> StatusLine(
-                            Icons.Filled.CheckCircle, "You're on the latest version",
-                            MaterialTheme.colorScheme.primary
-                        )
-                        is UpdateViewModel.State.Error -> StatusLine(
-                            Icons.Filled.ErrorOutline, s.message,
-                            MaterialTheme.colorScheme.error
-                        )
-                        else -> Unit
+                    val msg = when (val s = state) {
+                        is UpdateViewModel.State.UpToDate -> "You're on the latest version" to MaterialTheme.colorScheme.primary
+                        is UpdateViewModel.State.Error -> s.message to MaterialTheme.colorScheme.error
+                        else -> null
+                    }
+                    msg?.let { (text, color) ->
+                        Text(text, style = MaterialTheme.typography.bodySmall, color = color)
                     }
                 }
             }
@@ -125,17 +141,5 @@ fun UpdatesSettingsScreen(
 
     if (!BuildConfig.DEBUG && state is UpdateViewModel.State.Available) {
         UpdateDialog(vm)
-    }
-}
-
-@Composable
-private fun StatusLine(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    text: String,
-    color: androidx.compose.ui.graphics.Color,
-) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Icon(icon, null, tint = color)
-        Text(text, style = MaterialTheme.typography.bodyMedium, color = color)
     }
 }
