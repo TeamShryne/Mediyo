@@ -44,6 +44,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -51,6 +52,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import coil.compose.AsyncImagePainter
 import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
 import com.teamshryne.mediyo.core.design.DominantColors
 import com.teamshryne.mediyo.core.design.GlowingLoadingTitle
 import com.teamshryne.mediyo.core.design.MarqueeText
@@ -164,10 +166,15 @@ fun FullPlayer(
     val bgStyle by appearanceVm.bgStyle.collectAsState()
     val bgBlur by appearanceVm.bgBlur.collectAsState()
     val bgDim by appearanceVm.bgDim.collectAsState()
-    val bgGlow by appearanceVm.bgGlow.collectAsState()
     val bgDepth by appearanceVm.bgDepth.collectAsState()
     val bgTint by appearanceVm.bgTint.collectAsState()
-    val bgConfig = PlayerBgConfig(bgStyle, bgBlur, bgDim, bgGlow, bgDepth, bgTint)
+    val bgConfig = PlayerBgConfig(bgStyle, bgBlur, bgDim, bgDepth, bgTint)
+    // Background-only artwork continuity: the last decoded art stays
+    // behind while the new one loads (never a transparent hole), then
+    // crossfades. The hero artwork above is untouched — it keeps its own
+    // loading text. Scoped to FullPlayer composition, not the track.
+    val bgCtx = LocalContext.current
+    var bgReadyUrl by remember { mutableStateOf<String?>(null) }
     var showAddSheet by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     val menuScope = rememberCoroutineScope()
@@ -226,8 +233,12 @@ fun FullPlayer(
             config = bgConfig,
             dominant = dominant,
             artwork = {
+                val art = state.artwork
                 AsyncImage(
-                    model = state.artwork?.thumbSized(ART_HERO_PX),
+                    model = ImageRequest.Builder(bgCtx).data(art).crossfade(350).build(),
+                    placeholder = rememberAsyncImagePainter(bgReadyUrl),
+                    error = rememberAsyncImagePainter(bgReadyUrl),
+                    onSuccess = { bgReadyUrl = art },
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
