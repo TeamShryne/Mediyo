@@ -48,7 +48,7 @@ import com.teamshryne.mediyo.domain.model.Track
 
 /** Fake search field: typing beats scrolling, so home offers it before anything else. */
 @Composable
-fun HomeSearchBar(onOpen: () -> Unit, modifier: Modifier = Modifier) {
+fun HomeSearchBar(modifier: Modifier = Modifier, onOpen: () -> Unit) {
     Surface(
         onClick = onOpen,
         shape = RoundedCornerShape(28.dp),
@@ -104,7 +104,7 @@ private fun QuickPickTile(track: Track, onClick: () -> Unit, modifier: Modifier 
  * your most-likely-next-tap is always above the fold.
  */
 @Composable
-fun QuickPickGrid(tracks: List<Track>, onPick: (Track) -> Unit, modifier: Modifier = Modifier) {
+fun QuickPickGrid(tracks: List<Track>, modifier: Modifier = Modifier, onPick: (Track) -> Unit) {
     Column(modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         tracks.chunked(2).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -120,7 +120,7 @@ fun QuickPickGrid(tracks: List<Track>, onPick: (Track) -> Unit, modifier: Modifi
  * music"), the rest fall into slim rows elsewhere.
  */
 @Composable
-fun RotationFeature(track: Track, plays: Int, isPlaying: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun RotationFeature(track: Track, plays: Int, isPlaying: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Row(
         modifier.fillMaxWidth().padding(horizontal = 20.dp)
             .clip(RoundedCornerShape(18.dp))
@@ -181,7 +181,7 @@ fun RotationFeature(track: Track, plays: Int, isPlaying: Boolean, onClick: () ->
 
 /** Interrupted intent as chips: re-running beats retyping. */
 @Composable
-fun RecentSearchChips(queries: List<String>, onPick: (String) -> Unit, modifier: Modifier = Modifier) {
+fun RecentSearchChips(queries: List<String>, modifier: Modifier = Modifier, onPick: (String) -> Unit) {
     LazyRow(
         modifier = modifier.fillMaxWidth(),
         contentPadding = PaddingValues(horizontal = 20.dp),
@@ -201,7 +201,7 @@ fun RecentSearchChips(queries: List<String>, onPick: (String) -> Unit, modifier:
 
 /** Spotlight: the latest query, elevated to a card — "we remember what you wanted". */
 @Composable
-fun SearchSpotlightCard(query: String, onOpen: () -> Unit, modifier: Modifier = Modifier) {
+fun SearchSpotlightCard(query: String, modifier: Modifier = Modifier, onOpen: () -> Unit) {
     Row(
         modifier.fillMaxWidth().padding(horizontal = 20.dp)
             .clip(RoundedCornerShape(18.dp))
@@ -236,7 +236,7 @@ fun SearchSpotlightCard(query: String, onOpen: () -> Unit, modifier: Modifier = 
 
 /** Episode resume row: show name first (podcasts are identified by show, not title). */
 @Composable
-fun EpisodeResumeRow(track: Track, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun EpisodeResumeRow(track: Track, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Row(
         modifier.fillMaxWidth()
             .clickable(onClick = onClick)
@@ -271,7 +271,7 @@ fun EpisodeResumeRow(track: Track, onClick: () -> Unit, modifier: Modifier = Mod
 
 /** Generated mix card: artist face, "X Mix", made-for-you framing (variable reward). */
 @Composable
-fun MixCard(mix: HomeMix, onPlay: () -> Unit, modifier: Modifier = Modifier) {
+fun MixCard(mix: HomeMix, modifier: Modifier = Modifier, onPlay: () -> Unit) {
     Column(modifier.width(160.dp)) {
         Box {
             AsyncImage(
@@ -399,7 +399,7 @@ fun DaypartHeader(title: String, night: Boolean, modifier: Modifier = Modifier) 
  * finishing — the bar is the nudge.
  */
 @Composable
-fun AlbumProgressRow(item: AlbumProgress, onOpen: () -> Unit, modifier: Modifier = Modifier) {
+fun AlbumProgressRow(item: AlbumProgress, modifier: Modifier = Modifier, onOpen: () -> Unit) {
     Row(
         modifier.fillMaxWidth()
             .clickable(onClick = onOpen)
@@ -452,8 +452,8 @@ fun ShelfLoading(modifier: Modifier = Modifier) {
 @Composable
 fun ArtistCircleRow(
     artists: List<ArtistAffinity>,
-    onOpen: (ArtistAffinity) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onOpen: (ArtistAffinity) -> Unit
 ) {
     LazyRow(
         modifier = modifier.fillMaxWidth(),
