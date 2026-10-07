@@ -247,31 +247,7 @@ fun PodcastScreen(
                                     .clickable { expanded = !expanded }
                             )
                         }
-                        if (vm.sorts.isNotEmpty() || vm.filters.isNotEmpty()) {
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                items(vm.sorts, key = { "s:${it.label}" }) { o ->
-                                    FilterChip(
-                                        selected = o.selected,
-                                        onClick = { if (!o.selected) vm.applyOption(o.token) },
-                                        label = { Text(o.label) },
-                                        shape = RoundedCornerShape(20.dp)
-                                    )
-                                }
-                                items(vm.filters, key = { "f:${it.label}" }) { o ->
-                                    FilterChip(
-                                        selected = o.selected,
-                                        onClick = { if (!o.selected) vm.applyOption(o.token) },
-                                        label = { Text(o.label) },
-                                        shape = RoundedCornerShape(20.dp)
-                                    )
-                                }
-                            }
-                        } else {
-                            Spacer(Modifier.height(12.dp))
-                        }
+                        Spacer(Modifier.height(12.dp))
                     }
                 }
                 }
