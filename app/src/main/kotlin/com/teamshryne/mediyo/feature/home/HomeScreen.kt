@@ -110,6 +110,9 @@ class HomeVm @Inject constructor(
                     val q = bridge.radioFor(vid)
                     val tracks = (q?.items ?: emptyList()).map { it.toDomainTrack() }
                         .filter { it.videoId != null && it.videoId !in known }
+                        // The queue can repeat a video; a duplicate Lazy key
+                        // crashes the row, so dedupe before it reaches the UI.
+                        .distinctBy { it.videoId }
                         .take(12)
                     if (tracks.isNotEmpty()) radioShelf = RadioShelf(seed.title, vid, tracks)
                 }
@@ -324,7 +327,7 @@ fun HomeScreen(
                             contentPadding = PaddingValues(horizontal = 20.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            items(mixes, key = { "mix_${it.artistName}" }) { m ->
+                            items(mixes, key = { "mix_${it.artistName}_${mixes.indexOf(it)}" }) { m ->
                                 MixCard(m) { vm.playMix(m, player) }
                             }
                         }

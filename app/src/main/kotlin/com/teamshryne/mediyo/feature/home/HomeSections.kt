@@ -460,7 +460,9 @@ fun ArtistCircleRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        items(artists, key = { "ha_${it.artistId ?: it.name}" }) { a ->
+        // Index in the key as a floor: a duplicate id must never be able to
+        // crash the row (Lazy keys are unique-or-nothing).
+        items(artists, key = { "ha_${it.artistId ?: it.name}_${artists.indexOf(it)}" }) { a ->
             MediaCard(
                 title = a.name,
                 subtitle = if (a.followed) "Following" else "${a.trackCount} songs",

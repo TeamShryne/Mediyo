@@ -122,12 +122,22 @@ class HomeRepository @Inject constructor(
                 followed = id != null && followedById.containsKey(id),
                 trackCount = items.size
             )
-        }.sortedByDescending { it.score }.take(10).toMutableList()
+        }.sortedByDescending { it.score }.toMutableList()
         // Followed-but-unplayed artists still belong here (explicit taste).
-        followed.filter { f -> out.none { it.artistId == f.browseId } }.take(3).forEach { f ->
-            out.add(ArtistAffinity(f.name, f.browseId, f.artworkUrl, 0.0, true, 0))
+        followed.forEach { f ->
+            if (out.none { it.artistId == f.browseId }) {
+                out.add(ArtistAffinity(f.name, f.browseId, f.artworkUrl, 0.0, true, 0))
+            }
         }
-        out
+        // One entry per artist, period. Grouping is by name, so one browse id
+        // can surface under two spellings ("Daft Punk" / "daft punk") — a
+        // duplicate id means a duplicate LazyRow key, which crashes.
+        val deduped = linkedMapOf<String, ArtistAffinity>()
+        out.forEach { a ->
+            val key = a.artistId?.takeIf { it.isNotBlank() } ?: "n:${a.name}"
+            deduped.getOrPut(key) { a }
+        }
+        deduped.values.sortedByDescending { it.score }.take(10)
     }
 
     /**
