@@ -54,7 +54,9 @@ import javax.inject.Inject
     var loading by mutableStateOf(true); var error by mutableStateOf<String?>(null)
     var loadingMore by mutableStateOf(false); var continuation by mutableStateOf<String?>(null)
     var title by mutableStateOf(""); var artist by mutableStateOf("")
+    var artists by mutableStateOf<List<String>>(emptyList())
     var artistId by mutableStateOf<String?>(null); var artistAvatar by mutableStateOf<String?>(null)
+    var artistIds by mutableStateOf<List<String>>(emptyList())
     var kindYear by mutableStateOf(""); var stats by mutableStateOf<String?>(null)
     var description by mutableStateOf<String?>(null)
     var radioPlaylistId by mutableStateOf<String?>(null)
@@ -83,6 +85,7 @@ import javax.inject.Inject
             try {
                 val p = bridge.album(id)
                 title = p.title; artist = p.artist ?: ""
+                artists = p.artists; artistIds = p.artistIds
                 artistId = p.artistId; artistAvatar = p.artistAvatar
                 kindYear = listOfNotNull(p.kind, p.year).joinToString("  •  ")
                 stats = p.stats
@@ -234,13 +237,14 @@ fun AlbumScreen(
                             )
                             Spacer(Modifier.height(6.dp))
                         }
-                        if (vm.artist.isNotBlank()) {
+                        val byline = vm.artists.joinToString().ifBlank { vm.artist }
+                        if (byline.isNotBlank()) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.Center,
                                 modifier = Modifier.padding(horizontal = 20.dp)
-                                    .clickable(enabled = vm.artistId != null) {
-                                        vm.artistId?.let { nav?.navigate("artist/$it") }
+                                    .clickable(enabled = vm.artistIds.firstOrNull() != null) {
+                                        vm.artistIds.firstOrNull()?.let { nav?.navigate("artist/$it") }
                                     }
                             ) {
                                 AsyncImage(
@@ -253,7 +257,7 @@ fun AlbumScreen(
                                 )
                                 Spacer(Modifier.width(8.dp))
                                 Text(
-                                    vm.artist,
+                                    byline,
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurface,
                                     maxLines = 1, overflow = TextOverflow.Ellipsis

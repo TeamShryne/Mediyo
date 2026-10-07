@@ -76,6 +76,8 @@ data class FfiAlbumPage(
     val title: String,
     val artist: String?,
     val artistId: String?,
+    val artists: List<String> = emptyList(),
+    val artistIds: List<String> = emptyList(),
     val artistAvatar: String?,
     val kind: String?,
     val year: String?,

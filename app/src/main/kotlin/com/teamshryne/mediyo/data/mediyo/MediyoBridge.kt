@@ -299,6 +299,8 @@ private fun AlbumPage.toModel(): FfiAlbumPage {
         title = title(),
         artist = artists.firstOrNull(),
         artistId = artistIds.firstOrNull()?.emptyToNull(),
+        artists = artists,
+        artistIds = artistIds,
         artistAvatar = artistAvatar().emptyToNull(),
         kind = kind().emptyToNull(),
         year = year().emptyToNull(),
