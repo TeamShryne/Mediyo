@@ -621,6 +621,25 @@ class MediyoBridge @Inject constructor(private val auth: AuthRepository) {
             session().queue(videoId, playlistId ?: "").toModel()
         }
 
+    /**
+     * Two-hop radio: bare queue yields the automix id, second hop walks the
+     * similar-track list. Null when offline or unseedable — callers hide the shelf.
+     */
+    suspend fun radioFor(videoId: String): FfiQueue? = withContext(Dispatchers.IO) {
+        try {
+            val first = session().queue(videoId, "")
+            try {
+                val auto = first.automixPlaylistID()
+                if (auto.isBlank()) return@withContext null
+                session().queue(videoId, auto).toModel()
+            } finally {
+                first.close()
+            }
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
     suspend fun extendQueue(token: String): FfiQueue = withContext(Dispatchers.IO) {
         session().queueExtend(token).toModel()
     }
