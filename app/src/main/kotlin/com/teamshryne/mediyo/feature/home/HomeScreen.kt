@@ -43,7 +43,7 @@ import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import com.teamshryne.mediyo.domain.model.PlayOrigin
 import com.teamshryne.mediyo.domain.model.Track
 import com.teamshryne.mediyo.domain.model.toDomainTrack
-import com.teamshryne.mediyo.domain.repo.UserEventRepository
+import com.teamshryne.mediyo.domain.repository.UserEventRepository
 import com.teamshryne.mediyo.domain.repo.UserEventTypes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.Calendar
