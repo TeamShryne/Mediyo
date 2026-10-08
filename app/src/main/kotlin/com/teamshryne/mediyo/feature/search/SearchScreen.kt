@@ -8,6 +8,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -236,11 +237,11 @@ class SearchVm @Inject constructor(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-/** Pinned field block: OutlinedTextField (~56dp) plus padding. */
+/** Pinned field block: OutlinedTextField (~56dp) plus breathing room. */
 private val FIELD_BLOCK_HEIGHT = 68.dp
 
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
 fun SearchScreen(
     nav: androidx.navigation.NavController,
     player: com.teamshryne.mediyo.feature.player.PlayerViewModel,
