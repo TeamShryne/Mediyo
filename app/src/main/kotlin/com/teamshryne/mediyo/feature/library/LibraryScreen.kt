@@ -63,17 +63,6 @@ import com.teamshryne.mediyo.core.design.navigateAlbum
 import com.teamshryne.mediyo.core.design.navigateArtist
 import com.teamshryne.mediyo.core.design.navigatePlaylist
 import com.teamshryne.mediyo.core.design.navigatePodcast
-import com.teamshryne.mediyo.data.local.FollowedArtistEntity
-import com.teamshryne.mediyo.data.local.LocalPlaylistEntity
-import com.teamshryne.mediyo.data.local.SavedCollectionEntity
-import com.teamshryne.mediyo.domain.model.PlayOrigin
-import com.teamshryne.mediyo.domain.model.Track
-import com.teamshryne.mediyo.domain.model.bestThumbUrl
-import com.teamshryne.mediyo.domain.model.dbIdList
-import com.teamshryne.mediyo.domain.model.upscaledThumbUrl
-import com.teamshryne.mediyo.domain.repository.ArtistRepository
-import com.teamshryne.mediyo.domain.repository.HistoryRepository
-import com.teamshryne.mediyo.domain.repository.LikeRepository
 import com.teamshryne.mediyo.domain.repository.PlaylistRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
