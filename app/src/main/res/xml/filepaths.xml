@@ -2,4 +2,6 @@
 <paths>
     <!-- APKs downloaded by the in-app updater live in cacheDir/updates. -->
     <cache-path name="updates" path="updates/" />
+    <!-- Crash reports the user can share from the crash screen. -->
+    <cache-path name="crashes" path="crashes/" />
 </paths>
