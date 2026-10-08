@@ -18,6 +18,8 @@ interface UpdaterCleanupEntryPoint {
 class MediyoApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        // Installed first so even a crash during the rest of startup is caught.
+        com.teamshryne.mediyo.crash.CrashHandler.install(this)
         // Drop leftover updater APKs (cacheDir/updates) from previous installs.
         // UpdateViewModel state is in-memory, so anything on disk at startup
         // is either already installed or an abandoned download.
