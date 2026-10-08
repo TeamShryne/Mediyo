@@ -46,6 +46,22 @@ import com.teamshryne.mediyo.domain.model.PlayOrigin
 import com.teamshryne.mediyo.domain.model.Track
 import com.teamshryne.mediyo.domain.model.toDomainTrack
 import com.teamshryne.mediyo.domain.repository.UserEventRepository
+import com.teamshryne.mediyo.core.design.LocalOverlayBottom
+import com.teamshryne.mediyo.core.design.MediaCard
+import com.teamshryne.mediyo.core.design.SectionHeader
+import com.teamshryne.mediyo.core.design.navigateAlbum
+import com.teamshryne.mediyo.core.design.navigateArtist
+import com.teamshryne.mediyo.core.design.navigatePlaylist
+import com.teamshryne.mediyo.core.design.navigatePodcast
+import com.teamshryne.mediyo.core.design.openRoute
+import com.teamshryne.mediyo.core.design.rememberGreeting
+import com.teamshryne.mediyo.data.local.SavedCollectionEntity
+import com.teamshryne.mediyo.data.mediyo.FfiSearchResult
+import com.teamshryne.mediyo.data.mediyo.MediyoBridge
+import com.teamshryne.mediyo.domain.model.PlayOrigin
+import com.teamshryne.mediyo.domain.model.Track
+import com.teamshryne.mediyo.domain.model.toDomainTrack
+import com.teamshryne.mediyo.domain.repository.UserEventRepository
 import com.teamshryne.mediyo.domain.repository.UserEventTypes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.Calendar
@@ -236,9 +252,9 @@ fun HomeScreen(
     fun openSaved(item: SavedCollectionEntity) {
         vm.logSavedTap(item)
         when (item.kind) {
-            SavedCollectionEntity.ALBUM -> nav.navigate("album/${item.browseId}")
-            SavedCollectionEntity.PODCAST -> nav.navigate("podcast/${item.browseId}")
-            else -> nav.navigate("playlist/${item.browseId}")
+            SavedCollectionEntity.ALBUM -> nav.navigateAlbum(item.browseId)
+            SavedCollectionEntity.PODCAST -> nav.navigatePodcast(item.browseId)
+            else -> nav.navigatePlaylist(item.browseId)
         }
     }
 
@@ -391,7 +407,7 @@ fun HomeScreen(
                             // silently doing nothing on tap.
                             val id = a.artistId
                             if (id != null) {
-                                nav.navigate("artist/$id")
+                                nav.navigateArtist(id)
                             } else {
                                 scope.launch {
                                     resolving = a.name
@@ -401,7 +417,7 @@ fun HomeScreen(
                                         null
                                     }
                                     resolving = null
-                                    if (resolved != null) nav.navigate("artist/$resolved")
+                                    if (resolved != null) nav.navigateArtist(resolved)
                                     else android.widget.Toast.makeText(
                                         context,
                                         "Couldn't find ${a.name}",
@@ -461,7 +477,7 @@ fun HomeScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         SectionHeader("Finish the album")
                         finishAlbums.forEach { a ->
-                            AlbumProgressRow(a) { nav.navigate("album/${a.browseId}") }
+                            AlbumProgressRow(a) { nav.navigateAlbum(a.browseId) }
                         }
                     }
                 }
@@ -545,7 +561,7 @@ fun HomeScreen(
                                     round = true,
                                     size = 124.dp
                                 ) {
-                                    r.browseId?.let { nav.navigate("artist/$it") }
+                                    r.browseId?.let { nav.navigateArtist(it) }
                                 }
                             }
                         }

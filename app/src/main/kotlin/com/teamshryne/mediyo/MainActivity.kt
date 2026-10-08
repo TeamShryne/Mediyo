@@ -105,6 +105,46 @@ import com.teamshryne.mediyo.feature.settings.LyricsSettingsScreen
 import com.teamshryne.mediyo.feature.settings.SettingsScreen
 import com.teamshryne.mediyo.feature.update.UpdateDialog
 import com.teamshryne.mediyo.feature.update.UpdateViewModel
+import com.teamshryne.mediyo.BuildConfig
+import com.teamshryne.mediyo.core.design.LocalOverlayBottom
+import com.teamshryne.mediyo.core.design.MediyoTheme
+import com.teamshryne.mediyo.core.design.navigateArtist
+import com.teamshryne.mediyo.core.design.navigateChannel
+import com.teamshryne.mediyo.core.design.navigatePodcast
+import com.teamshryne.mediyo.core.design.popEnter
+import com.teamshryne.mediyo.core.design.popExit
+import com.teamshryne.mediyo.core.design.pushEnter
+import com.teamshryne.mediyo.core.design.pushExit
+import com.teamshryne.mediyo.core.design.sheetEnter
+import com.teamshryne.mediyo.core.design.sheetExit
+import com.teamshryne.mediyo.data.appearance.TabStyle
+import com.teamshryne.mediyo.feature.album.AlbumScreen
+import com.teamshryne.mediyo.feature.artist.ArtistScreen
+import com.teamshryne.mediyo.feature.channel.ChannelScreen
+import com.teamshryne.mediyo.feature.comments.CommentsBottomSheet
+import com.teamshryne.mediyo.feature.episode.EpisodeScreen
+import com.teamshryne.mediyo.feature.history.HistoryScreen
+import com.teamshryne.mediyo.feature.home.HomeScreen
+import com.teamshryne.mediyo.feature.library.LibraryScreen
+import com.teamshryne.mediyo.feature.library.LikedScreen
+import com.teamshryne.mediyo.feature.library.LocalPlaylistDetailScreen
+import com.teamshryne.mediyo.feature.player.FullPlayer
+import com.teamshryne.mediyo.feature.player.MiniPlayer
+import com.teamshryne.mediyo.feature.player.PlayerViewModel
+import com.teamshryne.mediyo.feature.playlist.PlaylistScreen
+import com.teamshryne.mediyo.feature.podcast.PodcastScreen
+import com.teamshryne.mediyo.feature.profile.ProfileScreen
+import com.teamshryne.mediyo.feature.queue.QueueScreen
+import com.teamshryne.mediyo.feature.search.SearchScreen
+import com.teamshryne.mediyo.feature.section.SectionScreen
+import com.teamshryne.mediyo.feature.settings.AppearanceScreen
+import com.teamshryne.mediyo.feature.settings.AppearanceVm
+import com.teamshryne.mediyo.feature.settings.LyricsSettingsScreen
+import com.teamshryne.mediyo.feature.settings.PlayerBackgroundScreen
+import com.teamshryne.mediyo.feature.settings.SettingsScreen
+import com.teamshryne.mediyo.feature.settings.TabBarStyleScreen
+import com.teamshryne.mediyo.feature.update.UpdateDialog
+import com.teamshryne.mediyo.feature.update.UpdateViewModel
 import com.teamshryne.mediyo.feature.update.UpdatesSettingsScreen
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -402,9 +442,9 @@ private fun AppShell() {
                 onShowQueue = { showQueueOverlay = true },
                 onShowComments = { playerState.videoId?.let { showCommentsId = it } },
                 onShowSleepTimer = { showSleepSheet = true },
-                onGoToArtist = { showFullPlayer = false; nav.navigate("artist/$it") },
-                onOpenChannel = { showFullPlayer = false; nav.navigate("channel/$it") },
-                onOpenPodcast = { showFullPlayer = false; nav.navigate("podcast/$it") },
+                onGoToArtist = { showFullPlayer = false; nav.navigateArtist(it) },
+                onOpenChannel = { showFullPlayer = false; nav.navigateChannel(it) },
+                onOpenPodcast = { showFullPlayer = false; nav.navigatePodcast(it) },
                 playerVm = playerVm
             )
         }
@@ -425,7 +465,7 @@ private fun AppShell() {
                 onClose = { showQueueOverlay = false },
                 onShowComments = { vid -> showCommentsId = vid },
                 onShowSleepTimer = { showSleepSheet = true },
-                onGoToArtist = { showQueueOverlay = false; nav.navigate("artist/$it") }
+                onGoToArtist = { showQueueOverlay = false; nav.navigateArtist(it) }
             )
         }
 

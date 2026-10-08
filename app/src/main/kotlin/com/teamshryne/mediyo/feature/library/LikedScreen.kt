@@ -24,6 +24,19 @@ import com.teamshryne.mediyo.domain.model.Track
 import com.teamshryne.mediyo.domain.model.dbIdList
 import com.teamshryne.mediyo.domain.model.upscaledThumbUrl
 import com.teamshryne.mediyo.domain.repository.LikeRepository
+import com.teamshryne.mediyo.core.design.CollectionHero
+import com.teamshryne.mediyo.core.design.LocalTrackRow
+import com.teamshryne.mediyo.core.design.TrackMenuSheet
+import com.teamshryne.mediyo.core.design.TrackOverflowIcon
+import com.teamshryne.mediyo.core.design.navigateAlbum
+import com.teamshryne.mediyo.core.design.navigateArtist
+import com.teamshryne.mediyo.core.design.navigateChannel
+import com.teamshryne.mediyo.data.local.LikedTrackEntity
+import com.teamshryne.mediyo.domain.model.PlayOrigin
+import com.teamshryne.mediyo.domain.model.Track
+import com.teamshryne.mediyo.domain.model.dbIdList
+import com.teamshryne.mediyo.domain.model.upscaledThumbUrl
+import com.teamshryne.mediyo.domain.repository.LikeRepository
 import com.teamshryne.mediyo.feature.playlist.AddToPlaylistSheet
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
@@ -156,10 +169,10 @@ fun LikedScreen(
             onAddToPlaylist = { showAddSheet = t; menuTrack = null },
             onPlayNext = { player?.addNext(t) },
             onAddToQueue = { player?.addToQueue(t) },
-            onGoToAlbum = t.albumId?.takeIf { it.isNotBlank() }?.let { { nav?.navigate("album/$it") } },
-            onOpenChannel = t.channelId?.takeIf { it.isNotBlank() }?.let { { nav?.navigate("channel/$it") } },
+            onGoToAlbum = t.albumId?.takeIf { it.isNotBlank() }?.let { { nav.navigateAlbum(it) } },
+            onOpenChannel = t.channelId?.takeIf { it.isNotBlank() }?.let { { nav.navigateChannel(it) } },
             onShowArtist = { name, id ->
-                menuScope.launch { (id?.takeIf { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name))?.let { nav?.navigate("artist/$it") } }
+                menuScope.launch { (id?.takeIf { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name))?.let { nav.navigateArtist(it) } }
             },
             onComments = { nav?.navigate("comments/${t.videoId}") }
         )

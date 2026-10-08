@@ -381,7 +381,7 @@ private fun SongActions(
             try {
                 // Prefer the parsed ID; fall back to search-by-name.
                 val resolved = id ?: vm.resolveArtistIdByName(name)
-                if (resolved != null) { onDismiss(); nav?.navigate("artist/$resolved") }
+                if (resolved != null) { onDismiss(); nav.navigateArtist(resolved) }
                 else vm.error = miss
             } catch (e: Throwable) {
                 vm.error = miss
@@ -437,7 +437,7 @@ private fun SongActions(
             MenuItem(
                 icon = Icons.Filled.OpenInNew,
                 label = "Open channel${item.channelName?.takeIf { it.isNotBlank() }?.let { " • $it" } ?: ""}",
-                onClick = { onDismiss(); nav?.navigate("channel/$channelId") }
+                onClick = { onDismiss(); nav.navigateChannel(channelId) }
             )
         }
     if (canResolveAlbum) {
@@ -451,7 +451,7 @@ private fun SongActions(
                     try {
                         val id = item.albumId?.takeIf { it.isNotBlank() }
                             ?: vm.resolveAlbumId(item)
-                        if (id != null) { onDismiss(); nav?.navigate("album/$id") }
+                        if (id != null) { onDismiss(); nav.navigateAlbum(id) }
                         else vm.error = "Couldn't find that album"
                     } catch (e: Throwable) {
                         vm.error = "Couldn't find that album"
@@ -490,7 +490,7 @@ private fun ArtistActions(
     MenuItem(
         icon = Icons.Filled.OpenInNew, label = "Open artist",
         enabled = browseId != null,
-        onClick = { if (browseId != null) { onDismiss(); nav?.navigate("artist/$browseId") } }
+        onClick = { if (browseId != null) { onDismiss(); nav.navigateArtist(browseId) } }
     )
     MenuItem(
         icon = if (followed) Icons.Filled.PersonRemove else Icons.Filled.PersonAdd,

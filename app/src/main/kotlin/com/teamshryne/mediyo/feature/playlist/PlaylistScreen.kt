@@ -40,6 +40,20 @@ import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import com.teamshryne.mediyo.domain.model.PlayOrigin
 import com.teamshryne.mediyo.domain.model.Track
 import com.teamshryne.mediyo.domain.model.bestThumbUrl
+import com.teamshryne.mediyo.core.design.ErrorState
+import com.teamshryne.mediyo.core.design.InfiniteScrollHandler
+import com.teamshryne.mediyo.core.design.LoadingFooter
+import com.teamshryne.mediyo.core.design.TrackOverflowIcon
+import com.teamshryne.mediyo.core.design.TrackRow
+import com.teamshryne.mediyo.core.design.appendUnique
+import com.teamshryne.mediyo.core.design.immersiveBrush
+import com.teamshryne.mediyo.core.design.navigateAlbum
+import com.teamshryne.mediyo.core.design.navigateArtist
+import com.teamshryne.mediyo.core.design.rememberDominantColors
+import com.teamshryne.mediyo.data.mediyo.MediyoBridge
+import com.teamshryne.mediyo.domain.model.PlayOrigin
+import com.teamshryne.mediyo.domain.model.Track
+import com.teamshryne.mediyo.domain.model.bestThumbUrl
 import com.teamshryne.mediyo.domain.model.toDomainTrack
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
@@ -393,9 +407,9 @@ fun PlaylistScreen(
                     onAddToPlaylist = { showAddTrack = track },
                     onPlayNext = { player?.addNext(track) },
                     onAddToQueue = { player?.addToQueue(track) },
-                    onGoToAlbum = m.album?.takeIf { it.isNotBlank() }?.let { { menuScope.launch { val id = m.albumId?.takeIf { it.isNotBlank() } ?: menuVm.resolveAlbumId(m); id?.let { nav?.navigate("album/$it") } } } },
+                    onGoToAlbum = m.album?.takeIf { it.isNotBlank() }?.let { { menuScope.launch { val id = m.albumId?.takeIf { it.isNotBlank() } ?: menuVm.resolveAlbumId(m); id?.let { nav.navigateAlbum(it) } } } },
                     onShowArtist = { name, id ->
-                        menuScope.launch { (id?.takeIf { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name))?.let { nav?.navigate("artist/$it") } }
+                        menuScope.launch { (id?.takeIf { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name))?.let { nav.navigateArtist(it) } }
                     },
                     onComments = { m.videoId?.let { nav?.navigate("comments/$it") } }
                 )

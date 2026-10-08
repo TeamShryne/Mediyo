@@ -59,6 +59,21 @@ import com.teamshryne.mediyo.domain.model.upscaledThumbUrl
 import com.teamshryne.mediyo.domain.repository.ArtistRepository
 import com.teamshryne.mediyo.domain.repository.HistoryRepository
 import com.teamshryne.mediyo.domain.repository.LikeRepository
+import com.teamshryne.mediyo.core.design.navigateAlbum
+import com.teamshryne.mediyo.core.design.navigateArtist
+import com.teamshryne.mediyo.core.design.navigatePlaylist
+import com.teamshryne.mediyo.core.design.navigatePodcast
+import com.teamshryne.mediyo.data.local.FollowedArtistEntity
+import com.teamshryne.mediyo.data.local.LocalPlaylistEntity
+import com.teamshryne.mediyo.data.local.SavedCollectionEntity
+import com.teamshryne.mediyo.domain.model.PlayOrigin
+import com.teamshryne.mediyo.domain.model.Track
+import com.teamshryne.mediyo.domain.model.bestThumbUrl
+import com.teamshryne.mediyo.domain.model.dbIdList
+import com.teamshryne.mediyo.domain.model.upscaledThumbUrl
+import com.teamshryne.mediyo.domain.repository.ArtistRepository
+import com.teamshryne.mediyo.domain.repository.HistoryRepository
+import com.teamshryne.mediyo.domain.repository.LikeRepository
 import com.teamshryne.mediyo.domain.repository.PlaylistRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
@@ -564,7 +579,7 @@ fun LibraryScreen(
                     SavedCollectionRow(
                         item = s,
                         kindLabel = "Album",
-                        onOpen = { nav?.navigate("album/${s.browseId}") },
+                        onOpen = { nav.navigateAlbum(s.browseId) },
                         onPlay = { vm.playSaved(s, player, shuffle = false) },
                         onShuffle = { vm.playSaved(s, player, shuffle = true) },
                         onRemove = { vm.removeSaved(s) }
@@ -580,7 +595,7 @@ fun LibraryScreen(
                     SavedCollectionRow(
                         item = s,
                         kindLabel = "Playlist",
-                        onOpen = { nav?.navigate("playlist/${s.browseId}") },
+                        onOpen = { nav.navigatePlaylist(s.browseId) },
                         onPlay = { vm.playSaved(s, player, shuffle = false) },
                         onShuffle = { vm.playSaved(s, player, shuffle = true) },
                         onRemove = { vm.removeSaved(s) }
@@ -596,7 +611,7 @@ fun LibraryScreen(
                     SavedCollectionRow(
                         item = s,
                         kindLabel = "Podcast",
-                        onOpen = { nav?.navigate("podcast/${s.browseId}") },
+                        onOpen = { nav.navigatePodcast(s.browseId) },
                         onPlay = { vm.playSaved(s, player, shuffle = false) },
                         onShuffle = { vm.playSaved(s, player, shuffle = true) },
                         onRemove = { vm.removeSaved(s) }
@@ -616,7 +631,7 @@ fun LibraryScreen(
                             append("Artist")
                             if (!a.subscriberCount.isNullOrBlank()) append(" • ${a.subscriberCount}")
                         },
-                        onClick = { nav?.navigate("artist/${a.browseId}") },
+                        onClick = { nav.navigateArtist(a.browseId) },
                         leading = { ArtistThumb(a) },
                         trailing = {
                             Box {
@@ -627,7 +642,7 @@ fun LibraryScreen(
                                     DropdownMenuItem(
                                         text = { Text("Open artist") },
                                         leadingIcon = { Icon(Icons.Filled.Person, null) },
-                                        onClick = { menu = false; nav?.navigate("artist/${a.browseId}") }
+                                        onClick = { menu = false; nav.navigateArtist(a.browseId) }
                                     )
                                     DropdownMenuItem(
                                         text = { Text("Unfollow") },
