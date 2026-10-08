@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -36,6 +37,23 @@ import com.teamshryne.mediyo.core.design.TrackOverflowIcon
 import com.teamshryne.mediyo.core.design.TrackRow
 import com.teamshryne.mediyo.core.design.appendUnique
 import com.teamshryne.mediyo.core.design.immersiveBrush
+import com.teamshryne.mediyo.core.design.rememberDominantColors
+import com.teamshryne.mediyo.data.mediyo.MediyoBridge
+import com.teamshryne.mediyo.domain.model.PlayOrigin
+import com.teamshryne.mediyo.domain.model.Track
+import com.teamshryne.mediyo.domain.model.bestThumbUrl
+import com.teamshryne.mediyo.core.design.ErrorState
+import com.teamshryne.mediyo.core.design.InfiniteScrollHandler
+import com.teamshryne.mediyo.core.design.LoadingFooter
+import com.teamshryne.mediyo.core.design.TrackOverflowIcon
+import com.teamshryne.mediyo.core.design.TrackRow
+import com.teamshryne.mediyo.core.design.appendUnique
+import com.teamshryne.mediyo.core.design.immersiveBrush
+import com.teamshryne.mediyo.core.design.isOpenableArtistId
+import com.teamshryne.mediyo.core.design.navigateAlbum
+import com.teamshryne.mediyo.core.design.navigateArtist
+import com.teamshryne.mediyo.core.design.navigateChannel
+import com.teamshryne.mediyo.core.design.navigatePlaylist
 import com.teamshryne.mediyo.core.design.rememberDominantColors
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import com.teamshryne.mediyo.domain.model.PlayOrigin
@@ -151,6 +169,8 @@ fun AlbumScreen(
     var showAddTrack by remember { mutableStateOf<Track?>(null) }
     val menuScope = rememberCoroutineScope()
     val menuVm: com.teamshryne.mediyo.core.design.MediaMenuVm = hiltViewModel()
+    val context = LocalContext.current
+    var resolvingArtist by remember { mutableStateOf(false) }
 
     when {
         vm.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
@@ -239,12 +259,46 @@ fun AlbumScreen(
                         }
                         val byline = vm.artists.joinToString().ifBlank { vm.artist }
                         if (byline.isNotBlank()) {
+                            // The core hands back one id per strapline artist,
+                            // and an artist run with no browse endpoint yields
+                            // "" rather than null — so pick the first id that
+                            // can actually open a page, and fall back to
+                            // searching by name when none can.
+                            val openable = vm.artistIds.firstOrNull {
+                                isOpenableArtistId(it)
+                            }
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.Center,
                                 modifier = Modifier.padding(horizontal = 20.dp)
-                                    .clickable(enabled = vm.artistIds.firstOrNull() != null) {
-                                        vm.artistIds.firstOrNull()?.let { nav?.navigate("artist/$it") }
+                                    .clickable(enabled = !resolvingArtist) {
+                                        val id = openable
+                                        if (id != null) {
+                                            nav?.navigateArtist(id)
+                                        } else {
+                                            val name = vm.artists.firstOrNull {
+                                                it.isNotBlank()
+                                            } ?: vm.artist
+                                            if (name.isBlank()) return@clickable
+                                            menuScope.launch {
+                                                resolvingArtist = true
+                                                val resolved = try {
+                                                    menuVm.resolveArtistIdByName(name)
+                                                } catch (_: Throwable) {
+                                                    null
+                                                }
+                                                resolvingArtist = false
+                                                if (resolved != null) {
+                                                    nav?.navigateArtist(resolved)
+                                                } else {
+                                                    android.widget.Toast.makeText(
+                                                        context,
+                                                        "Couldn't find $name",
+                                                        android.widget.Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                            }
+                                        }
                                     }
                             ) {
                                 AsyncImage(
@@ -399,10 +453,10 @@ fun AlbumScreen(
                                         round = false,
                                         onClick = {
                                             when {
-                                                r.browseId != null && r.category.contains("Album", true) -> nav?.navigate("album/${r.browseId}")
-                                                r.browseId != null && r.category.contains("Artist", true) -> nav?.navigate("artist/${r.browseId}")
-                                                r.browseId != null && r.category.contains("Playlist", true) -> nav?.navigate("playlist/${r.browseId}")
-                                                r.browseId != null -> nav?.navigate("channel/${r.browseId}")
+                                                r.browseId != null && r.category.contains("Album", true) -> nav.navigateAlbum(r.browseId)
+                                                r.browseId != null && r.category.contains("Artist", true) -> nav.navigateArtist(r.browseId)
+                                                r.browseId != null && r.category.contains("Playlist", true) -> nav.navigatePlaylist(r.browseId)
+                                                r.browseId != null -> nav.navigateChannel(r.browseId)
                                             }
                                         }
                                     )
@@ -433,7 +487,7 @@ fun AlbumScreen(
                     onPlayNext = { player?.addNext(track) },
                     onAddToQueue = { player?.addToQueue(track) },
                     onShowArtist = { name, id ->
-                        menuScope.launch { (id?.takeIf { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name))?.let { nav?.navigate("artist/$it") } }
+                        menuScope.launch { (id?.takeIf { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name))?.let { nav.navigateArtist(it) } }
                     },
                     onComments = { m.videoId?.let { nav?.navigate("comments/$it") } }
                 )

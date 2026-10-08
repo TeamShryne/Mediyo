@@ -26,6 +26,13 @@ import com.teamshryne.mediyo.core.design.SectionHeader
 import com.teamshryne.mediyo.data.mediyo.FfiEpisodePage
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import com.teamshryne.mediyo.domain.model.PlayOrigin
+import com.teamshryne.mediyo.core.design.ActionPill
+import com.teamshryne.mediyo.core.design.ErrorState
+import com.teamshryne.mediyo.core.design.SectionHeader
+import com.teamshryne.mediyo.core.design.navigatePodcast
+import com.teamshryne.mediyo.data.mediyo.FfiEpisodePage
+import com.teamshryne.mediyo.data.mediyo.MediyoBridge
+import com.teamshryne.mediyo.domain.model.PlayOrigin
 import com.teamshryne.mediyo.domain.model.Track
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.first
@@ -146,7 +153,7 @@ fun EpisodeScreen(
                                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.padding(horizontal = 20.dp)
                                     .clickable(enabled = p.showId != null) {
-                                        p.showId?.let { nav?.navigate("podcast/$it") }
+                                        p.showId?.let { nav.navigatePodcast(it) }
                                     }
                             )
                         }
