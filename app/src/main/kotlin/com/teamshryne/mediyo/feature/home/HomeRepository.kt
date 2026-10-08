@@ -102,42 +102,74 @@ class HomeRepository @Inject constructor(
      * Top artists: summed track scores per artist (one obsession beats ten
      * casuals), followed artists flagged — follows are explicit identity.
      */
+    /**
+     * Top artists: one entry per real artist.
+     *
+     * History stores a single byline string per track, and that string can
+     * hold several names ("Arijit Singh, Pritam") with browse ids stored
+     * parallel to them. Grouping on the raw byline therefore invented fake
+     * "artists" made of whole collaborations, and crediting each of them with
+     * just the first id made the tap target the wrong person. So: split the
+     * byline, pair names with ids by position, and group on the browse id
+     * when we have one (the stable identity) and the normalised name when we
+     * don't (rows saved before ids were stored).
+     */
     fun flowTopArtists(): Flow<List<ArtistAffinity>> = combine(
         history.flowHistory(), artists.flowFollowed()
     ) { rows: List<HistoryEntryEntity>, followed: List<FollowedArtistEntity> ->
         val now = System.currentTimeMillis()
-        val byArtist = linkedMapOf<String, MutableList<HistoryEntryEntity>>()
-        rows.filter { !it.isEpisode() && it.artist.isNotBlank() }.forEach {
-            byArtist.getOrPut(it.artist) { mutableListOf() }.add(it)
+        class Acc(
+            var name: String,
+            var id: String?,
+            var score: Double,
+            var plays: Int,
+            var art: String?,
+            var tracks: Int
+        )
+        val acc = linkedMapOf<String, Acc>()
+        rows.filter { !it.isEpisode() }.forEach { row ->
+            val names = row.artist.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+            if (names.isEmpty()) return@forEach
+            val ids = row.artistIds.dbIdList()
+            names.forEachIndexed { i, name ->
+                // Only UC… ids are artist pages; anything else would open a
+                // broken screen, so treat it as unknown and resolve by name.
+                val id = ids.getOrNull(i)?.trim()?.takeIf { it.startsWith("UC") }
+                val key = id ?: "n:" + name.lowercase()
+                val a = acc.getOrPut(key) { Acc(name, id, 0.0, 0, null, 0) }
+                a.score += scoreHistory(row, now)
+                a.plays += row.playCount
+                a.tracks++
+                if (a.art == null) a.art = row.artworkUrl
+                if (a.id == null && id != null) a.id = id
+            }
         }
         val followedById = followed.associateBy { it.browseId }
-        val out = byArtist.map { (name, items) ->
-            val ids = items.mapNotNull { it.artistIds.dbIdList().firstOrNull() }.distinct()
-            val id = ids.firstOrNull()
+        val out = acc.values.map { a ->
             ArtistAffinity(
-                name = name,
-                artistId = id,
-                artworkUrl = items.maxByOrNull { it.playCount }?.artworkUrl,
-                score = items.sumOf { scoreHistory(it, now) },
-                followed = id != null && followedById.containsKey(id),
-                trackCount = items.size
+                name = a.name,
+                artistId = a.id,
+                artworkUrl = a.art,
+                score = a.score,
+                followed = a.id != null && followedById.containsKey(a.id),
+                trackCount = a.tracks
             )
         }.sortedByDescending { it.score }.toMutableList()
-        // Followed-but-unplayed artists still belong here (explicit taste).
+        // Followed-but-unheard artists still belong here (explicit taste), and
+        // their stored name/art are cleaner than anything history inferred.
         followed.forEach { f ->
-            if (out.none { it.artistId == f.browseId }) {
+            val existing = out.indexOfFirst { it.artistId == f.browseId }
+            if (existing >= 0) {
+                out[existing] = out[existing].copy(
+                    name = f.name,
+                    artworkUrl = f.artworkUrl ?: out[existing].artworkUrl,
+                    followed = true
+                )
+            } else {
                 out.add(ArtistAffinity(f.name, f.browseId, f.artworkUrl, 0.0, true, 0))
             }
         }
-        // One entry per artist, period. Grouping is by name, so one browse id
-        // can surface under two spellings ("Daft Punk" / "daft punk") — a
-        // duplicate id means a duplicate LazyRow key, which crashes.
-        val deduped = linkedMapOf<String, ArtistAffinity>()
-        out.forEach { a ->
-            val key = a.artistId?.takeIf { it.isNotBlank() } ?: "n:${a.name}"
-            deduped.getOrPut(key) { a }
-        }
-        deduped.values.sortedByDescending { it.score }.take(10)
+        out.sortedByDescending { it.score }.take(10)
     }
 
     /**
@@ -149,8 +181,10 @@ class HomeRepository @Inject constructor(
         flowScored(), flowTopArtists()
     ) { scored, topArtists ->
         topArtists.take(3).mapNotNull { a ->
+            // Names are per-artist now, so match loosely: a track credited to
+            // several artists still seeds each of them.
             val seed = scored.firstOrNull { s ->
-                s.track.artists.any { it == a.name }
+                s.track.artists.any { it.trim().equals(a.name.trim(), ignoreCase = true) }
             }?.track ?: return@mapNotNull null
             HomeMix(a.name, seed.artworkUrl, seed)
         }

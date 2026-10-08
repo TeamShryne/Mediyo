@@ -28,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -204,6 +205,10 @@ fun HomeScreen(
     vm: HomeVm = hiltViewModel()
 ) {
     val greeting = rememberGreeting()
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val menuVm: com.teamshryne.mediyo.core.design.MediaMenuVm = hiltViewModel()
+    var resolving by remember { mutableStateOf<String?>(null) }
     val quickPicks by vm.quickPicks.collectAsState()
     val weekTop by vm.weekTop.collectAsState()
     val onRepeat by vm.onRepeat.collectAsState()
@@ -367,9 +372,42 @@ fun HomeScreen(
             if (topArtists.isNotEmpty()) {
                 item(key = "artists") {
                     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        SectionHeader("Your top artists")
+                        SectionHeader(
+                            "Your top artists",
+                            trailing = if (resolving != null) {
+                                {
+                                    androidx.compose.material3.CircularProgressIndicator(
+                                        Modifier.size(18.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                }
+                            } else null
+                        )
                         ArtistCircleRow(topArtists) { a ->
-                            a.artistId?.let { nav.navigate("artist/$it") }
+                            // Rows saved before ids existed (and any byline we
+                            // couldn't pair a UC id with) have nothing to
+                            // navigate to, so resolve by name instead of
+                            // silently doing nothing on tap.
+                            val id = a.artistId
+                            if (id != null) {
+                                nav.navigate("artist/$id")
+                            } else {
+                                scope.launch {
+                                    resolving = a.name
+                                    val resolved = try {
+                                        menuVm.resolveArtistIdByName(a.name)
+                                    } catch (_: Throwable) {
+                                        null
+                                    }
+                                    resolving = null
+                                    if (resolved != null) nav.navigate("artist/$resolved")
+                                    else android.widget.Toast.makeText(
+                                        context,
+                                        "Couldn't find ${a.name}",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
                         }
                     }
                 }
