@@ -3,7 +3,9 @@ package com.teamshryne.mediyo.feature.search
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -25,6 +27,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,6 +58,7 @@ import com.teamshryne.mediyo.domain.repository.UserEventRepository
 import com.teamshryne.mediyo.domain.repository.UserEventTypes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.distinctUntilChanged
 import com.teamshryne.mediyo.data.mediyo.FfiSearchFilter
 import com.teamshryne.mediyo.data.mediyo.FfiSearchResult
 import com.teamshryne.mediyo.data.mediyo.FfiSuggestText
@@ -81,10 +85,25 @@ class SearchVm @Inject constructor(
     var suggestEntities by mutableStateOf<List<FfiSearchResult>>(emptyList())
     /** Recent submitted queries, from logged search events. */
     var recents by mutableStateOf<List<String>>(emptyList())
+    /** Suggestion panel is allowed to be open (not dismissed by a scroll). */
+    var suggestOpen by mutableStateOf(false)
     private var suggestJob: kotlinx.coroutines.Job? = null
+    /**
+     * Guards against out-of-order responses: only the newest request may
+     * publish. Without it, a slow reply for "dar" can land after "dark" and
+     * replace the fresher list — the classic flickering-suggestion bug.
+     */
+    private var suggestSeq = 0
+    /** Query the user scrolled away from; its panel stays closed until it changes. */
+    private var dismissedFor: String? = null
 
     private var lastQueryInternal = ""
     val lastQuery: String get() = lastQueryInternal
+
+    /** True only when there is something to show and the user hasn't dismissed it. */
+    val suggestVisible: Boolean
+        get() = suggestOpen && query.isNotBlank() && dismissedFor != query &&
+            (suggestTexts.isNotEmpty() || suggestEntities.isNotEmpty())
 
     init {
         loadRecents()
@@ -114,29 +133,46 @@ class SearchVm @Inject constructor(
     fun onQueryChange(q: String) {
         query = q
         suggestJob?.cancel()
+        val seq = ++suggestSeq
+        // Editing the text re-opens the panel even if it was scrolled away.
+        if (q != dismissedFor) suggestOpen = true
         if (q.isBlank()) {
-            suggestTexts = emptyList()
-            suggestEntities = emptyList()
+            clearSuggest()
             loadRecents()
             return
         }
         suggestJob = viewModelScope.launch {
-            kotlinx.coroutines.delay(300)
+            kotlinx.coroutines.delay(220)
             try {
                 val s = bridge.suggest(q)
+                // Drop stale replies: a newer keystroke already moved on.
+                if (seq != suggestSeq || query != q) return@launch
                 suggestTexts = s.texts
                 suggestEntities = s.entities
             } catch (_: Throwable) { }
         }
     }
 
+    /** Hide the panel for the current query (scroll / back / tap-away). */
+    fun dismissSuggest() {
+        suggestOpen = false
+        if (query.isNotBlank()) dismissedFor = query
+    }
+
+    private fun clearSuggest() {
+        suggestJob?.cancel()
+        suggestSeq++
+        suggestTexts = emptyList()
+        suggestEntities = emptyList()
+        suggestOpen = false
+        dismissedFor = null
+    }
+
     /** Run a fresh search. [filter] == null means "All". */
     fun runSearch(filter: FfiSearchFilter?) {
         val q = query.trim()
         if (q.isEmpty()) return
-        suggestJob?.cancel()
-        suggestTexts = emptyList()
-        suggestEntities = emptyList()
+        clearSuggest()
         lastQueryInternal = q
         // A chip without params behaves exactly like All — normalize it so
         // the All chip stays selected instead of showing nothing selected.
@@ -202,6 +238,9 @@ class SearchVm @Inject constructor(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
+/** Pinned field block: OutlinedTextField (~56dp) plus padding. */
+private val FIELD_BLOCK_HEIGHT = 68.dp
+
 fun SearchScreen(
     nav: androidx.navigation.NavController,
     player: com.teamshryne.mediyo.feature.player.PlayerViewModel,
@@ -212,8 +251,19 @@ fun SearchScreen(
     var menuItem by remember { mutableStateOf<FfiSearchResult?>(null) }
     var showAddTrack by remember { mutableStateOf<Track?>(null) }
 
+    // Scrolling the results dismisses the suggestion panel — for the current
+    // query only, so the next keystroke re-opens it naturally.
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .distinctUntilChanged()
+            .collect { vm.dismissSuggest() }
+    }
+    // Back closes the panel before it leaves the screen.
+    BackHandler(enabled = vm.suggestVisible) { vm.dismissSuggest() }
+
     fun open(r: FfiSearchResult) {
         vm.logTap(r)
+        vm.dismissSuggest()
         when {
             r.videoId != null && r.category.contains("Episode", true) ->
                 nav.navigate("episode/${r.detailId.ifBlank { r.videoId }}")
@@ -225,11 +275,14 @@ fun SearchScreen(
         }
     }
 
+    Box(Modifier.fillMaxSize()) {
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
         // Outer Scaffold padding already clears the status bar — 4dp only.
-        contentPadding = PaddingValues(top = 4.dp, bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp),
+        // The pinned field owns the space above the list, so results scroll
+        // *under* it instead of the whole list jumping when it appears.
+        contentPadding = PaddingValues(top = FIELD_BLOCK_HEIGHT + 4.dp, bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         item(key = "search_header") {
@@ -241,54 +294,16 @@ fun SearchScreen(
             )
         }
 
-        // Search field + filter chips dock at the top once the big "Search"
-        // title scrolls away (framework stickyHeader — no manual scroll math,
-        // so no flicker or half-stuck states). Scrolling back to the absolute
-        // top re-seats the title above, restoring the original header.
-        stickyHeader(key = "search_bar") {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.background)
-                    .padding(horizontal = 20.dp)
-                    .padding(bottom = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                OutlinedTextField(
-                    value = vm.query,
-                    onValueChange = { vm.onQueryChange(it) },
-                    placeholder = { Text("Songs, artists, albums…", color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    leadingIcon = { Icon(Icons.Filled.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(28.dp),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { vm.submit() }),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                        unfocusedBorderColor = Color.Transparent,
-                        focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                if (vm.query.isNotBlank() && (vm.suggestTexts.isNotEmpty() || vm.suggestEntities.isNotEmpty())) {
-                    SuggestDropdown(
-                        texts = vm.suggestTexts,
-                        entities = vm.suggestEntities,
-                        onText = {
-                            vm.query = it.query.ifBlank { it.text }
-                            vm.runSearch(null)
-                        },
-                        onEntity = { open(it) },
-                        onMenu = { menuItem = it }
-                    )
-                }
-                // Filter chips appear only once a search has run — no "All"
-                // chip. Nothing selected = all results; picking a chip scopes
-                // the results and reveals a themed clear-filter pill.
-                val showChips = vm.hasSearched && vm.filters.isNotEmpty()
-                if (showChips) {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Filter chips scroll with the results: a pinned chip row would change
+        // the header height when a search runs, shifting the list under the
+        // user's finger. They appear right after the title instead.
+        if (vm.hasSearched && vm.filters.isNotEmpty()) {
+            item(key = "search_chips") {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         item(key = "clear_filter") {
                             val active = vm.selectedFilter != null
                             AnimatedVisibility(
@@ -441,6 +456,88 @@ fun SearchScreen(
         }
 
         item(key = "search_footer") { LoadingFooter(vm.loadingMore && !vm.loading) }
+    }
+
+    // ── Pinned search field ────────────────────────────────────────────
+    // Pinned rather than sticky-in-list: a sticky field re-measures whenever
+    // the suggestion panel changes the header height, which is what made
+    // suggestions feel unreliable (list jumping under the finger).
+    val scrolled by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 8
+        }
+    }
+    Column(
+        Modifier
+            .align(Alignment.TopCenter)
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 20.dp)
+            .height(FIELD_BLOCK_HEIGHT),
+        verticalArrangement = Arrangement.Center
+    ) {
+        OutlinedTextField(
+            value = vm.query,
+            onValueChange = { vm.onQueryChange(it) },
+            placeholder = { Text("Songs, artists, albums…", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+            leadingIcon = { Icon(Icons.Filled.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+            trailingIcon = if (vm.query.isNotEmpty()) {
+                {
+                    IconButton(onClick = { vm.onQueryChange("") }) {
+                        Icon(Icons.Filled.Close, contentDescription = "Clear", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            } else null,
+            singleLine = true,
+            shape = RoundedCornerShape(28.dp),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { vm.submit() }),
+            colors = OutlinedTextFieldDefaults.colors(
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                unfocusedBorderColor = Color.Transparent,
+                focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+            ),
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+    // Divider only once content is sliding underneath, so the bar doesn't
+    // draw a permanent line over the idle state.
+    AnimatedVisibility(
+        visible = scrolled,
+        enter = fadeIn(tween(160)),
+        exit = fadeOut(tween(160)),
+        modifier = Modifier.align(Alignment.TopCenter)
+    ) {
+        HorizontalDivider(
+            Modifier.padding(top = FIELD_BLOCK_HEIGHT - 1.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHighest
+        )
+    }
+
+    // ── Suggestion overlay ─────────────────────────────────────────────
+    // Floats above the results so it can never reflow them, and closes with
+    // a height + fade animation when the user scrolls into the results.
+    AnimatedVisibility(
+        visible = vm.suggestVisible,
+        enter = fadeIn(tween(140)) + expandVertically(tween(220)),
+        exit = fadeOut(tween(120)) + shrinkVertically(tween(200)),
+        modifier = Modifier.align(Alignment.TopCenter)
+    ) {
+        Box(Modifier.padding(top = FIELD_BLOCK_HEIGHT, start = 12.dp, end = 12.dp)) {
+            SuggestDropdown(
+                texts = vm.suggestTexts,
+                entities = vm.suggestEntities,
+                modifier = Modifier.fillMaxWidth(),
+                onText = {
+                    vm.query = it.query.ifBlank { it.text }
+                    vm.runSearch(null)
+                },
+                onEntity = { open(it) },
+                onMenu = { menuItem = it }
+            )
+        }
+    }
     }
 
     InfiniteScrollHandler(
@@ -699,10 +796,11 @@ private fun SuggestDropdown(
     entities: List<com.teamshryne.mediyo.data.mediyo.FfiSearchResult>,
     onText: (FfiSuggestText) -> Unit,
     onEntity: (com.teamshryne.mediyo.data.mediyo.FfiSearchResult) -> Unit,
-    onMenu: (com.teamshryne.mediyo.data.mediyo.FfiSearchResult) -> Unit = {}
+    onMenu: (com.teamshryne.mediyo.data.mediyo.FfiSearchResult) -> Unit = {},
+    modifier: Modifier = Modifier
 ) {
     Column(
-        Modifier
+        modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
