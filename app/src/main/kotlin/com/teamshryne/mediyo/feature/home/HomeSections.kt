@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -460,9 +461,10 @@ fun ArtistCircleRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        // Index in the key as a floor: a duplicate id must never be able to
+        // True positional index in the key: indexOf() returns the FIRST
+        // equal element, so duplicates would collapse onto one key and
         // crash the row (Lazy keys are unique-or-nothing).
-        items(artists, key = { "ha_${it.artistId ?: it.name}_${artists.indexOf(it)}" }) { a ->
+        itemsIndexed(artists, key = { i, a -> "ha_${a.artistId ?: a.name}_$i" }) { _, a ->
             MediaCard(
                 title = a.name,
                 subtitle = if (a.followed) "Following" else "${a.trackCount} songs",
