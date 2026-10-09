@@ -107,27 +107,28 @@ fun TrackMenuSheet(
             MenuItem(icon = Icons.Filled.QueueMusic, label = "Play next", onClick = { onDismiss(); onPlayNext() })
             MenuItem(icon = Icons.Filled.PlaylistPlay, label = "Add to queue", onClick = { onDismiss(); onAddToQueue() })
             // Offline: one row everywhere, state-driven, no caller changes needed.
-            if (track.videoId != null) {
+            val vid = track.videoId
+            if (vid != null) {
                 val dlVm: DownloadVm = hiltViewModel()
-                val dlState by dlVm.stateFor(track.videoId!!).collectAsState(initial = DownloadUiState.NotDownloaded)
+                val dlState by dlVm.stateFor(vid).collectAsState(initial = DownloadUiState.NotDownloaded)
                 when (dlState) {
                     DownloadUiState.Completed -> MenuItem(
                         icon = Icons.Filled.DownloadDone,
                         label = "Downloaded • remove",
-                        onClick = { onDismiss(); dlVm.remove(track.videoId!!) }
+                        onClick = { onDismiss(); dlVm.remove(vid) }
                     )
                     is DownloadUiState.Downloading -> {
                         val pct = (dlState as DownloadUiState.Downloading).percent
                         MenuItem(
                             icon = Icons.Filled.Downloading,
                             label = if (pct >= 0) "Downloading • $pct% • cancel" else "Downloading • cancel",
-                            onClick = { onDismiss(); dlVm.remove(track.videoId!!) }
+                            onClick = { onDismiss(); dlVm.remove(vid) }
                         )
                     }
                     DownloadUiState.Queued -> MenuItem(
                         icon = Icons.Filled.Downloading,
                         label = "Queued • cancel",
-                        onClick = { onDismiss(); dlVm.remove(track.videoId!!) }
+                        onClick = { onDismiss(); dlVm.remove(vid) }
                     )
                     DownloadUiState.Failed -> MenuItem(
                         icon = Icons.Filled.Download,

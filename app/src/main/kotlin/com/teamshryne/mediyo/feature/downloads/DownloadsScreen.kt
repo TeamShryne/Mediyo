@@ -211,7 +211,7 @@ private fun DownloadRow(
         if (inFlight) {
             if (download != null && download.contentLength > 0) {
                 CircularProgressIndicator(
-                    progress = (download.getBytesDownloaded().toFloat() / download.contentLength).coerceIn(0f, 1f),
+                    progress = { (download.getBytesDownloaded().toFloat() / download.contentLength).coerceIn(0f, 1f) },
                     modifier = Modifier.size(28.dp)
                 )
             } else {
