@@ -66,6 +66,7 @@ class WidgetPlaybackController @Inject constructor(
         val item = MediaItem.Builder()
             .setUri(Uri.parse("mediyo://$vid"))
             .setMediaId(vid)
+            .setCustomCacheKey(vid)
             .setMediaMetadata(metadata)
             .build()
         try {

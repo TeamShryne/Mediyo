@@ -90,6 +90,11 @@ class NewPipeResolver @Inject constructor() {
         resolveStreamUrl(videoId)
     }
 
+    /** Stream URLs are signed and live for hours — cache briefly, invalidate on 403/410. */
+    fun invalidate(videoId: String) {
+        cache.remove(videoId)
+    }
+
     private fun putCached(videoId: String, url: String) {
         if (cache.size >= MAX_CACHE_ENTRIES) {
             cache.entries.minByOrNull { it.value.at }?.key?.let { cache.remove(it) }
@@ -98,8 +103,8 @@ class NewPipeResolver @Inject constructor() {
     }
 
     private companion object {
-        /** googlevideo URLs expire after hours, not minutes — a short TTL is safe. */
-        const val CACHE_TTL_MS = 5 * 60_000L
-        const val MAX_CACHE_ENTRIES = 12
+        /** googlevideo URLs expire after hours — resolve rarely, invalidate on 403/410. */
+        const val CACHE_TTL_MS = 3 * 60 * 60_000L
+        const val MAX_CACHE_ENTRIES = 64
     }
 }
