@@ -51,7 +51,8 @@ import com.teamshryne.mediyo.feature.player.PlayerViewModel
  * needed); the trailing button cancels an in-flight download or removes a
  * finished one. Failed rows tap-to-retry via the overflow row below them.
  */
-@OptIn(ExperimentalMaterial3Api::class, UnstableApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
+@UnstableApi
 @Composable
 fun DownloadsScreen(
     nav: androidx.navigation.NavController? = null,
@@ -151,7 +152,7 @@ fun DownloadsScreen(
     }
 }
 
-@OptIn(UnstableApi::class)
+@UnstableApi
 @Composable
 private fun DownloadRow(
     entity: DownloadedTrackEntity,
