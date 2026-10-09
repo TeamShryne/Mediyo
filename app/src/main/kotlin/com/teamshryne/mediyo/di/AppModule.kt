@@ -11,6 +11,7 @@ import androidx.media3.datasource.cache.Cache
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.NoOpCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.audio.AudioSink
@@ -146,14 +147,18 @@ object AppModule {
         }
         // Audio focus + noisy handling — pauses for calls/other media and resumes
         // afterwards, and stops when headphones are unplugged.
+        // 30s back-buffer (kept from keyframes) sits on top of the disk cache,
+        // so rewinds inside the current song are instant.
+        val loadControl = DefaultLoadControl.Builder()
+            .setBackBuffer(30_000, true)
+            .build()
         return ExoPlayer.Builder(ctx)
             .setMediaSourceFactory(mediaSourceFactory)
             .setRenderersFactory(renderersFactory)
+            .setLoadControl(loadControl)
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_NETWORK)
-            // Keep 30s behind the playhead in RAM on top of the disk cache,
-            // so rewinds inside the current song are instant.
-            .setBackBuffer(30_000, true)
+            .setAudioAttributes(
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
