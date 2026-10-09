@@ -2,6 +2,7 @@ package com.teamshryne.mediyo.feature.equalizer
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -68,7 +69,7 @@ private fun formatDb(v: Float): String {
     return if (r == 0f) "0 dB" else "%+.0f dB".format(Locale.US, r)
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun EqualizerScreen(
     nav: androidx.navigation.NavController? = null,
