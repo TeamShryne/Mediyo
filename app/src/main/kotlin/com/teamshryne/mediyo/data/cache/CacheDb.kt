@@ -4,6 +4,8 @@ import androidx.room.*
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.teamshryne.mediyo.data.local.FollowedArtistEntity
+import com.teamshryne.mediyo.data.local.DownloadedTrackEntity
+import com.teamshryne.mediyo.data.local.DownloadedTrackDao
 import com.teamshryne.mediyo.data.local.HistoryDao
 import com.teamshryne.mediyo.data.local.HistoryEntryEntity
 import com.teamshryne.mediyo.data.local.HistoryPlayEventEntity
@@ -42,8 +44,8 @@ interface KvDao {
 data class CacheStatRow(val type: String, val cnt: Long, val bytes: Long?)
 
 @Database(
-    entities = [KvCache::class, LocalPlaylistEntity::class, LocalPlaylistEntryEntity::class, LikedTrackEntity::class, HistoryEntryEntity::class, HistoryPlayEventEntity::class, UserEventEntity::class, FollowedArtistEntity::class, SavedCollectionEntity::class],
-    version = 7,
+    entities = [KvCache::class, LocalPlaylistEntity::class, LocalPlaylistEntryEntity::class, LikedTrackEntity::class, HistoryEntryEntity::class, HistoryPlayEventEntity::class, UserEventEntity::class, FollowedArtistEntity::class, SavedCollectionEntity::class, DownloadedTrackEntity::class],
+    version = 8,
     exportSchema = false
 )
 abstract class MediyoDb : RoomDatabase() {
@@ -55,6 +57,7 @@ abstract class MediyoDb : RoomDatabase() {
     abstract fun userEventDao(): UserEventDao
     abstract fun savedCollectionDao(): SavedCollectionDao
     abstract fun followedArtistDao(): com.teamshryne.mediyo.data.local.FollowedArtistDao
+    abstract fun downloadedTrackDao(): DownloadedTrackDao
 }
 
 data class CacheStats(val totalBytes: Long, val byType: Map<String, Pair<Long,Long>>)
@@ -113,6 +116,22 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
     }
 }
 
+/**
+ * v7 → v8: offline library. New downloaded_tracks table (metadata for the
+ * permanent download cache, keyed by videoId).
+ */
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS downloaded_tracks (" +
+                "videoId TEXT PRIMARY KEY NOT NULL, " +
+                "title TEXT NOT NULL, " +
+                "artist TEXT NOT NULL, " +
+                "artworkUrl TEXT, " +
+                "downloadedAt INTEGER NOT NULL)"
+        )
+    }
+}
 /**
  * v6 → v7: generic interaction log + play-event context.
  * - new user_events table (typed key-value events for algo/stats).

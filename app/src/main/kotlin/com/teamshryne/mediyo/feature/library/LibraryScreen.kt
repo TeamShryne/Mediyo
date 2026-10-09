@@ -505,6 +505,22 @@ fun LibraryScreen(
                     )
                 }
             }
+            if (vm.filter == null && (q.isEmpty() || "download".contains(q, true))) {
+                item(key = "downloads") {
+                    LibraryRow(
+                        title = "Downloads",
+                        subtitle = "Offline songs",
+                        onClick = { nav?.navigate("downloads") },
+                        leading = {
+                            TileIcon(
+                                icon = Icons.Filled.Download,
+                                contentDescription = "Downloads"
+                            )
+                        },
+                        trailing = null
+                    )
+                }
+            }
 
             if (showPlaylists && filteredPlaylists.isNotEmpty()) {
                 if (vm.filter == null && (showLikedRow || showHistoryRow || filteredArtists.isNotEmpty() || showSavedAlbums || showSavedPlaylists || showSavedPodcasts)) {

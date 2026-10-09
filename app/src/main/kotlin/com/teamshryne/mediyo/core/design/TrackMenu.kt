@@ -10,8 +10,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.teamshryne.mediyo.domain.model.Track
 import com.teamshryne.mediyo.domain.model.bestThumbUrl
+import com.teamshryne.mediyo.feature.downloads.DownloadUiState
+import com.teamshryne.mediyo.feature.downloads.DownloadVm
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -103,6 +106,41 @@ fun TrackMenuSheet(
             MenuItem(icon = Icons.Filled.PlaylistAdd, label = "Add to playlist", onClick = { onDismiss(); onAddToPlaylist() })
             MenuItem(icon = Icons.Filled.QueueMusic, label = "Play next", onClick = { onDismiss(); onPlayNext() })
             MenuItem(icon = Icons.Filled.PlaylistPlay, label = "Add to queue", onClick = { onDismiss(); onAddToQueue() })
+            // Offline: one row everywhere, state-driven, no caller changes needed.
+            if (track.videoId != null) {
+                val dlVm: DownloadVm = hiltViewModel()
+                val dlState by dlVm.stateFor(track.videoId!!).collectAsState(initial = DownloadUiState.NotDownloaded)
+                when (dlState) {
+                    DownloadUiState.Completed -> MenuItem(
+                        icon = Icons.Filled.DownloadDone,
+                        label = "Downloaded • remove",
+                        onClick = { onDismiss(); dlVm.remove(track.videoId!!) }
+                    )
+                    is DownloadUiState.Downloading -> {
+                        val pct = (dlState as DownloadUiState.Downloading).percent
+                        MenuItem(
+                            icon = Icons.Filled.Downloading,
+                            label = if (pct >= 0) "Downloading • $pct% • cancel" else "Downloading • cancel",
+                            onClick = { onDismiss(); dlVm.remove(track.videoId!!) }
+                        )
+                    }
+                    DownloadUiState.Queued -> MenuItem(
+                        icon = Icons.Filled.Downloading,
+                        label = "Queued • cancel",
+                        onClick = { onDismiss(); dlVm.remove(track.videoId!!) }
+                    )
+                    DownloadUiState.Failed -> MenuItem(
+                        icon = Icons.Filled.Download,
+                        label = "Download failed • retry",
+                        onClick = { onDismiss(); dlVm.download(track) }
+                    )
+                    DownloadUiState.NotDownloaded -> MenuItem(
+                        icon = Icons.Filled.Download,
+                        label = "Download",
+                        onClick = { onDismiss(); dlVm.download(track) }
+                    )
+                }
+            }
             if (onGoToAlbum != null) MenuItem(icon = Icons.Filled.Album, label = "Go to album", onClick = { onDismiss(); onGoToAlbum() })
             if (onOpenChannel != null && !track.channelId.isNullOrBlank()) MenuItem(icon = Icons.Filled.OpenInNew, label = "Open channel${track.channelName?.takeIf { it.isNotBlank() }?.let { " • $it" } ?: ""}", onClick = { onDismiss(); onOpenChannel() })
             if (onShowArtist != null && artistEntries.isNotEmpty()) {

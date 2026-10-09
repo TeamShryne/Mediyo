@@ -9,7 +9,9 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackParameters
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import com.teamshryne.mediyo.data.cache.StreamDataSource
 import com.teamshryne.mediyo.data.playback.NewPipeResolver
 import com.teamshryne.mediyo.data.playback.PlaybackPrefs
 import com.teamshryne.mediyo.data.sleeptimer.SleepTimerManager
@@ -97,6 +99,7 @@ data class PlaybackSettings(
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     private val resolver: NewPipeResolver,
+    private val streams: StreamDataSource,
     private val queueManager: PlaybackQueueManager,
     private val historyRepo: HistoryRepository,
     private val likeRepo: LikeRepository,
@@ -124,6 +127,8 @@ class PlayerViewModel @Inject constructor(
     private var resolveJob: Job? = null
     private var pendingLoadJob: Job? = null
     private var prefetchJob: Job? = null
+    /** VideoId that already used its one expiry-retry; cleared on track change. */
+    private var expiryRetryVid: String? = null
     @Volatile private var resolving = false
     private var tickerJob: Job? = null
     private var lastHistoryVideoId: String? = null
@@ -446,6 +451,15 @@ class PlayerViewModel @Inject constructor(
                 viewModelScope.launch {
                     delay(300)
                     if (erroredVid != null && _state.value.videoId != erroredVid) return@launch
+                    // Expired signed URL (403/410/416): remembered URLs are dead,
+                    // but cached bytes may still play. Drop the URLs and retry the
+                    // same track once before giving up and skipping.
+                    if (erroredVid != null && error.isExpiredStreamError() && expiryRetryVid != erroredVid) {
+                        expiryRetryVid = erroredVid
+                        streams.invalidateUrl(erroredVid)
+                        requestLoad(immediate = true)
+                        return@launch
+                    }
                     next(immediate = true)
                 }
             }
@@ -455,6 +469,7 @@ class PlayerViewModel @Inject constructor(
     private fun loadCurrent() {
         val cur = queueManager.currentState().current ?: return
         val vid = cur.videoId ?: return
+        if (expiryRetryVid != null && expiryRetryVid != vid) expiryRetryVid = null
         val origin = queueManager.currentState().origin
         // Finalize the outgoing track's session BEFORE swapping the media item —
         // after setMediaItem the player position resets and the progress is lost.
@@ -473,7 +488,9 @@ class PlayerViewModel @Inject constructor(
             .setArtworkUri(cur.artworkUrl?.let(Uri::parse))
             .build()
         val placeholderUri = Uri.parse("mediyo://$vid")
-        val mediaItem = MediaItem.Builder().setUri(placeholderUri).setMediaId(vid).setMediaMetadata(metadata).build()
+        // customCacheKey pins every cache tier to the videoId (stable for
+        // years) instead of the signed stream URL (dead in hours).
+        val mediaItem = MediaItem.Builder().setUri(placeholderUri).setMediaId(vid).setCustomCacheKey(vid).setMediaMetadata(metadata).build()
 
         _state.value = _state.value.copy(
             videoId = vid,
@@ -772,4 +789,16 @@ class PlayerViewModel @Inject constructor(
     private fun FfiSearchResult.toEntry() = QueueEntry(
         videoId ?: "", title, artists.joinToString(), thumbnails.bestThumbUrl(), artistIds
     )
+}
+
+/** 403/410/416 from googlevideo = the signed URL died, not the song. */
+private fun androidx.media3.common.PlaybackException.isExpiredStreamError(): Boolean {
+    var current: Throwable? = this.cause
+    while (current != null) {
+        if (current is HttpDataSource.InvalidResponseCodeException &&
+            (current.responseCode == 403 || current.responseCode == 410 || current.responseCode == 416)
+        ) return true
+        current = current.cause
+    }
+    return false
 }
