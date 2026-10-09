@@ -30,6 +30,7 @@ import javax.inject.Singleton
  * directly. Completed downloads are removed from the song cache so only one
  * copy ever lives on disk.
  */
+@OptIn(UnstableApi::class)
 @Singleton
 class StreamDataSource @Inject constructor(
     @ApplicationContext private val ctx: Context,

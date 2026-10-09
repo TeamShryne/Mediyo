@@ -59,6 +59,7 @@ object AppModule {
             .fallbackToDestructiveMigration()
             .build()
 
+    @OptIn(UnstableApi::class)
     @Provides @Singleton
     fun provideDatabaseProvider(@ApplicationContext ctx: Context): DatabaseProvider =
         StandaloneDatabaseProvider(ctx)
@@ -67,6 +68,7 @@ object AppModule {
      * Transient song cache: every streamed byte lands here, oldest evicted
      * first. Sized once from prefs — size-slider changes apply on next start.
      */
+    @OptIn(UnstableApi::class)
     @Provides @Singleton @PlayerCache
     fun providePlayerCache(
         @ApplicationContext ctx: Context,
@@ -83,6 +85,7 @@ object AppModule {
     }
 
     /** Permanent offline store: only the download manager writes here, never evicted. */
+    @OptIn(UnstableApi::class)
     @Provides @Singleton @DownloadCache
     fun provideDownloadCache(
         @ApplicationContext ctx: Context,

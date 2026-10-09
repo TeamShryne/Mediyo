@@ -2,6 +2,8 @@ package com.teamshryne.mediyo.feature.downloads
 
 import androidx.media3.datasource.cache.Cache
 import androidx.media3.exoplayer.offline.Download
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 import com.teamshryne.mediyo.data.cache.DownloadCache
 import com.teamshryne.mediyo.data.cache.PlayerCache
 import com.teamshryne.mediyo.data.cache.StoragePrefs
@@ -35,6 +37,7 @@ data class CacheSizes(val songBytes: Long = 0L, val downloadBytes: Long = 0L)
  * list, storage sizes and all user actions. Size reads are refresh-driven
  * (cheap `cacheSpace` calls, never a flow) so the UI only polls while open.
  */
+@OptIn(UnstableApi::class)
 @HiltViewModel
 class DownloadVm @Inject constructor(
     private val downloads: DownloadUtil,
