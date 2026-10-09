@@ -8,8 +8,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.exoplayer.ExoPlayer
 import com.teamshryne.mediyo.data.playback.NewPipeResolver
+import com.teamshryne.mediyo.data.playback.PlaybackPrefs
 import com.teamshryne.mediyo.data.sleeptimer.SleepTimerManager
 import com.teamshryne.mediyo.domain.model.PlayOrigin
 import com.teamshryne.mediyo.domain.model.Track
@@ -75,6 +77,23 @@ data class QueueEntry(
     val artistIds: List<String> = emptyList()
 )
 
+/**
+ * Playback-rate state (ExoPlayer PlaybackParameters).
+ * [pitch] is the user's chosen pitch; the player receives [effectivePitch],
+ * which is pinned to 1.0 while [preservePitch] is on so speed changes keep
+ * voices natural. Applies per player (survives track changes) and persists.
+ */
+data class PlaybackSettings(
+    val speed: Float = 1f,
+    val pitch: Float = 1f,
+    val preservePitch: Boolean = true
+) {
+    val effectivePitch: Float get() = if (preservePitch) 1f else pitch
+    /** Tolerance-based: slider-snapped 1.0 can be off by an ulp. */
+    val isDefault: Boolean get() =
+        kotlin.math.abs(speed - 1f) < 0.005f && (preservePitch || kotlin.math.abs(pitch - 1f) < 0.005f)
+}
+
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     private val resolver: NewPipeResolver,
@@ -84,6 +103,7 @@ class PlayerViewModel @Inject constructor(
     private val events: UserEventRepository,
     private val hub: PlaybackSessionHub,
     private val player: ExoPlayer,
+    private val playbackPrefs: PlaybackPrefs,
     private val sleepManager: SleepTimerManager,
     private val widgetSync: WidgetSync,
     private val widgetArtCache: WidgetArtworkCache,
@@ -94,6 +114,12 @@ class PlayerViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(PlayerState())
     val state: StateFlow<PlayerState> = _state
+
+    private val _playback = MutableStateFlow(PlaybackSettings())
+    /** Live speed/pitch state — collect in UI for labels and sliders. */
+    val playback: StateFlow<PlaybackSettings> = _playback
+    /** True while we are pushing our own params so the listener doesn't echo them back. */
+    @Volatile private var applyingParams = false
 
     private var resolveJob: Job? = null
     private var pendingLoadJob: Job? = null
@@ -107,6 +133,8 @@ class PlayerViewModel @Inject constructor(
         startTicker()
         setupAutoNext()
         setupSessionBridge()
+        setupPlaybackListener()
+        restorePlaybackParams()
         viewModelScope.launch {
             queueManager.state.collect { qs ->
                 val cur = qs.current
@@ -162,6 +190,133 @@ class PlayerViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    // ── Playback speed & pitch ────────────────────────────────────────
+
+    private fun restorePlaybackParams() {
+        viewModelScope.launch {
+            try {
+                val saved = playbackPrefs.load()
+                _playback.value = PlaybackSettings(
+                    speed = saved.speed,
+                    pitch = saved.pitch,
+                    preservePitch = saved.preservePitch
+                )
+                applyPlaybackParams()
+            } catch (_: Throwable) {
+                // DataStore unreadable (first run / corruption) — stay at 1.0×
+                applyPlaybackParams()
+            }
+        }
+    }
+
+    /**
+     * Single choke point for pushing [PlaybackSettings] to ExoPlayer.
+     * Always uses setPlaybackParameters (never setPlaybackSpeed) so speed
+     * and pitch can't clobber each other, and clamps so a corrupt pref
+     * can never throw the player into a bad state.
+     */
+    private fun applyPlaybackParams() {
+        val s = _playback.value
+        val speed = PlaybackPrefs.clampSpeed(s.speed)
+        val pitch = PlaybackPrefs.clampPitch(s.effectivePitch)
+        applyingParams = true
+        try {
+            player.setPlaybackParameters(PlaybackParameters(speed, pitch))
+        } catch (_: Throwable) {
+        } finally {
+            applyingParams = false
+        }
+    }
+
+    /**
+     * Adopt rate changes that came from outside our UI (Android Auto,
+     *assistant, headset long-press) so the sliders never show a stale value.
+     */
+    private fun setupPlaybackListener() {
+        player.addListener(object : androidx.media3.common.Player.Listener {
+            override fun onPlaybackParametersChanged(playbackParameters: PlaybackParameters) {
+                if (applyingParams) return
+                val extSpeed = PlaybackPrefs.clampSpeed(playbackParameters.speed)
+                val extPitch = PlaybackPrefs.clampPitch(playbackParameters.pitch)
+                val cur = _playback.value
+                // External source pins pitch to 1.0 → treat as preserve-on.
+                val extPreserve = extPitch == 1f
+                if (extSpeed != cur.speed || extPitch != cur.effectivePitch) {
+                    _playback.value = cur.copy(
+                        speed = extSpeed,
+                        pitch = if (extPreserve && !cur.preservePitch) cur.pitch else extPitch,
+                        preservePitch = if (extPreserve) true else cur.preservePitch
+                    )
+                    viewModelScope.launch {
+                        try {
+                            playbackPrefs.setAll(_playback.value.speed, _playback.value.pitch, _playback.value.preservePitch)
+                        } catch (_: Throwable) {}
+                    }
+                }
+            }
+        })
+    }
+
+    /**
+     * Live preview during a slider drag: applies instantly for feedback but
+     * doesn't touch DataStore, so a drag burst can't thrash disk I/O.
+     */
+    fun previewSpeed(speed: Float) {
+        _playback.value = _playback.value.copy(speed = PlaybackPrefs.clampSpeed(speed))
+        applyPlaybackParams()
+    }
+
+    fun previewPitch(pitch: Float) {
+        val p = PlaybackPrefs.clampPitch(pitch)
+        _playback.value = _playback.value.copy(pitch = p, preservePitch = false)
+        applyPlaybackParams()
+    }
+
+    /** Committed on drag-release / chip tap: applies + persists + logs. */
+    fun setSpeed(speed: Float) {
+        val v = PlaybackPrefs.clampSpeed(speed)
+        _playback.value = _playback.value.copy(speed = v)
+        applyPlaybackParams()
+        viewModelScope.launch {
+            try { playbackPrefs.setSpeed(v) } catch (_: Throwable) {}
+            try { events.log(UserEventTypes.PLAYBACK_RATE, videoId = _state.value.videoId, meta = describePlayback()) } catch (_: Throwable) {}
+        }
+    }
+
+    fun setPitch(pitch: Float) {
+        val v = PlaybackPrefs.clampPitch(pitch)
+        // A chosen pitch only means something once it can detune.
+        _playback.value = _playback.value.copy(pitch = v, preservePitch = false)
+        applyPlaybackParams()
+        viewModelScope.launch {
+            try { playbackPrefs.setPitch(v) } catch (_: Throwable) {}
+            try { events.log(UserEventTypes.PLAYBACK_RATE, videoId = _state.value.videoId, meta = describePlayback()) } catch (_: Throwable) {}
+        }
+    }
+
+    fun setPreservePitch(preserve: Boolean) {
+        _playback.value = _playback.value.copy(preservePitch = preserve)
+        applyPlaybackParams()
+        viewModelScope.launch {
+            try { playbackPrefs.setPreservePitch(preserve) } catch (_: Throwable) {}
+            try { events.log(UserEventTypes.PLAYBACK_RATE, videoId = _state.value.videoId, meta = describePlayback()) } catch (_: Throwable) {}
+        }
+    }
+
+    fun resetPlaybackRate() {
+        _playback.value = PlaybackSettings()
+        applyPlaybackParams()
+        viewModelScope.launch {
+            try { playbackPrefs.reset() } catch (_: Throwable) {}
+            try { events.log(UserEventTypes.PLAYBACK_RATE, videoId = _state.value.videoId, meta = "reset") } catch (_: Throwable) {}
+        }
+    }
+
+    private fun describePlayback(): String {
+        val s = _playback.value
+        return "speed=${s.speed} pitch=${s.effectivePitch} preserve=${s.preservePitch}"
     }
 
     private fun pushSessionSnapshot() {
@@ -347,6 +502,7 @@ class PlayerViewModel @Inject constructor(
             // by ResolvingDataSource on the loader thread.
             player.setMediaItem(mediaItem)
             player.prepare()
+            applyPlaybackParams()
             player.play()
             _state.value = _state.value.copy(isPlaying = true, isBuffering = false)
             maybeRecordHistory(cur, origin)
@@ -523,7 +679,7 @@ class PlayerViewModel @Inject constructor(
         if (s.current != null && _state.value.repeatOne) {
             // repeat same — ensure FGS before resuming, otherwise ghost playback without notification
             ensureServiceForPlayback()
-            player.seekTo(0); player.play()
+            player.seekTo(0); applyPlaybackParams(); player.play()
             _state.value = _state.value.copy(isPlaying = true)
             pushSessionSnapshot()
             return
@@ -562,6 +718,7 @@ class PlayerViewModel @Inject constructor(
         } else {
             // resuming from pause — must be foreground or notification disappears
             ensureServiceForPlayback()
+            applyPlaybackParams()
             player.play(); _state.value = _state.value.copy(isPlaying = true)
         }
         pushSessionSnapshot()
