@@ -483,7 +483,7 @@ private fun DockedTabBar(tabs: List<Tab>, currentRoute: String?, onSelect: (Tab)
     ) {
         Surface(
             shape = CircleShape,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.9f),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
             shadowElevation = 10.dp,
             tonalElevation = 0.dp,
             modifier = Modifier.padding(vertical = 8.dp)
@@ -530,7 +530,7 @@ private fun CapsuleTabBar(tabs: List<Tab>, currentRoute: String?, onSelect: (Tab
     ) {
         Surface(
             shape = CircleShape,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.9f),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
             tonalElevation = 0.dp,
             modifier = Modifier.fillMaxWidth()
         ) {

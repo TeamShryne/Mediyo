@@ -238,7 +238,7 @@ class SearchVm @Inject constructor(
     }
 }
 
-/** Pinned field block: OutlinedTextField (~56dp) plus breathing room. */
+/** Search field block: OutlinedTextField (~56dp) plus breathing room. Shared by the sticky header and the overlays docked to it. */
 private val FIELD_BLOCK_HEIGHT = 68.dp
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -282,9 +282,10 @@ fun SearchScreen(
         state = listState,
         modifier = Modifier.fillMaxSize(),
         // Outer Scaffold padding already clears the status bar — 4dp only.
-        // The pinned field owns the space above the list, so results scroll
-        // *under* it instead of the whole list jumping when it appears.
-        contentPadding = PaddingValues(top = FIELD_BLOCK_HEIGHT + 4.dp, bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp),
+        // Title first, field second (sticky): the field sticks once the
+        // title scrolls away, and only the fixed-height field lives in the
+        // sticky block, so the suggestion overlay can never reflow the list.
+        contentPadding = PaddingValues(top = 4.dp, bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         item(key = "search_header") {
@@ -294,6 +295,42 @@ fun SearchScreen(
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(horizontal = 20.dp)
             )
+        }
+
+        stickyHeader(key = "search_bar") {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.background)
+                    .padding(horizontal = 20.dp)
+                    .height(FIELD_BLOCK_HEIGHT),
+                verticalArrangement = Arrangement.Center
+            ) {
+                OutlinedTextField(
+                    value = vm.query,
+                    onValueChange = { vm.onQueryChange(it) },
+                    placeholder = { Text("Songs, artists, albums…", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    leadingIcon = { Icon(Icons.Filled.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    trailingIcon = if (vm.query.isNotEmpty()) {
+                        {
+                            IconButton(onClick = { vm.onQueryChange("") }) {
+                                Icon(Icons.Filled.Close, contentDescription = "Clear", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    } else null,
+                    singleLine = true,
+                    shape = RoundedCornerShape(28.dp),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { vm.submit() }),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
 
         // Filter chips scroll with the results: a pinned chip row would change
@@ -460,48 +497,15 @@ fun SearchScreen(
         item(key = "search_footer") { LoadingFooter(vm.loadingMore && !vm.loading) }
     }
 
-    // ── Pinned search field ────────────────────────────────────────────
-    // Pinned rather than sticky-in-list: a sticky field re-measures whenever
-    // the suggestion panel changes the header height, which is what made
-    // suggestions feel unreliable (list jumping under the finger).
+    // ── Sticky-field divider + suggestion overlay ────────────────────────
+    // The field lives in the sticky header above (fixed height, so it can
+    // never reflow the list); these overlays dock to that same height.
+    // At list-top the panel briefly covers the title — standard dropdown
+    // behaviour; once scrolled it docks exactly under the stuck field.
     val scrolled by remember {
         derivedStateOf {
             listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 8
         }
-    }
-    Column(
-        Modifier
-            .align(Alignment.TopCenter)
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 20.dp)
-            .height(FIELD_BLOCK_HEIGHT),
-        verticalArrangement = Arrangement.Center
-    ) {
-        OutlinedTextField(
-            value = vm.query,
-            onValueChange = { vm.onQueryChange(it) },
-            placeholder = { Text("Songs, artists, albums…", color = MaterialTheme.colorScheme.onSurfaceVariant) },
-            leadingIcon = { Icon(Icons.Filled.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-            trailingIcon = if (vm.query.isNotEmpty()) {
-                {
-                    IconButton(onClick = { vm.onQueryChange("") }) {
-                        Icon(Icons.Filled.Close, contentDescription = "Clear", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            } else null,
-            singleLine = true,
-            shape = RoundedCornerShape(28.dp),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { vm.submit() }),
-            colors = OutlinedTextFieldDefaults.colors(
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                unfocusedBorderColor = Color.Transparent,
-                focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
-            ),
-            modifier = Modifier.fillMaxWidth()
-        )
     }
     // Divider only once content is sliding underneath, so the bar doesn't
     // draw a permanent line over the idle state.
