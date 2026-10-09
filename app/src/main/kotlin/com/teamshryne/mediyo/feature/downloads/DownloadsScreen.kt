@@ -1,3 +1,5 @@
+@file:OptIn(androidx.media3.common.util.UnstableApi::class)
+
 package com.teamshryne.mediyo.feature.downloads
 
 import androidx.compose.foundation.clickable
