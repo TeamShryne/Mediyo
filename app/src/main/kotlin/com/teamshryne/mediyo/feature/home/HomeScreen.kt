@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
@@ -265,8 +266,12 @@ fun HomeScreen(
         daypartTracks = emptyList()
     }
 
+    // Every content section counts: otherwise a user whose history only
+    // feeds some shelves sees "Nothing here yet" above real content.
     val hasAnything = quickPicks.isNotEmpty() || weekTop.isNotEmpty() || saved.isNotEmpty() ||
-        recentSearches.isNotEmpty() || mixes.isNotEmpty() || episodes.isNotEmpty()
+        recentSearches.isNotEmpty() || mixes.isNotEmpty() || episodes.isNotEmpty() ||
+        onRepeat.isNotEmpty() || rediscover.isNotEmpty() || topArtists.isNotEmpty() ||
+        finishAlbums.isNotEmpty() || daypartTracks.isNotEmpty()
 
     LazyColumn(
         modifier = Modifier.fillMaxWidth(),
@@ -337,7 +342,7 @@ fun HomeScreen(
                             contentPadding = PaddingValues(horizontal = 20.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            items(mixes, key = { "mix_${it.artistName}_${mixes.indexOf(it)}" }) { m ->
+                            itemsIndexed(mixes, key = { i, m -> "mix_${m.artistName}_$i" }) { _, m ->
                                 MixCard(m) { vm.playMix(m, player) }
                             }
                         }
@@ -362,7 +367,7 @@ fun HomeScreen(
                             contentPadding = PaddingValues(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            items(onRepeat, key = { it.uniqueKey() }) { t ->
+                            itemsIndexed(onRepeat, key = { i, t -> "${t.uniqueKey()}_$i" }) { _, t ->
                                 MediaCard(
                                     title = t.title,
                                     subtitle = t.artists.joinToString(),
@@ -428,7 +433,7 @@ fun HomeScreen(
                             contentPadding = PaddingValues(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            items(rediscover, key = { it.uniqueKey() }) { t ->
+                            itemsIndexed(rediscover, key = { i, t -> "${t.uniqueKey()}_$i" }) { _, t ->
                                 MediaCard(
                                     title = t.title,
                                     subtitle = t.artists.joinToString(),
@@ -448,7 +453,7 @@ fun HomeScreen(
                             contentPadding = PaddingValues(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            items(daypartTracks, key = { it.uniqueKey() }) { t ->
+                            itemsIndexed(daypartTracks, key = { i, t -> "${t.uniqueKey()}_$i" }) { _, t ->
                                 MediaCard(
                                     title = t.title,
                                     subtitle = t.artists.joinToString(),
@@ -492,7 +497,7 @@ fun HomeScreen(
                             contentPadding = PaddingValues(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            items(shelf.tracks, key = { it.uniqueKey() }) { t ->
+                            itemsIndexed(shelf.tracks, key = { i, t -> "${t.uniqueKey()}_$i" }) { _, t ->
                                 MediaCard(
                                     title = t.title,
                                     subtitle = t.artists.joinToString(),

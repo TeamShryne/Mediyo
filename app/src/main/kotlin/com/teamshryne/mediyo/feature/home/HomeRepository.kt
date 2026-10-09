@@ -187,7 +187,10 @@ class HomeRepository @Inject constructor(
                 s.track.artists.any { it.trim().equals(a.name.trim(), ignoreCase = true) }
             }?.track ?: return@mapNotNull null
             HomeMix(a.name, seed.artworkUrl, seed)
-        }
+            // One mix per artist name: id-less history rows can seat the same
+            // artist twice in the top-3 (id entry + "n:name" entry), which
+            // used to emit two identical cards — and identical Lazy keys.
+        }.distinctBy { it.artistName.trim().lowercase() }
     }
 
     /**
