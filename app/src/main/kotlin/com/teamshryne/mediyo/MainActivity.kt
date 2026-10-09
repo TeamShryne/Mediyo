@@ -107,6 +107,7 @@ import com.teamshryne.mediyo.feature.settings.LyricsSettingsScreen
 import com.teamshryne.mediyo.feature.settings.SettingsScreen
 import com.teamshryne.mediyo.feature.update.UpdateDialog
 import com.teamshryne.mediyo.feature.update.UpdateViewModel
+import com.teamshryne.mediyo.feature.equalizer.EqualizerScreen
 import com.teamshryne.mediyo.core.design.navigateArtist
 import com.teamshryne.mediyo.core.design.navigateChannel
 import com.teamshryne.mediyo.core.design.navigatePodcast
@@ -295,6 +296,7 @@ private fun AppShell() {
                     CommentsBottomSheet(videoId = vid, onDismiss = { nav.popBackStack() })
                 }
                 composable("settings/appearance") { AppearanceScreen(nav) }
+                composable("settings/equalizer") { EqualizerScreen(nav) }
                 composable("settings/appearance/tabs") { TabBarStyleScreen(nav) }
                 composable("settings/appearance/player") { PlayerBackgroundScreen(nav) }
                 }

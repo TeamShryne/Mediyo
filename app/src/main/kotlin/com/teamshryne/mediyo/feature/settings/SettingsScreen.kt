@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.SystemUpdate
@@ -49,6 +50,13 @@ private val hubEntries = listOf(
         route = "settings/appearance"
     ),
     SettingsEntry(
+        id = "equalizer",
+        title = "Equalizer",
+        subtitle = "Bands & presets",
+        icon = Icons.Filled.GraphicEq,
+        route = "settings/equalizer"
+    ),
+    SettingsEntry(
         id = "lyrics",
         title = "Lyrics",
         subtitle = "Sources & priority",
@@ -69,10 +77,10 @@ fun SettingsScreen(
     nav: NavController? = null,
 ) {
     // Updater is release-only — hide its entry in debug builds.
-    val personalize = remember { hubEntries.filter { it.id == "appearance" || it.id == "lyrics" } }
+    val personalize = remember { hubEntries.filter { it.id == "appearance" || it.id == "lyrics" || it.id == "equalizer" } }
     val about = remember {
         hubEntries.filterNot { it.id == "updates" && BuildConfig.DEBUG }
-            .filter { it.id != "appearance" && it.id != "lyrics" }
+            .filter { it.id != "appearance" && it.id != "lyrics" && it.id != "equalizer" }
     }
     LazyColumn(
         Modifier.fillMaxSize(),
