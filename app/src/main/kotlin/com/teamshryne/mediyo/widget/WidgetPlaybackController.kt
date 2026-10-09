@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import com.teamshryne.mediyo.domain.model.PlayOrigin
 import com.teamshryne.mediyo.domain.model.Track
@@ -55,6 +56,7 @@ class WidgetPlaybackController @Inject constructor(
     }
 
     /** Plays [track] and records history — the cold-start path bypasses PlayerViewModel. */
+    @OptIn(UnstableApi::class)
     private suspend fun loadTrack(track: Track, origin: PlayOrigin, shuffled: Boolean = false) {
         ensureService()
         val vid = track.videoId ?: return

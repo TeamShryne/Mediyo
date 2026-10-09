@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackParameters
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import com.teamshryne.mediyo.data.cache.StreamDataSource
@@ -466,6 +467,7 @@ class PlayerViewModel @Inject constructor(
         })
     }
 
+    @OptIn(UnstableApi::class)
     private fun loadCurrent() {
         val cur = queueManager.currentState().current ?: return
         val vid = cur.videoId ?: return
