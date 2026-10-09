@@ -1,6 +1,5 @@
 package com.teamshryne.mediyo.feature.downloads
 
-import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
