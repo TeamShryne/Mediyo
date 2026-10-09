@@ -59,6 +59,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -197,7 +198,12 @@ private fun AppShell() {
     // Space the floating pill needs: measured live, 82dp estimate on the
     // very first frame so content never jumps once measured.
     val pillReserve = (if (pillH > 0) with(density) { pillH.toDp() } else 82.dp) + 8.dp
+    // Dismissing the keyboard here (not just navigating) matters: with the
+    // keyboard up, the first tap outside the field is eaten to close it, so
+    // without this the tab press would silently do nothing.
+    val focusManager = LocalFocusManager.current
     fun selectTab(t: Tab) {
+        focusManager.clearFocus()
         nav.navigate(t.route) {
             launchSingleTop = true
             popUpTo(nav.graph.findStartDestination().id) { saveState = true }
@@ -206,16 +212,9 @@ private fun AppShell() {
     }
 
     val bg = MaterialTheme.colorScheme.background
-    // Scrims stay transparent through the first half, ramping to opaque
-    // only near the bar — content shows through the upper area.
-    val tabScrim = remember(bg) {
-        Brush.verticalGradient(
-            0f to Color.Transparent,
-            0.7f to Color.Transparent,
-            0.92f to bg.copy(alpha = 0.55f),
-            1f to bg
-        )
-    }
+    // The tab bar floats with no scrim: any gradient behind it reads as a
+    // tinted halo around the pill, so the overlay stays fully transparent
+    // and page content shows through untouched.
     val pillScrim = remember {
         Brush.verticalGradient(
             0f to Color.Transparent,
@@ -303,18 +302,11 @@ private fun AppShell() {
             }
         }
 
-        // Tab bar overlay — gradient scrim fading transparent → opaque
-        // top to bottom, so page content stays visible above the bar
-        // (including the empty area around the dock style).
+        // Tab bar overlay — fully transparent surroundings, the pill floats
+        // alone with no scrim halo (page content stays visible around it).
         if (showTabBar) {
             Box(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                    .background(tabScrim)
-                    // navigationBars, NOT safeDrawing: safeDrawing includes
-                    // the IME, which would lift the bar above the keyboard.
-                    // Chrome stays anchored at the physical bottom (covered
-                    // by the keyboard); scrollable lists clear the keyboard
-                    // separately via overlayBottom (see sysBottom).
                     .windowInsetsPadding(
                         WindowInsets.navigationBars.only(WindowInsetsSides.Bottom)
                     )
