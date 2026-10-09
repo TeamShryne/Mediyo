@@ -1,6 +1,5 @@
 package com.teamshryne.mediyo.feature.downloads
 
-import androidx.media3.common.util.UnstableApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -52,7 +51,6 @@ import com.teamshryne.mediyo.feature.player.PlayerViewModel
  * finished one. Failed rows tap-to-retry via the overflow row below them.
  */
 @OptIn(ExperimentalMaterial3Api::class)
-@OptIn(UnstableApi::class)
 @Composable
 fun DownloadsScreen(
     nav: androidx.navigation.NavController? = null,
@@ -60,7 +58,7 @@ fun DownloadsScreen(
     vm: DownloadVm = hiltViewModel()
 ) {
     val tracks by vm.tracks.collectAsState(initial = emptyList())
-    val states by vm.downloadMap.collectAsState()
+    val states by vm.uiStates.collectAsState()
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -120,10 +118,9 @@ fun DownloadsScreen(
                 )
             ) {
                 items(tracks, key = { it.videoId }) { entity ->
-                    val dl = states[entity.videoId]
                     DownloadRow(
                         entity = entity,
-                        download = dl,
+                        state = states[entity.videoId] ?: DownloadUiState.Completed,
                         onPlay = {
                             player.playTrack(
                                 Track(
@@ -152,35 +149,24 @@ fun DownloadsScreen(
     }
 }
 
-@OptIn(UnstableApi::class)
 @Composable
 private fun DownloadRow(
     entity: DownloadedTrackEntity,
-    download: androidx.media3.exoplayer.offline.Download?,
+    state: DownloadUiState,
     onPlay: () -> Unit,
     onCancelOrRemove: () -> Unit,
     onRetry: () -> Unit
 ) {
-    val statusText = when {
-        download == null -> "Downloaded"
-        download.state == androidx.media3.exoplayer.offline.Download.STATE_DOWNLOADING -> {
-            val total = download.contentLength
-            if (total > 0) {
-                "Downloading • ${(download.getBytesDownloaded() * 100 / total).toInt().coerceIn(0, 100)}%"
-            } else "Downloading…"
-        }
-        download.state == androidx.media3.exoplayer.offline.Download.STATE_QUEUED ||
-            download.state == androidx.media3.exoplayer.offline.Download.STATE_RESTARTING ->
-            "Queued"
-        download.state == androidx.media3.exoplayer.offline.Download.STATE_FAILED ->
-            "Failed • tap to retry"
-        else -> "Downloaded"
+    val statusText = when (state) {
+        DownloadUiState.Completed -> "Downloaded"
+        is DownloadUiState.Downloading ->
+            if (state.percent >= 0) "Downloading • ${state.percent}%" else "Downloading…"
+        DownloadUiState.Queued -> "Queued"
+        DownloadUiState.Failed -> "Failed • tap to retry"
+        DownloadUiState.NotDownloaded -> "Downloaded"
     }
-    val failed = download?.state == androidx.media3.exoplayer.offline.Download.STATE_FAILED
-    val inFlight = download != null &&
-        (download.state == androidx.media3.exoplayer.offline.Download.STATE_DOWNLOADING ||
-            download.state == androidx.media3.exoplayer.offline.Download.STATE_QUEUED ||
-            download.state == androidx.media3.exoplayer.offline.Download.STATE_RESTARTING)
+    val failed = state is DownloadUiState.Failed
+    val inFlight = state is DownloadUiState.Downloading || state is DownloadUiState.Queued
 
     Row(
         Modifier.fillMaxWidth()
@@ -212,9 +198,10 @@ private fun DownloadRow(
             )
         }
         if (inFlight) {
-            if (download != null && download.contentLength > 0) {
+            val pct = (state as? DownloadUiState.Downloading)?.percent ?: -1
+            if (pct >= 0) {
                 CircularProgressIndicator(
-                    progress = { (download.getBytesDownloaded().toFloat() / download.contentLength).coerceIn(0f, 1f) },
+                    progress = { (pct / 100f).coerceIn(0f, 1f) },
                     modifier = Modifier.size(28.dp)
                 )
             } else {

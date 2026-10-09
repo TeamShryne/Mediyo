@@ -14,9 +14,12 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -58,6 +61,16 @@ class DownloadVm @Inject constructor(
         downloads.downloadState(videoId),
         downloads.isDownloaded(videoId)
     ) { dl, inDb -> dl.toUiState(inDb) }
+
+    /**
+     * Whole-library states for the Downloads screen: no media3 types leak
+     * into the UI, so screens need no UnstableApi opt-in (same pattern as
+     * the track-menu rows). DB truth isn't per-row here — anything with a
+     * live download entry counts as present; rows vanish with it.
+     */
+    val uiStates: StateFlow<Map<String, DownloadUiState>> = downloads.downloads
+        .map { m -> m.mapValues { (_, dl) -> dl.toUiState(inDb = dl.state != Download.STATE_REMOVING) } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     fun download(track: Track) = downloads.download(track)
     fun remove(videoId: String) = downloads.remove(videoId)
