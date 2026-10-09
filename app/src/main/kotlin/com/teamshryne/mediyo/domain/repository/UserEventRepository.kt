@@ -35,6 +35,7 @@ object UserEventTypes {
     const val SHUFFLE = "shuffle"
     const val REPEAT = "repeat"
     const val SEEK = "seek"
+    const val PLAYBACK_RATE = "playback_rate"
     const val SLEEP_SET = "sleep_set"
     const val SLEEP_END_OF_TRACK = "sleep_end_of_track"
     const val SLEEP_END_OF_QUEUE = "sleep_end_of_queue"

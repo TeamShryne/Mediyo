@@ -42,7 +42,10 @@ fun TrackMenuSheet(
     onRemove: (() -> Unit)? = null,
     onShare: (() -> Unit)? = null,
     onRefetchLyrics: (() -> Unit)? = null,
-    onLyricsSettings: (() -> Unit)? = null
+    onLyricsSettings: (() -> Unit)? = null,
+    onPlaybackSettings: (() -> Unit)? = null,
+    /** e.g. "1.25× · +3 st" — shown beside the entry only when off-normal. */
+    playbackLabel: String? = null
 ) {
     if (!show) return
     // One entry point for artists; multi-artist tracks swap the sheet
@@ -90,6 +93,13 @@ fun TrackMenuSheet(
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
             }
             MenuItem(icon = if (isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder, label = if (isLiked) "Remove from Liked" else "Add to Liked", onClick = { onDismiss(); onLike() })
+            if (onPlaybackSettings != null) {
+                MenuItem(
+                    icon = Icons.Filled.Speed,
+                    label = if (playbackLabel != null) "Playback speed & pitch • $playbackLabel" else "Playback speed & pitch",
+                    onClick = { onDismiss(); onPlaybackSettings() }
+                )
+            }
             MenuItem(icon = Icons.Filled.PlaylistAdd, label = "Add to playlist", onClick = { onDismiss(); onAddToPlaylist() })
             MenuItem(icon = Icons.Filled.QueueMusic, label = "Play next", onClick = { onDismiss(); onPlayNext() })
             MenuItem(icon = Icons.Filled.PlaylistPlay, label = "Add to queue", onClick = { onDismiss(); onAddToQueue() })

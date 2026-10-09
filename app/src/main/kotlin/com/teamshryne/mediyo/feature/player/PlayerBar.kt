@@ -177,6 +177,10 @@ fun FullPlayer(
     var bgReadyUrl by remember { mutableStateOf<String?>(null) }
     var showAddSheet by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
+    var showPlaybackSheet by remember { mutableStateOf(false) }
+    val playbackState = playerVm?.playback?.collectAsState()
+    val playback = playbackState?.value ?: PlaybackSettings()
+    val playbackLabel = remember(playback) { playbackMenuLabel(playback) }
     val menuScope = rememberCoroutineScope()
     val menuVm: MediaMenuVm = hiltViewModel()
     // lyrics mode: toggles between player and synced lyrics experience
@@ -607,7 +611,23 @@ fun FullPlayer(
                 onComments = { onShowComments() },
                 onRefetchLyrics = if (isLyricsMode) {
                     { lyricsVm.refetch(trackForMenu, state.durationMs.takeIf { it > 0 }) }
-                } else null
+                } else null,
+                onPlaybackSettings = if (playerVm != null) {
+                    { showPlaybackSheet = true }
+                } else null,
+                playbackLabel = playbackLabel
+            )
+        }
+        if (showPlaybackSheet && playerVm != null) {
+            PlaybackSettingsSheet(
+                settings = playback,
+                onPreviewSpeed = playerVm::previewSpeed,
+                onCommitSpeed = playerVm::setSpeed,
+                onPreviewPitch = playerVm::previewPitch,
+                onCommitPitch = playerVm::setPitch,
+                onSetPreservePitch = playerVm::setPreservePitch,
+                onReset = playerVm::resetPlaybackRate,
+                onDismiss = { showPlaybackSheet = false }
             )
         }
     }
