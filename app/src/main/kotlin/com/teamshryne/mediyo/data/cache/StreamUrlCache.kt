@@ -1,7 +1,9 @@
 package com.teamshryne.mediyo.data.cache
 
 import android.net.Uri
+import androidx.annotation.OptIn
 import androidx.core.net.toUri
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSpec
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -68,6 +70,7 @@ class StreamUrlCache @Inject constructor(
 }
 
 /** Swap the placeholder/lazy URI for a resolved http(s) stream URL. */
+@OptIn(UnstableApi::class)
 internal fun DataSpec.withStreamUrl(url: String): DataSpec =
     withUri(url.toUri())
 
