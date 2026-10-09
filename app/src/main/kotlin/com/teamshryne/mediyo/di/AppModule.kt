@@ -5,10 +5,15 @@ import android.net.Uri
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.audio.AudioSink
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.ResolvingDataSource
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.audio.SilenceSkippingAudioProcessor
+import androidx.media3.exoplayer.audio.SonicAudioProcessor
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.room.Room
 import com.teamshryne.mediyo.data.cache.MediyoDb
@@ -65,7 +70,8 @@ object AppModule {
     @Singleton
     fun provideExoPlayer(
         @ApplicationContext ctx: Context,
-        resolver: NewPipeResolver
+        resolver: NewPipeResolver,
+        eqProcessor: com.teamshryne.mediyo.playback.EqAudioProcessor
     ): ExoPlayer {
         // Queue lives in ExoPlayer as MediaItems with placeholder URIs (mediyo://videoId).
         // The actual stream URL is resolved lazily on the loader thread when ExoPlayer
@@ -88,10 +94,34 @@ object AppModule {
             dataSpec.withUri(Uri.parse(url))
         }
         val mediaSourceFactory = DefaultMediaSourceFactory(resolvingFactory)
+        // In-pipeline EQ (MetroList-style): our own biquad processor rides in
+        // the audio sink ahead of the stock chain, so it behaves identically
+        // on every device with no system effect HAL involved. The trailing
+        // processors are ExoPlayer's own defaults (trimming, disabled
+        // silence-skipper, Sonic for speed/pitch) — playback behaviour is
+        // otherwise unchanged.
+        val renderersFactory = object : DefaultRenderersFactory(ctx) {
+            override fun buildAudioSink(
+                context: Context,
+                enableFloatOutput: Boolean,
+                enableAudioTrackPlaybackParams: Boolean
+            ): AudioSink = DefaultAudioSink.Builder(ctx)
+                .setEnableFloatOutput(enableFloatOutput)
+                .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                .setAudioProcessorChain(
+                    DefaultAudioSink.DefaultAudioProcessorChain(
+                        arrayOf(eqProcessor),
+                        SilenceSkippingAudioProcessor(2_000_000, 20_000, 256),
+                        SonicAudioProcessor()
+                    )
+                )
+                .build()
+        }
         // Audio focus + noisy handling — pauses for calls/other media and resumes
         // afterwards, and stops when headphones are unplugged.
         return ExoPlayer.Builder(ctx)
             .setMediaSourceFactory(mediaSourceFactory)
+            .setRenderersFactory(renderersFactory)
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .setAudioAttributes(
