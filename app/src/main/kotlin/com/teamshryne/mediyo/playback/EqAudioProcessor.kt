@@ -132,7 +132,7 @@ class EqAudioProcessor @Inject constructor() : BaseAudioProcessor() {
         }
     }
 
-    override fun onFlush(streamMetadata: AudioProcessor.StreamMetadata) {
+    override fun onFlush() {
         synchronized(this) { filters.forEach { it.reset() } }
     }
 
