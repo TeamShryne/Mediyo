@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -309,8 +310,13 @@ private fun AppShell() {
             Box(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                     .background(tabScrim)
+                    // navigationBars, NOT safeDrawing: safeDrawing includes
+                    // the IME, which would lift the bar above the keyboard.
+                    // Chrome stays anchored at the physical bottom (covered
+                    // by the keyboard); scrollable lists clear the keyboard
+                    // separately via overlayBottom (see sysBottom).
                     .windowInsetsPadding(
-                        WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)
+                        WindowInsets.navigationBars.only(WindowInsetsSides.Bottom)
                     )
             ) {
                 // 52dp fade zone above the bar: content shows through.
@@ -360,8 +366,10 @@ private fun AppShell() {
                 Box(
                     modifier = Modifier.fillMaxWidth()
                         .background(pillScrim)
+                        // Same as the tab bar above: navigationBars keeps the
+                        // pill pinned behind the keyboard instead of riding it.
                         .windowInsetsPadding(
-                            WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)
+                            WindowInsets.navigationBars.only(WindowInsetsSides.Bottom)
                         )
                         .padding(top = 40.dp)
                 ) {
