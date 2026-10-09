@@ -1,7 +1,7 @@
-@file:OptIn(androidx.media3.common.util.UnstableApi::class)
-
 package com.teamshryne.mediyo.feature.downloads
 
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -52,7 +52,7 @@ import com.teamshryne.mediyo.feature.player.PlayerViewModel
  * needed); the trailing button cancels an in-flight download or removes a
  * finished one. Failed rows tap-to-retry via the overflow row below them.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, UnstableApi::class)
 @Composable
 fun DownloadsScreen(
     nav: androidx.navigation.NavController? = null,
@@ -152,6 +152,7 @@ fun DownloadsScreen(
     }
 }
 
+@OptIn(UnstableApi::class)
 @Composable
 private fun DownloadRow(
     entity: DownloadedTrackEntity,
