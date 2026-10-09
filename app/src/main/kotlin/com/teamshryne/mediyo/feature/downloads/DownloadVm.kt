@@ -65,7 +65,7 @@ class DownloadVm @Inject constructor(
 
     fun toggle(track: Track) {
         val id = track.videoId ?: return
-        when (val s = downloads.downloads.value[id]?.toUiState(true)) {
+        when (downloads.downloads.value[id]?.toUiState(true)) {
             is DownloadUiState.Downloading, DownloadUiState.Queued -> downloads.remove(id)
             DownloadUiState.Completed -> downloads.remove(id)
             else -> downloads.download(track)

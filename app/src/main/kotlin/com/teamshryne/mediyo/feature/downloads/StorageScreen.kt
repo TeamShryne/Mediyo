@@ -136,7 +136,9 @@ fun StorageScreen(
                             modifier = Modifier.fillMaxWidth()
                         )
                         LinearProgressIndicator(
-                            progress = if (limitBytes > 0) (sizes.songBytes.toFloat() / limitBytes).coerceIn(0f, 1f) else 0f,
+                            progress = {
+                                if (limitBytes > 0) (sizes.songBytes.toFloat() / limitBytes).coerceIn(0f, 1f) else 0f
+                            },
                             modifier = Modifier.fillMaxWidth()
                         )
                         Text(
