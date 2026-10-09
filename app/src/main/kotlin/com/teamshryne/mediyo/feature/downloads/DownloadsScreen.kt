@@ -52,7 +52,7 @@ import com.teamshryne.mediyo.feature.player.PlayerViewModel
  * finished one. Failed rows tap-to-retry via the overflow row below them.
  */
 @OptIn(ExperimentalMaterial3Api::class)
-@UnstableApi
+@OptIn(UnstableApi::class)
 @Composable
 fun DownloadsScreen(
     nav: androidx.navigation.NavController? = null,
@@ -152,7 +152,7 @@ fun DownloadsScreen(
     }
 }
 
-@UnstableApi
+@OptIn(UnstableApi::class)
 @Composable
 private fun DownloadRow(
     entity: DownloadedTrackEntity,
