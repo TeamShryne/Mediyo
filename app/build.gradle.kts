@@ -6,6 +6,8 @@ plugins {
     alias(libs.plugins.hilt)
 }
 
+import java.io.ByteArrayOutputStream
+
 android {
     namespace = "com.teamshryne.mediyo"
     compileSdk = 34
@@ -91,7 +93,7 @@ android {
 
 /** Short HEAD SHA for BuildConfig. Safe fallback keeps configuration green without git. */
 fun gitSha(): String = try {
-    val out = java.io.ByteArrayOutputStream()
+    val out = ByteArrayOutputStream()
     project.exec {
         commandLine("git", "rev-parse", "--short", "HEAD")
         standardOutput = out
