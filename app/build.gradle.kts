@@ -40,6 +40,10 @@ android {
         targetSdk = 34
         versionCode = appVersionCode
         versionName = appVersionName
+        // Short commit SHA so any APK (especially CI artifacts) is
+        // identifiable in Settings. Never fails the build when git is
+        // unavailable (e.g. source export without .git).
+        buildConfigField("String", "GIT_SHA", "\"${gitSha()}\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
@@ -83,6 +87,18 @@ android {
     lint {
         disable += "NewApi"
     }
+}
+
+/** Short HEAD SHA for BuildConfig. Safe fallback keeps configuration green without git. */
+fun gitSha(): String = try {
+    val out = java.io.ByteArrayOutputStream()
+    project.exec {
+        commandLine("git", "rev-parse", "--short", "HEAD")
+        standardOutput = out
+    }
+    out.toString().trim().ifEmpty { "unknown" }
+} catch (_: Exception) {
+    "unknown"
 }
 
 dependencies {
