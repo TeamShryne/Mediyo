@@ -53,7 +53,6 @@ import com.teamshryne.mediyo.core.design.appendUnique
 import com.teamshryne.mediyo.core.design.shimmer
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import com.teamshryne.mediyo.domain.model.PlayOrigin
-import com.teamshryne.mediyo.domain.model.Track
 import com.teamshryne.mediyo.domain.model.bestThumbUrl
 import com.teamshryne.mediyo.domain.model.toDomainTrack
 import com.teamshryne.mediyo.domain.repository.UserEventRepository
@@ -250,8 +249,20 @@ fun SearchScreen(
 ) {
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
-    var menuItem by remember { mutableStateOf<FfiSearchResult?>(null) }
-    var showAddTrack by remember { mutableStateOf<Track?>(null) }
+    // Menus render at the root overlay (GlobalSheets) for full-window dim.
+    val sheets: com.teamshryne.mediyo.core.design.SheetHostVm = hiltViewModel()
+
+    fun openMenu(m: FfiSearchResult) = sheets.showMediaMenu(
+        com.teamshryne.mediyo.core.design.MediaMenuRequest(
+            item = m, nav = nav,
+            onPlayTracks = { tracks, idx, origin -> player.playTracks(tracks, idx, origin) },
+            onEnqueueTracks = { player.addToQueueList(it) },
+            onAddToPlaylist = { sheets.openAddToPlaylist(it) },
+            onPlayNext = { player.addNext(it) },
+            onAddToQueue = { player.addToQueue(it) },
+            onComments = { vid -> sheets.showComments(vid) }
+        )
+    )
 
     // Scrolling the results dismisses the suggestion panel — for the current
     // query only, so the next keystroke re-opens it naturally.
@@ -481,7 +492,7 @@ fun SearchScreen(
                             selectedLabel = vm.selectedLabel,
                             player = player,
                             onOpen = { open(it) },
-                            onMenu = { menuItem = it }
+                            onMenu = { openMenu(it) }
                         )
                     }
                 }
@@ -489,7 +500,7 @@ fun SearchScreen(
                     rest[i].let { it.videoId ?: it.browseId ?: it.playlistId }?.let { "r_${it}_$i" } ?: "r_$i"
                 }) { i ->
                     val r = rest[i]
-                    ResultRow(item = r, onClick = { open(r) }, onMenu = { menuItem = r })
+                    ResultRow(item = r, onClick = { open(r) }, onMenu = { openMenu(r) })
                 }
             }
         }
@@ -540,7 +551,7 @@ fun SearchScreen(
                     vm.runSearch(null)
                 },
                 onEntity = { open(it) },
-                onMenu = { menuItem = it }
+                onMenu = { openMenu(it) }
             )
         }
     }
@@ -551,19 +562,6 @@ fun SearchScreen(
         itemCount = vm.results.size + 2,
         enabled = vm.continuation != null && !vm.loading && !vm.loadingMore && vm.error == null
     ) { vm.loadMore() }
-
-    menuItem?.let { m ->
-        com.teamshryne.mediyo.core.design.MediaMenuSheet(
-            item = m, show = true, onDismiss = { menuItem = null }, nav = nav,
-            onPlayTracks = { tracks, idx, origin -> player.playTracks(tracks, idx, origin) },
-            onEnqueueTracks = { player.addToQueueList(it) },
-            onAddToPlaylist = { showAddTrack = it },
-            onPlayNext = { player.addNext(it) },
-            onAddToQueue = { player.addToQueue(it) },
-            onComments = { vid -> nav.navigate("comments/$vid") }
-        )
-    }
-    showAddTrack?.let { t -> com.teamshryne.mediyo.feature.playlist.AddToPlaylistSheet(track = t, onDismiss = { showAddTrack = null }) }
 }
 
 /**

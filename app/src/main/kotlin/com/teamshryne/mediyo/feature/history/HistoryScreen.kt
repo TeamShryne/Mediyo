@@ -17,7 +17,6 @@ import androidx.lifecycle.viewModelScope
 import com.teamshryne.mediyo.core.design.CollectionHero
 import com.teamshryne.mediyo.core.design.LocalTrackRow
 import com.teamshryne.mediyo.core.design.TrackOverflowIcon
-import com.teamshryne.mediyo.core.design.TrackMenuSheet
 import com.teamshryne.mediyo.data.local.HistoryEntryEntity
 import com.teamshryne.mediyo.domain.model.PlayOrigin
 import com.teamshryne.mediyo.domain.model.Track
@@ -28,7 +27,6 @@ import com.teamshryne.mediyo.domain.repository.LikeRepository
 import com.teamshryne.mediyo.core.design.navigateAlbum
 import com.teamshryne.mediyo.core.design.navigateArtist
 import com.teamshryne.mediyo.core.design.navigateChannel
-import com.teamshryne.mediyo.feature.playlist.AddToPlaylistSheet
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
@@ -57,11 +55,32 @@ fun HistoryScreen(
 ) {
     val history by vm.history.collectAsState()
     val playingId = player?.state?.collectAsState()?.value?.videoId
-    var menuTrack by remember { mutableStateOf<Track?>(null) }
-    var showAddSheet by remember { mutableStateOf<Track?>(null) }
+    // Sheets render at the root overlay (GlobalSheets) for full-window dim.
+    val sheets: com.teamshryne.mediyo.core.design.SheetHostVm = hiltViewModel()
     var showClear by remember { mutableStateOf(false) }
     val menuScope = rememberCoroutineScope()
     val menuVm: com.teamshryne.mediyo.core.design.MediaMenuVm = hiltViewModel()
+
+    fun openMenu(t: Track) = menuScope.launch {
+        val liked = t.videoId?.let { vm.isLiked(it) } ?: false
+        sheets.showTrackMenu(
+            com.teamshryne.mediyo.core.design.TrackMenuRequest(
+                track = t,
+                isLiked = liked,
+                onLike = { vm.toggleLike(t) },
+                onAddToPlaylist = { sheets.openAddToPlaylist(it) },
+                onPlayNext = { player?.addNext(t) },
+                onAddToQueue = { player?.addToQueue(t) },
+                onGoToAlbum = t.albumId?.takeIf { it.isNotBlank() }?.let { { nav.navigateAlbum(it) } },
+                onOpenChannel = t.channelId?.takeIf { it.isNotBlank() }?.let { { nav.navigateChannel(it) } },
+                onShowArtist = { name, id ->
+                    menuScope.launch { (id?.takeIf { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name))?.let { nav.navigateArtist(it) } }
+                },
+                onComments = { t.videoId?.let { sheets.showComments(it) } },
+                onRemove = { vm.remove(t.videoId ?: "") }
+            )
+        )
+    }
 
     val grouped = remember(history) { groupByDate(history) }
     val heroThumb = remember(history) { history.firstOrNull()?.artworkUrl?.upscaledThumbUrl() }
@@ -134,7 +153,7 @@ fun HistoryScreen(
                         track = track,
                         isPlaying = playingId == e.videoId,
                         showArtwork = true,
-                        trailing = { TrackOverflowIcon(onClick = { menuTrack = track }) }
+                        trailing = { TrackOverflowIcon(onClick = { openMenu(track) }) }
                     ) {
                         val sectionTracks = items.map { it.toTrack() }
                         val pos = items.indexOf(e).coerceAtLeast(0)
@@ -149,7 +168,7 @@ fun HistoryScreen(
                     track = t,
                     isPlaying = playingId == t.videoId,
                     showArtwork = true,
-                    trailing = { TrackOverflowIcon(onClick = { menuTrack = t }) }
+                    trailing = { TrackOverflowIcon(onClick = { openMenu(t) }) }
                 ) {
                     player?.playTracks(allTracks, allTracks.indexOf(t).coerceAtLeast(0), PlayOrigin.History("Search"))
                 }
@@ -165,26 +184,6 @@ fun HistoryScreen(
         }
     }
 
-    menuTrack?.let { t ->
-        var liked by remember { mutableStateOf(false) }
-        LaunchedEffect(t.videoId) { liked = t.videoId?.let { vm.isLiked(it) } ?: false }
-        TrackMenuSheet(
-            track = t, show = true, onDismiss = { menuTrack = null },
-            isLiked = liked,
-            onLike = { vm.toggleLike(t) },
-            onAddToPlaylist = { showAddSheet = t; menuTrack = null },
-            onPlayNext = { player?.addNext(t) },
-            onAddToQueue = { player?.addToQueue(t) },
-            onGoToAlbum = t.albumId?.takeIf { it.isNotBlank() }?.let { { nav.navigateAlbum(it) } },
-            onOpenChannel = t.channelId?.takeIf { it.isNotBlank() }?.let { { nav.navigateChannel(it) } },
-            onShowArtist = { name, id ->
-                menuScope.launch { (id?.takeIf { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name))?.let { nav.navigateArtist(it) } }
-            },
-            onComments = { nav?.navigate("comments/${t.videoId}") },
-            onRemove = { vm.remove(t.videoId ?: ""); menuTrack = null }
-        )
-    }
-    showAddSheet?.let { t -> AddToPlaylistSheet(track = t, onDismiss = { showAddSheet = null }) }
     if (showClear) AlertDialog(onDismissRequest = { showClear = false }, title = { Text("Clear history?") }, confirmButton = { Button(onClick = { vm.clearAll(); showClear = false }) { Text("Clear") } }, dismissButton = { TextButton(onClick = { showClear = false }) { Text("Cancel") } })
 }
 

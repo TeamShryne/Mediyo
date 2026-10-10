@@ -72,6 +72,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.teamshryne.mediyo.BuildConfig
 import com.teamshryne.mediyo.core.design.LocalOverlayBottom
+import com.teamshryne.mediyo.core.design.GlobalSheets
+import com.teamshryne.mediyo.core.design.SheetHostVm
 import com.teamshryne.mediyo.core.design.MediyoTheme
 import com.teamshryne.mediyo.core.design.popEnter
 import com.teamshryne.mediyo.data.appearance.TabStyle
@@ -83,7 +85,6 @@ import com.teamshryne.mediyo.core.design.sheetExit
 import com.teamshryne.mediyo.feature.album.AlbumScreen
 import com.teamshryne.mediyo.feature.artist.ArtistScreen
 import com.teamshryne.mediyo.feature.channel.ChannelScreen
-import com.teamshryne.mediyo.feature.comments.CommentsBottomSheet
 import com.teamshryne.mediyo.feature.episode.EpisodeScreen
 import com.teamshryne.mediyo.feature.history.HistoryScreen
 import com.teamshryne.mediyo.feature.home.HomeScreen
@@ -165,6 +166,9 @@ private fun AppShell() {
 
     val playerVm: PlayerViewModel = hiltViewModel()
     val playerState by playerVm.state.collectAsState()
+    // All bottom sheets render at root (GlobalSheets) so their dim covers
+    // the full window including system-bar regions.
+    val sheetVm: SheetHostVm = hiltViewModel()
     // Silent update check once per launch — dialog appears only if Available.
     // Disabled entirely in debug builds.
     val updateVm: UpdateViewModel = hiltViewModel()
@@ -173,7 +177,6 @@ private fun AppShell() {
     val sleepState by playerVm.sleepState.collectAsState()
     var showFullPlayer by remember { mutableStateOf(false) }
     var showQueueOverlay by remember { mutableStateOf(false) }
-    var showCommentsId by remember { mutableStateOf<String?>(null) }
     var showSleepSheet by remember { mutableStateOf(false) }
     // Player collapse has priority over nav pop — both handlers, inner one wins
     BackHandler(enabled = showFullPlayer && !showQueueOverlay) { showFullPlayer = false }
@@ -293,10 +296,6 @@ private fun AppShell() {
                 composable("liked") { LikedScreen(nav, playerVm) }
                 composable("history") { HistoryScreen(nav, playerVm) }
                 composable("profile") { ProfileScreen(nav) }
-                composable("comments/{videoId}") { back ->
-                    val vid = back.arguments?.getString("videoId") ?: ""
-                    CommentsBottomSheet(videoId = vid, onDismiss = { nav.popBackStack() })
-                }
                 composable("settings/appearance") { AppearanceScreen(nav) }
                 composable("settings/equalizer") { EqualizerScreen(nav) }
                 composable("settings/storage") { StorageScreen(nav) }
@@ -409,7 +408,7 @@ private fun AppShell() {
                 onToggleRepeat = playerVm::toggleRepeat,
                 onCollapse = { showFullPlayer = false },
                 onShowQueue = { showQueueOverlay = true },
-                onShowComments = { playerState.videoId?.let { showCommentsId = it } },
+                onShowComments = { playerState.videoId?.let { sheetVm.showComments(it) } },
                 onShowSleepTimer = { showSleepSheet = true },
                 onGoToArtist = { showFullPlayer = false; nav.navigateArtist(it) },
                 onOpenChannel = { showFullPlayer = false; nav.navigateChannel(it) },
@@ -432,15 +431,13 @@ private fun AppShell() {
             QueueScreen(
                 player = playerVm,
                 onClose = { showQueueOverlay = false },
-                onShowComments = { vid -> showCommentsId = vid },
+                onShowComments = { vid -> sheetVm.showComments(vid) },
                 onShowSleepTimer = { showSleepSheet = true },
                 onGoToArtist = { showQueueOverlay = false; nav.navigateArtist(it) }
             )
         }
 
-        showCommentsId?.let { vid ->
-            CommentsBottomSheet(videoId = vid, onDismiss = { showCommentsId = null })
-        }
+        GlobalSheets(sheetVm)
 
         if (!BuildConfig.DEBUG && updateState is UpdateViewModel.State.Available) {
             UpdateDialog(updateVm)
