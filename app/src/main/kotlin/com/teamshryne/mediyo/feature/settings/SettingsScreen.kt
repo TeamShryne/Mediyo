@@ -115,7 +115,7 @@ fun SettingsScreen(
 
         item {
             Text(
-                "Mediyo v${BuildConfig.VERSION_NAME}",
+                "Mediyo v${BuildConfig.VERSION_NAME} (${BuildConfig.GIT_SHA})",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                 textAlign = TextAlign.Center,
