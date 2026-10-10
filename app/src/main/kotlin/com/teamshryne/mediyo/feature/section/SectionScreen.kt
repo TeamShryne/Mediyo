@@ -132,7 +132,7 @@ fun SectionScreen(
             com.teamshryne.mediyo.core.design.TrackMenuRequest(
                 track = track,
                 onLike = { player?.toggleLike(track) },
-                onAddToPlaylist = { sheets.openAddToPlaylist(it) },
+                onAddToPlaylist = { sheets.openAddToPlaylist(track) },
                 onPlayNext = { player?.addNext(track) },
                 onAddToQueue = { player?.addToQueue(track) },
                 onGoToAlbum = m.album?.takeIf { it.isNotBlank() }?.let { { menuScope.launch { val id = m.albumId?.takeIf { it.isNotBlank() } ?: menuVm.resolveAlbumId(m); id?.let { nav.navigateAlbum(it) } } } },

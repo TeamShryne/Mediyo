@@ -88,7 +88,7 @@ fun ChannelScreen(
             com.teamshryne.mediyo.core.design.TrackMenuRequest(
                 track = track,
                 onLike = { player?.toggleLike(track) },
-                onAddToPlaylist = { sheets.openAddToPlaylist(it) },
+                onAddToPlaylist = { sheets.openAddToPlaylist(track) },
                 onPlayNext = { player?.addNext(track) },
                 onAddToQueue = { player?.addToQueue(track) },
                 onComments = { m.videoId?.let { sheets.showComments(it) } }

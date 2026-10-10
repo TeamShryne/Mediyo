@@ -84,7 +84,7 @@ fun LocalPlaylistDetailScreen(
                 track = t,
                 isLiked = liked,
                 onLike = { vm.toggleLike(t) },
-                onAddToPlaylist = { sheets.openAddToPlaylist(it) },
+                onAddToPlaylist = { sheets.openAddToPlaylist(t) },
                 onPlayNext = { player?.addNext(t) },
                 onAddToQueue = { player?.addToQueue(t) },
                 onGoToAlbum = t.albumId?.takeIf { it.isNotBlank() }?.let { { nav.navigateAlbum(it) } },
