@@ -38,7 +38,6 @@ import com.teamshryne.mediyo.core.design.immersiveBrush
 import com.teamshryne.mediyo.core.design.rememberDominantColors
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import com.teamshryne.mediyo.domain.model.PlayOrigin
-import com.teamshryne.mediyo.domain.model.Track
 import com.teamshryne.mediyo.domain.model.bestThumbUrl
 import com.teamshryne.mediyo.core.design.navigateAlbum
 import com.teamshryne.mediyo.core.design.navigateArtist
@@ -149,10 +148,28 @@ fun PlaylistScreen(
     vm: PlaylistVm = hiltViewModel()
 ) {
     LaunchedEffect(browseId) { vm.load(browseId) }
-    var menuItem by remember { mutableStateOf<com.teamshryne.mediyo.data.mediyo.FfiSearchResult?>(null) }
-    var showAddTrack by remember { mutableStateOf<Track?>(null) }
+    // Sheets render at the root overlay (GlobalSheets) for full-window dim.
+    val sheets: com.teamshryne.mediyo.core.design.SheetHostVm = hiltViewModel()
     val menuScope = rememberCoroutineScope()
     val menuVm: com.teamshryne.mediyo.core.design.MediaMenuVm = hiltViewModel()
+
+    fun openMenu(m: com.teamshryne.mediyo.data.mediyo.FfiSearchResult) {
+        val track = m.toDomainTrack()
+        sheets.showTrackMenu(
+            com.teamshryne.mediyo.core.design.TrackMenuRequest(
+                track = track,
+                onLike = { player?.toggleLike(track) },
+                onAddToPlaylist = { sheets.openAddToPlaylist(it) },
+                onPlayNext = { player?.addNext(track) },
+                onAddToQueue = { player?.addToQueue(track) },
+                onGoToAlbum = m.album?.takeIf { it.isNotBlank() }?.let { { menuScope.launch { val id = m.albumId?.takeIf { it.isNotBlank() } ?: menuVm.resolveAlbumId(m); id?.let { nav.navigateAlbum(it) } } } },
+                onShowArtist = { name, id ->
+                    menuScope.launch { (id?.takeIf { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name))?.let { nav.navigateArtist(it) } }
+                },
+                onComments = { m.videoId?.let { sheets.showComments(it) } }
+            )
+        )
+    }
 
     when {
         vm.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
@@ -340,7 +357,7 @@ fun PlaylistScreen(
                         isPlaying = playingId != null && playingId == t.videoId,
                         number = i + 1,
                         showArtwork = true,
-                        trailing = { TrackOverflowIcon(onClick = { menuItem = t }) }
+                        trailing = { TrackOverflowIcon(onClick = { openMenu(t) }) }
                     ) {
                         t.videoId?.let { player?.playFromWithOrigin(vm.tracks, t, PlayOrigin.Playlist(browseId, vm.title)) }
                     }
@@ -353,7 +370,7 @@ fun PlaylistScreen(
                         isPlaying = playingId != null && playingId == t.videoId,
                         number = vm.tracks.indexOf(t) + 1,
                         showArtwork = true,
-                        trailing = { TrackOverflowIcon(onClick = { menuItem = t }) }
+                        trailing = { TrackOverflowIcon(onClick = { openMenu(t) }) }
                     ) {
                         t.videoId?.let { player?.playFromWithOrigin(vm.tracks, t, PlayOrigin.Playlist(browseId, vm.title)) }
                     }
@@ -387,24 +404,6 @@ fun PlaylistScreen(
                 enabled = vm.continuation != null && !vm.loading && !vm.loadingMore
             ) { vm.loadMore() }
 
-            menuItem?.let { m ->
-                val track = m.toDomainTrack()
-                com.teamshryne.mediyo.core.design.TrackMenuSheet(
-                    track = track, show = true, onDismiss = { menuItem = null },
-                    onLike = { player?.toggleLike(track) },
-                    onAddToPlaylist = { showAddTrack = track },
-                    onPlayNext = { player?.addNext(track) },
-                    onAddToQueue = { player?.addToQueue(track) },
-                    onGoToAlbum = m.album?.takeIf { it.isNotBlank() }?.let { { menuScope.launch { val id = m.albumId?.takeIf { it.isNotBlank() } ?: menuVm.resolveAlbumId(m); id?.let { nav.navigateAlbum(it) } } } },
-                    onShowArtist = { name, id ->
-                        menuScope.launch { (id?.takeIf { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name))?.let { nav.navigateArtist(it) } }
-                    },
-                    onComments = { m.videoId?.let { nav?.navigate("comments/$it") } }
-                )
-            }
-            showAddTrack?.let { t ->
-                com.teamshryne.mediyo.feature.playlist.AddToPlaylistSheet(track = t, onDismiss = { showAddTrack = null })
-            }
         }
     }
 }

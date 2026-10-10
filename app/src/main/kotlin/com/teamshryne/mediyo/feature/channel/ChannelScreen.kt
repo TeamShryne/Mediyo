@@ -29,7 +29,6 @@ import com.teamshryne.mediyo.data.mediyo.FfiCarousel
 import com.teamshryne.mediyo.data.mediyo.FfiSearchResult
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import com.teamshryne.mediyo.domain.model.PlayOrigin
-import com.teamshryne.mediyo.domain.model.Track
 import com.teamshryne.mediyo.domain.model.bestThumbUrl
 import com.teamshryne.mediyo.domain.model.toDomainTrack
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -80,8 +79,22 @@ fun ChannelScreen(
     vm: ChannelVm = hiltViewModel()
 ) {
     LaunchedEffect(browseId) { vm.load(browseId) }
-    var menuItem by remember { mutableStateOf<FfiSearchResult?>(null) }
-    var showAddTrack by remember { mutableStateOf<Track?>(null) }
+    // Sheets render at the root overlay (GlobalSheets) for full-window dim.
+    val sheets: com.teamshryne.mediyo.core.design.SheetHostVm = hiltViewModel()
+
+    fun openMenu(m: FfiSearchResult) {
+        val track = m.toDomainTrack()
+        sheets.showTrackMenu(
+            com.teamshryne.mediyo.core.design.TrackMenuRequest(
+                track = track,
+                onLike = { player?.toggleLike(track) },
+                onAddToPlaylist = { sheets.openAddToPlaylist(it) },
+                onPlayNext = { player?.addNext(track) },
+                onAddToQueue = { player?.addToQueue(track) },
+                onComments = { m.videoId?.let { sheets.showComments(it) } }
+            )
+        )
+    }
 
     fun handle(r: FfiSearchResult, shelf: List<FfiSearchResult>) {
         when {
@@ -204,7 +217,7 @@ fun ChannelScreen(
                                             isPlaying = playingId != null && playingId == r.videoId,
                                             number = i + 1,
                                             showArtwork = true,
-                                            trailing = { com.teamshryne.mediyo.core.design.TrackOverflowIcon(onClick = { menuItem = r }) }
+                                            trailing = { com.teamshryne.mediyo.core.design.TrackOverflowIcon(onClick = { openMenu(r) }) }
                                         ) { handle(r, c.items) }
                                     }
                                 }
@@ -250,20 +263,6 @@ fun ChannelScreen(
             }
             }
 
-            menuItem?.let { m ->
-                val track = m.toDomainTrack()
-                com.teamshryne.mediyo.core.design.TrackMenuSheet(
-                    track = track, show = true, onDismiss = { menuItem = null },
-                    onLike = { player?.toggleLike(track) },
-                    onAddToPlaylist = { showAddTrack = track },
-                    onPlayNext = { player?.addNext(track) },
-                    onAddToQueue = { player?.addToQueue(track) },
-                    onComments = { m.videoId?.let { nav?.navigate("comments/$it") } }
-                )
-            }
-            showAddTrack?.let { t ->
-                com.teamshryne.mediyo.feature.playlist.AddToPlaylistSheet(track = t, onDismiss = { showAddTrack = null })
-            }
         }
     }
 }

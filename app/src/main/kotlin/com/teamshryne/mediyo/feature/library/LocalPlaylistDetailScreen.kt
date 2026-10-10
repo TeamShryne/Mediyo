@@ -17,7 +17,6 @@ import androidx.lifecycle.viewModelScope
 import com.teamshryne.mediyo.core.design.CollectionHero
 import com.teamshryne.mediyo.core.design.LocalTrackRow
 import com.teamshryne.mediyo.core.design.TrackOverflowIcon
-import com.teamshryne.mediyo.core.design.TrackMenuSheet
 import com.teamshryne.mediyo.data.local.LocalPlaylistEntryEntity
 import com.teamshryne.mediyo.domain.model.PlayOrigin
 import com.teamshryne.mediyo.domain.model.Track
@@ -72,11 +71,32 @@ fun LocalPlaylistDetailScreen(
     val entries by vm.flowEntries(playlistId).collectAsState(initial = emptyList())
     val playingId by player?.state?.collectAsState()?.let { remember { it } } ?: remember { mutableStateOf(com.teamshryne.mediyo.feature.player.PlayerState()) }
 
-    var menuTrack by remember { mutableStateOf<Track?>(null) }
-    var menuEntryId by remember { mutableStateOf<String?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    // Sheets render at the root overlay (GlobalSheets) for full-window dim.
+    val sheets: com.teamshryne.mediyo.core.design.SheetHostVm = hiltViewModel()
     val menuScope = rememberCoroutineScope()
     val menuVm: com.teamshryne.mediyo.core.design.MediaMenuVm = hiltViewModel()
+
+    fun openMenu(t: Track, entryId: String?) = menuScope.launch {
+        val liked = t.videoId?.let { vm.isLiked(it) } ?: false
+        sheets.showTrackMenu(
+            com.teamshryne.mediyo.core.design.TrackMenuRequest(
+                track = t,
+                isLiked = liked,
+                onLike = { vm.toggleLike(t) },
+                onAddToPlaylist = { sheets.openAddToPlaylist(it) },
+                onPlayNext = { player?.addNext(t) },
+                onAddToQueue = { player?.addToQueue(t) },
+                onGoToAlbum = t.albumId?.takeIf { it.isNotBlank() }?.let { { nav.navigateAlbum(it) } },
+                onOpenChannel = t.channelId?.takeIf { it.isNotBlank() }?.let { { nav.navigateChannel(it) } },
+                onShowArtist = { name, id ->
+                    menuScope.launch { (id?.takeIf { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name))?.let { nav.navigateArtist(it) } }
+                },
+                onComments = { t.videoId?.let { sheets.showComments(it) } },
+                onRemove = { entryId?.let { vm.remove(it) } }
+            )
+        )
+    }
 
     val title = playlist?.title ?: vm.title.ifEmpty { "Playlist" }
     val description = playlist?.description
@@ -143,7 +163,7 @@ fun LocalPlaylistDetailScreen(
                     showArtwork = true,
                     trailing = {
                         TrackOverflowIcon(onClick = {
-                            menuTrack = t; menuEntryId = entries.getOrNull(idx)?.id
+                            openMenu(t, entries.getOrNull(idx)?.id)
                         })
                     }
                 ) {
@@ -160,7 +180,7 @@ fun LocalPlaylistDetailScreen(
                     showArtwork = true,
                     trailing = {
                         TrackOverflowIcon(onClick = {
-                            menuTrack = t; menuEntryId = entries.getOrNull(tracks.indexOf(t))?.id
+                            openMenu(t, entries.getOrNull(tracks.indexOf(t))?.id)
                         })
                     }
                 ) {
@@ -176,26 +196,6 @@ fun LocalPlaylistDetailScreen(
                 }
             }
         }
-    }
-
-    menuTrack?.let { t ->
-        var liked by remember { mutableStateOf(false) }
-        LaunchedEffect(t.videoId) { liked = t.videoId?.let { vm.isLiked(it) } ?: false }
-        TrackMenuSheet(
-            track = t, show = true, onDismiss = { menuTrack = null; menuEntryId = null },
-            isLiked = liked,
-            onLike = { vm.toggleLike(t) },
-            onAddToPlaylist = { /* already in playlist, could add to another */ },
-            onPlayNext = { player?.addNext(t) },
-            onAddToQueue = { player?.addToQueue(t) },
-            onGoToAlbum = t.albumId?.takeIf { it.isNotBlank() }?.let { { nav.navigateAlbum(it) } },
-            onOpenChannel = t.channelId?.takeIf { it.isNotBlank() }?.let { { nav.navigateChannel(it) } },
-            onShowArtist = { name, id ->
-                menuScope.launch { (id?.takeIf { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name))?.let { nav.navigateArtist(it) } }
-            },
-            onComments = { nav?.navigate("comments/${t.videoId}") },
-            onRemove = { menuEntryId?.let { vm.remove(it) } }
-        )
     }
 
     if (showDeleteConfirm) {

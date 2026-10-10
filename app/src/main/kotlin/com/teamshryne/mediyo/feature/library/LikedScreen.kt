@@ -17,7 +17,8 @@ import androidx.lifecycle.viewModelScope
 import com.teamshryne.mediyo.core.design.CollectionHero
 import com.teamshryne.mediyo.core.design.LocalTrackRow
 import com.teamshryne.mediyo.core.design.TrackOverflowIcon
-import com.teamshryne.mediyo.core.design.TrackMenuSheet
+import com.teamshryne.mediyo.core.design.TrackMenuRequest
+import com.teamshryne.mediyo.core.design.SheetHostVm
 import com.teamshryne.mediyo.data.local.LikedTrackEntity
 import com.teamshryne.mediyo.domain.model.PlayOrigin
 import com.teamshryne.mediyo.domain.model.Track
@@ -27,7 +28,6 @@ import com.teamshryne.mediyo.domain.repository.LikeRepository
 import com.teamshryne.mediyo.core.design.navigateAlbum
 import com.teamshryne.mediyo.core.design.navigateArtist
 import com.teamshryne.mediyo.core.design.navigateChannel
-import com.teamshryne.mediyo.feature.playlist.AddToPlaylistSheet
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
@@ -49,11 +49,28 @@ fun LikedScreen(
 ) {
     val liked by vm.liked.collectAsState()
     val playingId = player?.state?.collectAsState()?.value?.videoId
-    var menuTrack by remember { mutableStateOf<Track?>(null) }
-    var showAddSheet by remember { mutableStateOf<Track?>(null) }
+    // Sheets render at the root overlay (GlobalSheets) for full-window dim.
+    val sheets: SheetHostVm = hiltViewModel()
     var showClearConfirm by remember { mutableStateOf(false) }
     val menuScope = rememberCoroutineScope()
     val menuVm: com.teamshryne.mediyo.core.design.MediaMenuVm = hiltViewModel()
+
+    fun openMenu(t: Track) = sheets.showTrackMenu(
+        TrackMenuRequest(
+            track = t,
+            isLiked = true,
+            onLike = { vm.remove(t.videoId ?: "") },
+            onAddToPlaylist = { sheets.openAddToPlaylist(it) },
+            onPlayNext = { player?.addNext(t) },
+            onAddToQueue = { player?.addToQueue(t) },
+            onGoToAlbum = t.albumId?.takeIf { it.isNotBlank() }?.let { { nav.navigateAlbum(it) } },
+            onOpenChannel = t.channelId?.takeIf { it.isNotBlank() }?.let { { nav.navigateChannel(it) } },
+            onShowArtist = { name, id ->
+                menuScope.launch { (id?.takeIf { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name))?.let { nav.navigateArtist(it) } }
+            },
+            onComments = { t.videoId?.let { sheets.showComments(it) } }
+        )
+    )
 
     val tracks = remember(liked) { liked.map { it.toTrack() } }
     val heroThumb = remember(liked) { liked.firstOrNull()?.artworkUrl?.upscaledThumbUrl() }
@@ -122,7 +139,7 @@ fun LikedScreen(
                     isPlaying = playingId != null && playingId == t.videoId,
                     number = idx + 1,
                     showArtwork = true,
-                    trailing = { TrackOverflowIcon(onClick = { menuTrack = t }) }
+                    trailing = { TrackOverflowIcon(onClick = { openMenu(t) }) }
                 ) {
                     player?.playTracks(tracks, idx, PlayOrigin.Liked(tracks.size))
                 }
@@ -135,7 +152,7 @@ fun LikedScreen(
                     isPlaying = playingId != null && playingId == t.videoId,
                     number = tracks.indexOf(t) + 1,
                     showArtwork = true,
-                    trailing = { TrackOverflowIcon(onClick = { menuTrack = t }) }
+                    trailing = { TrackOverflowIcon(onClick = { openMenu(t) }) }
                 ) {
                     player?.playTracks(tracks, tracks.indexOf(t).coerceAtLeast(0), PlayOrigin.Liked(tracks.size))
                 }
@@ -151,25 +168,6 @@ fun LikedScreen(
         }
     }
 
-    menuTrack?.let { t ->
-        TrackMenuSheet(
-            track = t, show = true, onDismiss = { menuTrack = null },
-            isLiked = true,
-            onLike = { vm.remove(t.videoId ?: ""); menuTrack = null },
-            onAddToPlaylist = { showAddSheet = t; menuTrack = null },
-            onPlayNext = { player?.addNext(t) },
-            onAddToQueue = { player?.addToQueue(t) },
-            onGoToAlbum = t.albumId?.takeIf { it.isNotBlank() }?.let { { nav.navigateAlbum(it) } },
-            onOpenChannel = t.channelId?.takeIf { it.isNotBlank() }?.let { { nav.navigateChannel(it) } },
-            onShowArtist = { name, id ->
-                menuScope.launch { (id?.takeIf { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name))?.let { nav.navigateArtist(it) } }
-            },
-            onComments = { nav?.navigate("comments/${t.videoId}") }
-        )
-    }
-    showAddSheet?.let { t ->
-        AddToPlaylistSheet(track = t, onDismiss = { showAddSheet = null })
-    }
     if (showClearConfirm) {
         AlertDialog(onDismissRequest = { showClearConfirm = false }, title = { Text("Clear liked songs?") }, confirmButton = { Button(onClick = { vm.clearAll(); showClearConfirm = false }) { Text("Clear") } }, dismissButton = { TextButton(onClick = { showClearConfirm = false }) { Text("Cancel") } })
     }
