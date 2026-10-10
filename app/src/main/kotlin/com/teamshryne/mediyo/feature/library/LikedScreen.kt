@@ -60,7 +60,7 @@ fun LikedScreen(
             track = t,
             isLiked = true,
             onLike = { vm.remove(t.videoId ?: "") },
-            onAddToPlaylist = { sheets.openAddToPlaylist(it) },
+            onAddToPlaylist = { sheets.openAddToPlaylist(t) },
             onPlayNext = { player?.addNext(t) },
             onAddToQueue = { player?.addToQueue(t) },
             onGoToAlbum = t.albumId?.takeIf { it.isNotBlank() }?.let { { nav.navigateAlbum(it) } },
