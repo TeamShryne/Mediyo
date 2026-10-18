@@ -26,9 +26,9 @@ Get the latest version from the **[GitHub Releases page](https://github.com/Team
 
 ## Build from source
 
-The GitHub Actions workflow builds the native library for Android and runs the Android build and lint tasks.
+The GitHub Actions workflow builds the Go-based native core for Android and runs the Android build and lint tasks.
 
-To build locally, you will need a compatible Android development environment, the Rust toolchain, and the Android NDK. The exact local setup is not yet documented.
+To build locally, you will need a compatible Android development environment, the Go toolchain, and the Android NDK. The exact local setup is not yet documented.
 
 For the native core, see [TeamShryne/mediyo-core](https://github.com/TeamShryne/mediyo-core).
 
