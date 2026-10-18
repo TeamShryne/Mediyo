@@ -1,34 +1,90 @@
-<p align="center"><b>Mediyo</b> — Industry-grade YouTube Music client<br/>Native Kotlin • Compose M3 • mediyo-core (Go) • NewPipe stream only</p>
+# Mediyo
 
-<p align="center">
-<a href="https://github.com/TeamShryne/Mediyo/actions/workflows/android.yml"><img src="https://github.com/TeamShryne/Mediyo/actions/workflows/android.yml/badge.svg"/></a>
-<a href="https://github.com/TeamShryne/mediyo-core"><img src="https://img.shields.io/badge/core-mediyo--core-E91E63"/></a>
-</p>
+**Mediyo is an experimental Android music player for exploring and listening to YouTube Music.**
 
-## Stack
-- **UI:** Compose M3, Navigation Compose, Material 3 dynamic color, edge-to-edge, shimmer, Paging 3
-- **Arch:** Single-activity, MVVM + Clean, Hilt, Coroutines Flow, Room + DataStore
-- **Data:** `mediyo-core` (Go, gomobile `app/libs/mediyo.aar`, anonymous visitor identity) for catalog/search/browse metadata, NewPipeExtractor only for `audioStreams` URL → Media3 ExoPlayer + MediaSession + foreground service
-- **Cache:** Per-type Room `kv_cache` (search/browse/media/lyrics/comments/library) + Coil disk + `CachePrefs` (maxBytes/TTL/wifiOnly/offline) — full control in Settings > Storage & Cache
+Built with Kotlin and Jetpack Compose, Mediyo focuses on a native Android experience, playback controls, and flexible local caching.
 
-## Build
-- `mediyo-core` ships as a vendored `app/libs/mediyo.aar` (built in [TeamShryne/mediyo-core](https://github.com/TeamShryne/mediyo-core) via `make aar`); the app consumes it through `MediyoBridge` (single process `Session`, plain Kotlin models in `data/mediyo/`). Rebuild + copy the AAR whenever the core changes.
-- Push to `main` → `android.yml` → `assembleDebug` + `lint` + APK artifact
+> **Status:** In development. Features and setup may change.
 
-## Auth
-Anonymous only: first launch bootstraps a `visitorData` (persisted in DataStore, shown in Profile); `MediyoBridge.rotateVisitorData()` recovers poisoned sessions. No login, no cookies.
+[![Android CI](https://github.com/TeamShryne/Mediyo/actions/workflows/android.yml/badge.svg)](https://github.com/TeamShryne/Mediyo/actions/workflows/android.yml)
+[![Core library](https://img.shields.io/badge/core-mediyo--core-blue)](https://github.com/TeamShryne/mediyo-core)
 
-## Storage & Cache
-`Settings > Storage & Cache`: total bar, per-type size/count, max slider (128MB–2GB), TTL 24h/7d/30d, Wi-Fi only, Offline only, per-type Clear, Clear all, prefetch on Wi-Fi, downloads manager (internal/SD, quality, auto-delete 30d).
+## Features
 
-## Project
-```
+- Browse and search music metadata.
+- Play audio with Media3 ExoPlayer.
+- Use Android media controls and background playback.
+- Cache search, browse, media, lyrics, comments, and library data locally.
+- Manage cache size, expiration, and network preferences in **Settings → Storage & Cache**.
+- Manage downloads, choose quality and storage location, and configure automatic cleanup.
+- Use the app without creating a Mediyo account.
+
+Mediyo is a work in progress, so not every feature or workflow should be considered stable.
+
+## Technology
+
+- **Language and UI:** Kotlin, Jetpack Compose, Material 3
+- **Architecture:** MVVM, Hilt, Coroutines, Flow
+- **Local storage:** Room, DataStore, Coil
+- **Playback:** AndroidX Media3 / ExoPlayer, MediaSession, foreground service
+- **Native core:** Rust via mediyo-core / mediyo-ffi
+- **Audio stream extraction:** NewPipe Extractor
+
+## Get the app
+
+There is currently no documented public release or local installation package. The GitHub Actions workflow builds a debug APK and publishes it as a workflow artifact when its configured trigger runs.
+
+1. Open [GitHub Actions](https://github.com/TeamShryne/Mediyo/actions/workflows/android.yml).
+2. Select a successful workflow run.
+3. Download the APK from its **Artifacts** section, if an artifact is available.
+
+Debug builds are intended for testing and may not be suitable for everyday use.
+
+## Build from source
+
+The project currently relies on its GitHub Actions workflow for builds. The workflow builds the Rust native library for Android and then runs the Android build and lint tasks.
+
+To build locally, you will need a compatible Android development environment, the Rust toolchain, and the Android NDK. The exact local setup is not yet documented.
+
+For the native core, see [TeamShryne/mediyo-core](https://github.com/TeamShryne/mediyo-core).
+
+## Storage and cache
+
+Open **Settings → Storage & Cache** to manage local data. Available controls include:
+
+- Cache size limit
+- Cache expiration
+- Wi-Fi-only and offline-related preferences
+- Per-category cache clearing or clearing all cached data
+- Wi-Fi prefetching
+- Download location, audio quality, and automatic cleanup
+
+Options may change as development continues.
+
+## Project structure
+
+```text
 Mediyo/
-  app/  (Compose app + data/mediyo bridge/models + libs/mediyo.aar)
-  .github/workflows/android.yml  (builds the Go AAR, then the APK)
+├── app/                     # Android application
+├── rust/                    # Native Rust core and FFI
+├── gradle/                  # Gradle wrapper configuration
+└── .github/workflows/       # CI build workflow
 ```
 
+## Privacy and account
 
+Mediyo supports anonymous use and does not require a Mediyo account. Depending on the current build and configuration, it may use YouTube Music session data for access to certain features. Review the code and your local settings before using any account-linked functionality.
 
+## Disclaimer
 
+Mediyo is an independent, experimental project and is not affiliated with, endorsed by, or sponsored by YouTube or Google. YouTube and YouTube Music are trademarks of their respective owners.
 
+Use the app in accordance with applicable laws and the relevant service terms. Availability and playback behavior may change when upstream services change.
+
+## Contributing
+
+Issues and pull requests are welcome. Before opening a pull request, describe the change clearly and include steps to reproduce or test it where relevant.
+
+## License
+
+No license is specified in this repository yet. Unless a license is added, you should not assume that the source code is available for reuse, modification, or redistribution.
