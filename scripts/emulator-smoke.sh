@@ -60,6 +60,16 @@ adb shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1
 adb shell svc power stayon true >/dev/null 2>&1
 adb shell wm dismiss-keyguard >/dev/null 2>&1
 
+# Gesture navigation, to match a modern phone. The default emulator image uses
+# 3-button nav, whose 48dp strip is twice as tall and makes sheet content
+# colliding with the system bar look far worse than it does on a real device.
+# Without this the screenshots misrepresent the app.
+step "switching to gesture navigation"
+adb shell cmd overlay enable com.android.internal.systemui.navbar.gestural >/dev/null 2>&1 || true
+adb shell settings put secure navigation_mode 2 >/dev/null 2>&1 || true
+sleep 3
+adb shell wm dismiss-keyguard >/dev/null 2>&1
+
 step "installing $APK"
 if ! adb install -r -t "$APK"; then
   echo "::error::apk install failed"
@@ -162,6 +172,34 @@ shot "sheet-sleep-timer" 8
 step "sheet: track menu (root host)"
 send sheet --es target menu
 shot "sheet-menu-root" 6
+
+# ── Second pass: 3-button navigation ────────────────────────────────────────
+# The tour above runs in gesture navigation, which is what a modern phone
+# shows. Three-button nav has a 48dp bar instead of a 24dp handle, so sheet
+# content colliding with the system bar is far more visible there — that is
+# the configuration that exposed the sheet system-bar bugs in the first
+# place, so keep it covered.
+step "switching to 3-button navigation"
+adb shell cmd overlay disable com.android.internal.systemui.navbar.gestural >/dev/null 2>&1 || true
+adb shell settings put secure navigation_mode 0 >/dev/null 2>&1 || true
+sleep 4
+
+send sheet --es target menu
+shot "3btn-sheet-menu" 6
+adb shell input keyevent KEYCODE_BACK >/dev/null 2>&1
+sleep 2
+
+send overlay --es target player
+sleep 3
+send sheet --es target menu
+shot "3btn-sheet-menu-player" 6
+adb shell input keyevent KEYCODE_BACK >/dev/null 2>&1
+sleep 2
+
+send sheet --es target comments
+shot "3btn-sheet-comments" 10
+adb shell input keyevent KEYCODE_BACK >/dev/null 2>&1
+sleep 2
 
 step "collecting logs"
 adb logcat -d -s MediyoAdb:D > "$OUT/mediyo-adb.log" 2>/dev/null
