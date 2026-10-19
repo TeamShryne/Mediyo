@@ -5,13 +5,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Dp
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import com.teamshryne.mediyo.data.mediyo.FfiSearchResult
@@ -152,17 +153,48 @@ fun SheetStatusBar(open: Boolean) {
 }
 
 /**
- * Nav-bar height for sheet content, read *outside* `ModalBottomSheet`.
+ * Nav-bar height for sheet content.
  *
- * The sheet consumes window insets before its content sees them, so both
- * `navigationBarsPadding()` on the content and the sheet's own `windowInsets`
- * parameter resolve to nothing — verified on-device: the sheet screenshots were
- * byte-identical across the bottom 300 rows after each attempt. Reading the
- * inset here, where it is still live, and handing the value in is what
- * actually moves the content.
+ * Three things had to be ruled out first, all measured on-device from the
+ * emulator screenshots:
+ *  - `navigationBarsPadding()` on the sheet content: no effect.
+ *  - `ModalBottomSheet(windowInsets = WindowInsets.systemBars)`: no effect.
+ *  - `WindowInsets.navigationBars` read at the root and passed in: no effect.
+ *
+ * `ModalBottomSheet` consumes insets before its content sees them, and — the
+ * real reason the third attempt failed too — Compose reports
+ * `navigationBars` as zero in this app entirely. So read the window directly,
+ * which is immune to both, and fall back to the platform's nav-bar dimension
+ * when the window reports nothing (immersive mode, some OEM builds).
+ *
+ * The logged value is deliberate: this bug is invisible to the compiler and to
+ * lint, so the next reader needs the number in the log rather than a comment
+ * claiming it works.
  */
 @Composable
-fun navBarInset(): Dp = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+fun navBarInset(): Dp {
+    val view = LocalView.current
+    val density = LocalDensity.current
+    return remember(view, density) {
+        val activity = view.context as? Activity
+        val fromWindow = activity?.let {
+            ViewCompat.getInsetsIgnoringVisibility(
+                it.window.decorView, WindowInsetsCompat.Type.navigationBars()
+            ).bottom
+        } ?: 0
+        // Platform dimension: 48dp on 3-button, 24dp on gesture nav.
+        val fromPlatform = activity?.resources?.let { res ->
+            val id = res.getIdentifier("navigation_bar_height", "dimen", "android")
+            if (id > 0) res.getDimensionPixelSize(id) else 0
+        } ?: 0
+        val px = maxOf(fromWindow, fromPlatform)
+        android.util.Log.i(
+            "MediyoSheet",
+            "navBarInset window=${fromWindow}px platform=${fromPlatform}px -> ${with(density) { px.toDp() }}"
+        )
+        with(density) { px.toDp() }
+    }
+}
 
 /** Render in `AppShell`'s root overlay `Box`, after the queue overlay. */
 @Composable
