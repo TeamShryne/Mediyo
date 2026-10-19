@@ -1,0 +1,16 @@
+# Default owner for everything in the repo.
+* @TeamShryne
+
+# Paths where a mistake is expensive, or where nothing else would catch it.
+#
+# .github/workflows/ — the build, release and emulator pipelines. A bad change
+#   here can ship a broken APK, or quietly stop testing one.
+# app/libs/ — the vendored mediyo-core AAR. Binary, and the only copy of the
+#   Go core; a bad one is very hard to diagnose from the app's behaviour.
+# app/proguard-rules.pro — decides what R8 may strip. A missing keep rule
+#   breaks release builds only, and the debug tour will not catch it.
+# app/build.gradle.kts — signing, versioning, ABI filters.
+.github/workflows/ @TeamShryne
+/app/libs/ @TeamShryne
+/app/proguard-rules.pro @TeamShryne
+/app/build.gradle.kts @TeamShryne
