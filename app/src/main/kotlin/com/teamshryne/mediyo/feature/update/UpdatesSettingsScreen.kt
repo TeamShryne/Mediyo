@@ -43,12 +43,12 @@ import androidx.navigation.NavController
 import com.teamshryne.mediyo.BuildConfig
 import com.teamshryne.mediyo.data.update.UpdateChannel
 
-@OptIn(ExperimentalMaterial3Api::class)
 /**
  * Picks the update track. The two are separate feeds rather than one feed
  * with a preference: nightlies are published as prereleases, so they never
  * appear in the stable feed at all.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ChannelCard(
     channel: UpdateChannel,
@@ -97,6 +97,7 @@ private fun ChannelCard(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UpdatesSettingsScreen(
     nav: NavController? = null,
