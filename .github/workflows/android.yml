@@ -52,7 +52,11 @@ jobs:
       - name: Build debug APK + lint
         run: |
           chmod +x gradlew || true
-          ./gradlew --no-daemon assembleDebug lintDebug --stacktrace
+          # -PenableR8=true minifies and resource-shrinks this APK, so the
+          # emulator tour below exercises the same R8 path as a release build.
+          # The release keystore is not involved: this is still the debug key
+          # and the .debug applicationId.
+          ./gradlew --no-daemon assembleDebug lintDebug --stacktrace -PenableR8=true
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/27.0.12077973
 

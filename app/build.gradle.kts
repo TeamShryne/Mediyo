@@ -73,6 +73,19 @@ android {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
             manifestPlaceholders["appName"] = "Mediyo Debug"
+            // -PenableR8=true produces a minified, resource-shrunk APK that
+            // still uses the debug key and the .debug applicationId, so CI can
+            // rehearse the release build's R8 behaviour on every PR without
+            // ever touching the release keystore.
+            //
+            // Release-only shrinking is exactly the class of bug that builds
+            // clean and then crashes on a user's phone: a missing keep rule
+            // for a class reached only by reflection.
+            isMinifyEnabled = (project.findProperty("enableR8") as String?) == "true"
+            if (isMinifyEnabled) {
+                isShrinkResources = true
+                proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            }
         }
     }
 
