@@ -177,11 +177,9 @@ fun navBarInset(): Dp {
     val density = LocalDensity.current
     return remember(view, density) {
         val activity = view.context as? Activity
-        val fromWindow = activity?.let {
-            ViewCompat.getInsetsIgnoringVisibility(
-                it.window.decorView, WindowInsetsCompat.Type.navigationBars()
-            ).bottom
-        } ?: 0
+        val fromWindow = ViewCompat.getRootWindowInsets(view)
+            ?.getInsets(WindowInsetsCompat.Type.navigationBars())
+            ?.bottom ?: 0
         // Platform dimension: 48dp on 3-button, 24dp on gesture nav.
         val fromPlatform = activity?.resources?.let { res ->
             val id = res.getIdentifier("navigation_bar_height", "dimen", "android")
