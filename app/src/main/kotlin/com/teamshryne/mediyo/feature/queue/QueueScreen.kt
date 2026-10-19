@@ -147,7 +147,7 @@ private class QueueReorder(
         offset = 0f
     }
 
-    private fun autoScrollLoop() {
+    private suspend fun autoScrollLoop() {
         var last = 0L
         while (isActive && index >= 0) {
             val now = withFrameNanos { it }
