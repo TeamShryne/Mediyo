@@ -464,7 +464,8 @@ fun QueueScreen(
                 scope.launch { (id?.takeIf { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name))?.let(onGoToArtist) }
             },
             onComments = { track.videoId?.let(onShowComments) },
-            onRemove = idx?.let { { vm.removeAt(it) } }
+            onRemove = idx?.let { { vm.removeAt(it) } },
+            navBarInset = com.teamshryne.mediyo.core.design.navBarInset()
         )
     }
     showAddSheet?.let { t ->

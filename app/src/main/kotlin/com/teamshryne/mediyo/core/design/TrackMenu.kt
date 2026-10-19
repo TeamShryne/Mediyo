@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.teamshryne.mediyo.domain.model.Track
@@ -48,7 +49,9 @@ fun TrackMenuSheet(
     onLyricsSettings: (() -> Unit)? = null,
     onPlaybackSettings: (() -> Unit)? = null,
     /** e.g. "1.25× · +3 st" — shown beside the entry only when off-normal. */
-    playbackLabel: String? = null
+    playbackLabel: String? = null,
+    /** Nav-bar height for the host to pass in — see [navBarInset]. */
+    navBarInset: Dp = 0.dp
 ) {
     if (!show) return
     // One entry point for artists; multi-artist tracks swap the sheet
@@ -69,13 +72,12 @@ fun TrackMenuSheet(
     // nav buttons sitting on the sheet's own background.
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-        windowInsets = WindowInsets.systemBars
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
     ) {
         Column(
             Modifier
                 .padding(horizontal = 8.dp, vertical = 8.dp)
-                .padding(bottom = 16.dp),
+                .padding(bottom = navBarInset + 16.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             if (showArtists && artistEntries.size > 1) {

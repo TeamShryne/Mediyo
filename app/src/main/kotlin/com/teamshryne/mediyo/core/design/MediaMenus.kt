@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -257,20 +258,21 @@ fun MediaMenuSheet(
     onPlayNext: (Track) -> Unit,
     onAddToQueue: (Track) -> Unit,
     onComments: ((videoId: String) -> Unit)? = null,
-    vm: MediaMenuVm = hiltViewModel()
+    vm: MediaMenuVm = hiltViewModel(),
+    /** Nav-bar height for the host to pass in — see [navBarInset]. */
+    navBarInset: Dp = 0.dp
 ) {
     if (!show) return
     val scope = rememberCoroutineScope()
-    // See TrackMenu.kt: insets go on the sheet, not on the content it hosts.
+    // See TrackMenu.kt: the inset is handed in, not read from inside the sheet.
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-        windowInsets = WindowInsets.systemBars
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
     ) {
         Column(
             Modifier
                 .padding(horizontal = 8.dp)
-                .padding(bottom = 16.dp),
+                .padding(bottom = navBarInset + 16.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             MenuHeader(item = item)

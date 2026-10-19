@@ -5,9 +5,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.Dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import com.teamshryne.mediyo.data.mediyo.FfiSearchResult
@@ -147,6 +151,19 @@ fun SheetStatusBar(open: Boolean) {
     }
 }
 
+/**
+ * Nav-bar height for sheet content, read *outside* `ModalBottomSheet`.
+ *
+ * The sheet consumes window insets before its content sees them, so both
+ * `navigationBarsPadding()` on the content and the sheet's own `windowInsets`
+ * parameter resolve to nothing — verified on-device: the sheet screenshots were
+ * byte-identical across the bottom 300 rows after each attempt. Reading the
+ * inset here, where it is still live, and handing the value in is what
+ * actually moves the content.
+ */
+@Composable
+fun navBarInset(): Dp = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
 /** Render in `AppShell`'s root overlay `Box`, after the queue overlay. */
 @Composable
 fun GlobalSheets(host: SheetHostVm = hiltViewModel()) {
@@ -157,6 +174,9 @@ fun GlobalSheets(host: SheetHostVm = hiltViewModel()) {
     val commentsVid by m.comments.collectAsState()
 
     SheetStatusBar(open = trackReq != null || addTrack != null || mediaReq != null || commentsVid != null)
+
+    // Read here, outside the sheet, where the inset is still live.
+    val navBottom = navBarInset()
 
     trackReq?.let { r ->
         TrackMenuSheet(
@@ -175,7 +195,8 @@ fun GlobalSheets(host: SheetHostVm = hiltViewModel()) {
             onRefetchLyrics = r.onRefetchLyrics,
             onLyricsSettings = r.onLyricsSettings,
             onPlaybackSettings = r.onPlaybackSettings,
-            playbackLabel = r.playbackLabel
+            playbackLabel = r.playbackLabel,
+            navBarInset = navBottom
         )
     }
     addTrack?.let { t ->
@@ -189,7 +210,8 @@ fun GlobalSheets(host: SheetHostVm = hiltViewModel()) {
             onAddToPlaylist = r.onAddToPlaylist,
             onPlayNext = r.onPlayNext,
             onAddToQueue = r.onAddToQueue,
-            onComments = r.onComments
+            onComments = r.onComments,
+            navBarInset = navBottom
         )
     }
     commentsVid?.let { vid ->
