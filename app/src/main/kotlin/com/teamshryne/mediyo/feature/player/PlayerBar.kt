@@ -609,14 +609,14 @@ fun FullPlayer(
                 onDismiss = { showMenu = false },
                 isLiked = liked,
                 onLike = { if (playerVm != null) playerVm.toggleLikeCurrent() else liked = !liked },
-                onAddToPlaylist = { showAddSheet = true },
+                onAddToPlaylist = { showMenu = false; showAddSheet = true },
                 onPlayNext = { playerVm?.addNext(trackForMenu) },
                 onAddToQueue = { playerVm?.addToQueue(trackForMenu) },
                 onShowArtist = { name, id ->
                     menuScope.launch { (id?.takeIf { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name))?.let { onGoToArtist(it) } }
                 },
                 onOpenChannel = { trackForMenu.channelId?.takeIf { it.isNotBlank() }?.let { onOpenChannel(it) } },
-                onComments = { onShowComments() },
+                onComments = { showMenu = false; onShowComments() },
                 onRefetchLyrics = if (isLyricsMode) {
                     { lyricsVm.refetch(trackForMenu, state.durationMs.takeIf { it > 0 }) }
                 } else null,
