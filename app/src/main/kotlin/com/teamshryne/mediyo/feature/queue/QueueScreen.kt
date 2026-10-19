@@ -149,7 +149,7 @@ private class QueueReorder(
 
     private suspend fun autoScrollLoop() {
         var last = 0L
-        while (isActive && index >= 0) {
+        while (coroutineContext.isActive && index >= 0) {
             val now = withFrameNanos { it }
             val dt = if (last == 0L) 0f else ((now - last) / 1_000_000_000f).coerceIn(0f, 0.05f)
             last = now
