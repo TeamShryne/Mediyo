@@ -69,9 +69,18 @@ class AdbControlReceiver : BroadcastReceiver() {
                 else -> reject("--es query or --es videoId required")
             }
 
-            "dump" -> accept(AdbCommand.Dump(at), "dump (see logcat -s $AdbControl.TAG)")
+            "dump" -> accept(AdbCommand.Dump(at), "dump (see logcat -s ${AdbControl.TAG})")
 
-            else -> reject("--es cmd must be one of: go, search, play, dump")
+            "sheet" -> {
+                val which = (intent.getStringExtra(EXTRA_TARGET)?.trim()?.lowercase() ?: arg)
+                when (which) {
+                    "menu", "comments", "playlist", "sleep" ->
+                        accept(AdbCommand.Sheet(at, which), "sheet $which")
+                    else -> reject("--es target must be one of: menu, comments, playlist, sleep")
+                }
+            }
+
+            else -> reject("--es cmd must be one of: go, search, play, dump, sheet")
         }
 
         AdbControl.log("$cmd -> $reply")
@@ -109,5 +118,6 @@ class AdbControlReceiver : BroadcastReceiver() {
         const val EXTRA_QUERY = "query"
         const val EXTRA_VIDEO_ID = "videoId"
         const val EXTRA_TITLE = "title"
+        const val EXTRA_TARGET = "target"
     }
 }
