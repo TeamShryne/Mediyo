@@ -74,13 +74,27 @@ class AdbControlReceiver : BroadcastReceiver() {
             "sheet" -> {
                 val which = (intent.getStringExtra(EXTRA_TARGET)?.trim()?.lowercase() ?: arg)
                 when (which) {
-                    "menu", "comments", "playlist", "sleep" ->
+                    "menu", "media", "comments", "playlist", "sleep" ->
                         accept(AdbCommand.Sheet(at, which), "sheet $which")
-                    else -> reject("--es target must be one of: menu, comments, playlist, sleep")
+                    else -> reject("--es target must be one of: menu, media, comments, playlist, sleep")
                 }
             }
 
-            else -> reject("--es cmd must be one of: go, search, play, dump, sheet")
+            "overlay" -> {
+                val which = (intent.getStringExtra(EXTRA_TARGET)?.trim()?.lowercase() ?: arg)
+                when (which) {
+                    "player", "queue" -> accept(AdbCommand.Overlay(at, which), "overlay $which")
+                    else -> reject("--es target must be one of: player, queue")
+                }
+            }
+
+            "resolve" -> if (query.isEmpty()) {
+                reject("--es query required")
+            } else {
+                accept(AdbCommand.Resolve(at, query), "resolve '$query'")
+            }
+
+            else -> reject("--es cmd must be one of: go, search, play, dump, sheet, overlay, resolve")
         }
 
         AdbControl.log("$cmd -> $reply")

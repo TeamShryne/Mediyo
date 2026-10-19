@@ -159,7 +159,13 @@ fun CommentsBottomSheet(
     var selectedThread by remember { mutableStateOf<FfiComment?>(null) }
 
     val listState = rememberLazyListState()
-    ModalBottomSheet(onDismissRequest = onDismiss, shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp), modifier = Modifier.fillMaxHeight(0.92f)) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        modifier = Modifier.fillMaxHeight(0.92f),
+        // Matches the nav-bar strip SheetStatusBar paints while this is open.
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+    ) {
         if (selectedThread != null) {
             val thread = selectedThread!!
             CommentThreadView(comment = thread, onBack = { selectedThread = null })
