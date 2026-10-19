@@ -36,10 +36,13 @@ jobs:
       contents: read
       actions: write
     env:
-      # Pinned so the AVD cache key is stable across runs.
       API_LEVEL: '34'
-      SYSTEM_IMAGE: 'system-images;android-34;google_apis;x86_64'
-      # Stable location so the AVD survives between runs and can be cached.
+      # Must match what android-emulator-runner picks for target/arch below,
+      # otherwise sdkmanager installs one image and the action downloads another.
+      # `default` is the AOSP image: no Play services, which this app does not
+      # need, and it is materially smaller than google_apis.
+      SYSTEM_IMAGE: 'system-images;android-34;default;x86_64'
+      # Stable location so the AVD is recreated in the same place every run.
       ANDROID_AVD_HOME: ${{ github.workspace }}/.android-avd
     steps:
       - uses: actions/checkout@v4
@@ -49,6 +52,19 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+
+      # qemu links against these even with -noaudio, and the runner image ships
+      # without libpulse0. Without this the emulator dies at exec time with
+      # "libpulse.so.0: cannot open shared object file" and the boot wait below
+      # then spins until it times out.
+      - name: Emulator runtime libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libpulse0 libnss3 libxcursor1 libxdamage1 libxrandr2 libxi6 \
+            libxtst6 libasound2t64 libatk1.0-0t64 libatk-bridge2.0-0t64 \
+            libcups2t64 libdrm2 libxkbcommon0 libxcomposite1 libxfixes3 \
+            libgl1 libglx-mesa0
 
       - name: Android SDK
         uses: android-actions/setup-android@v4
@@ -67,7 +83,7 @@ jobs:
           path: |
             ${{ env.ANDROID_SDK_ROOT }}/system-images
             ${{ env.ANDROID_SDK_ROOT }}/emulator
-          key: emulator-${{ env.API_LEVEL }}-${{ hashFiles('.github/workflows/emulator.yml') }}
+          key: emulator-${{ env.API_LEVEL }}-default-x86_64
           restore-keys: emulator-${{ env.API_LEVEL }}-
 
       - name: Gradle cache (heavy)
@@ -102,10 +118,9 @@ jobs:
           profile: Nexus 6
           ram-size: 4096M
           disable-animations: true
-          disable-window-animations: true
-          emulator-options: >-
-            -no-snapshot-save -no-boot-anim -gpu swiftshader_indirect
-            -noaudio -camera-back none -camera-front none
+          # Fail fast if the guest never boots, instead of polling until the
+          # job-level timeout.
+          emulator-boot-timeout: 600
           script: scripts/emulator-smoke.sh
 
       - name: Upload screenshots and logs
