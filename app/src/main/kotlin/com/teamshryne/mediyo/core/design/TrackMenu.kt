@@ -72,7 +72,10 @@ fun TrackMenuSheet(
     // nav buttons sitting on the sheet's own background.
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        // Same token SheetStatusBar paints behind the nav bar, so the strip the
+        // buttons sit on matches the sheet rather than approximating it.
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
     ) {
         Column(
             Modifier

@@ -267,7 +267,9 @@ fun MediaMenuSheet(
     // See TrackMenu.kt: the inset is handed in, not read from inside the sheet.
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        // See TrackMenu.kt: matches the nav-bar strip painted by SheetStatusBar.
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
     ) {
         Column(
             Modifier
