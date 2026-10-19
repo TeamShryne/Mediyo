@@ -135,10 +135,14 @@ rather than offering a broken build. Publish a new nightly and it resumes.
 
 ## Verifying a release
 
-The `Android` and `Emulator` workflows run on every push and pull request and
-are required checks on `main`. The emulator one installs the debug APK on an
-API 34 emulator, drives it through the adb control surface and uploads 31
-screenshots — see [adb-control.md](adb-control.md).
+The `Android` workflow runs on every push and pull request and has two required
+checks: `APK` (build + lint) and `Boot emulator + drive app`. The second one
+installs the debug APK on an API 34 emulator, drives it through the adb control
+surface and uploads 31 screenshots — see [adb-control.md](adb-control.md).
+
+It is a **separate job in the same workflow**, not a separate workflow, so it
+takes the APK straight from the artifact the build just produced: no second
+build, and no downloading across workflow runs.
 
 Neither runs against a *release* build, so R8 and resource shrinking are not
 exercised before shipping. The release keystore and `minifyEnabled` are only
@@ -151,8 +155,7 @@ it is not covered.
 | | |
 | --- | --- |
 | `.github/workflows/publish.yml` | releases and nightlies |
-| `.github/workflows/android.yml` | build + lint (required check) |
-| `.github/workflows/emulator.yml` | emulator tour (required check) |
+| `.github/workflows/android.yml` | build + lint + emulator tour (both required checks) |
 | `scripts/version-code.sh` | the version code formula |
 | `scripts/make-update-json.sh` | the updater contract |
 | `scripts/emulator-smoke.sh` | the tour script |
