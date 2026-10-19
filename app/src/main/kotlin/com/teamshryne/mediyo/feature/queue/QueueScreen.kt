@@ -222,12 +222,6 @@ private class QueueReorder(
     }
 }
 
-private fun Modifier.reorderDrag(
-    reorder: QueueReorder,
-    enabled: () -> Boolean,
-    topInset: () -> Float
-): Modifier = reorder.dragModifier(enabled, topInset)
-
 // ── Full Screen Queue ────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -300,7 +294,7 @@ fun QueueScreen(
         // dragging upward past the header used to kill the gesture.
         modifier = Modifier
             .fillMaxSize()
-            .reorderDrag(reorder, enabled = { canReorder.value }, topInset = { listTopInset.floatValue }),
+            .then(reorder.dragModifier(enabled = { canReorder.value }, topInset = { listTopInset.floatValue })),
         topBar = {
             TopAppBar(
                 title = {
