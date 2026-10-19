@@ -76,6 +76,12 @@ sealed interface AdbCommand {
 
     /** Log the current player state to logcat. */
     data class Dump(override val at: Long) : AdbCommand
+
+    /**
+     * Open one of the bottom sheets so it can be screenshotted. [target] is
+     * `menu`, `comments`, `playlist` or `sleep`.
+     */
+    data class Sheet(override val at: Long, val target: String) : AdbCommand
 }
 
 /**

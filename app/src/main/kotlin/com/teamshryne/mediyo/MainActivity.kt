@@ -264,6 +264,47 @@ private fun AppShell() {
                     is AdbCommand.Play ->
                         adbScope.launch { playFromAdb(appContext, playerVm, cmd) }
 
+                    is AdbCommand.Sheet -> {
+                        // Sheets are the easiest thing to regress without noticing,
+                        // so give adb a way to open each one for a screenshot.
+                        val track = playerVm.currentTrack()
+                        when (cmd.target) {
+                            "menu" -> if (track == null) {
+                                AdbControl.log("sheet menu needs something in the queue")
+                            } else {
+                                sheetVm.showTrackMenu(
+                                    com.teamshryne.mediyo.core.design.TrackMenuRequest(
+                                        track = track,
+                                        onComments = track.videoId?.let { { sheetVm.showComments(it) } },
+                                        onAddToPlaylist = { sheetVm.openAddToPlaylist(track) }
+                                    )
+                                )
+                                AdbControl.log("sheet menu opened for '${track.title}'")
+                            }
+
+                            "comments" -> {
+                                val vid = track?.videoId
+                                if (vid == null) AdbControl.log("sheet comments needs a videoId")
+                                else {
+                                    sheetVm.showComments(vid)
+                                    AdbControl.log("sheet comments opened for $vid")
+                                }
+                            }
+
+                            "playlist" -> if (track == null) {
+                                AdbControl.log("sheet playlist needs something in the queue")
+                            } else {
+                                sheetVm.openAddToPlaylist(track)
+                                AdbControl.log("sheet add-to-playlist opened")
+                            }
+
+                            "sleep" -> {
+                                showSleepSheet = true
+                                AdbControl.log("sheet sleep timer opened")
+                            }
+                        }
+                    }
+
                     is AdbCommand.Dump -> AdbControl.log(
                         "dump title=${playerState.title} artist=${playerState.artist} " +
                             "playing=${playerState.isPlaying} queue=${playerState.queueSize} " +

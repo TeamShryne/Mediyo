@@ -710,14 +710,7 @@ private fun TopResultMiniRow(item: FfiSearchResult, onClick: () -> Unit, onMenu:
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                buildString {
-                    append(
-                        item.artists.joinToString()
-                            .ifBlank { item.info?.takeIf { it.isNotBlank() } ?: item.category }
-                    )
-                    append("  •  ")
-                    append(item.category)
-                },
+                searchMeta(item),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -732,6 +725,23 @@ private fun TopResultMiniRow(item: FfiSearchResult, onClick: () -> Unit, onMenu:
             )
         }
         TrackOverflowIcon(onClick = onMenu)
+    }
+}
+
+/**
+ * Secondary line under a search result title: "Artist • Song", collapsing to
+ * just "Song" when the artist is unknown.
+ *
+ * The artist used to fall back to the category and then had the category
+ * appended again, which rendered every anonymous song as "Song • Song".
+ */
+private fun searchMeta(item: FfiSearchResult): String {
+    val primary = item.artists.joinToString().ifBlank { item.info?.trim().orEmpty() }
+    val category = item.category.trim()
+    return when {
+        primary.isEmpty() -> category
+        category.isEmpty() || primary.equals(category, ignoreCase = true) -> primary
+        else -> "$primary  •  $category"
     }
 }
 
@@ -767,14 +777,7 @@ private fun ResultRow(item: FfiSearchResult, onClick: () -> Unit, onMenu: () -> 
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                buildString {
-                    append(
-                        item.artists.joinToString()
-                            .ifBlank { item.info?.takeIf { it.isNotBlank() } ?: item.category }
-                    )
-                    append("  •  ")
-                    append(item.category)
-                },
+                searchMeta(item),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,

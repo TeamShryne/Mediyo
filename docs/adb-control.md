@@ -27,6 +27,19 @@ adb logcat -s MediyoAdb
 All four take the same action, `com.teamshryne.mediyo.adb`, and select on
 `--es cmd`.
 
+### Quoting multi-word values
+
+`adb shell` hands the command line to a *device-side* shell, which re-splits
+it. So the obvious form silently truncates:
+
+```bash
+--es query "daft punk one more time"   # arrives as query="daft"  ✗
+--es query "'daft punk one more time'" # arrives intact        ✓
+```
+
+The inner single quotes survive one round of re-splitting. Every example below
+that has spaces already uses this form.
+
 ### go — open any screen
 
 ```bash
@@ -61,7 +74,7 @@ error: no route 'nope': Navigation destination that matches request …
 
 ```bash
 adb shell am broadcast -p com.teamshryne.mediyo.debug -a com.teamshryne.mediyo.adb \
-    --es cmd search --es query "daft punk one more time"
+    --es cmd search --es query "'daft punk one more time'"
 ```
 
 Switches to the search tab and submits the query. Results are visible on screen.
@@ -73,7 +86,7 @@ and starts the best match:
 
 ```bash
 adb shell am broadcast -p com.teamshryne.mediyo.debug -a com.teamshryne.mediyo.adb \
-    --es cmd play --es query "daft punk one more time"
+    --es cmd play --es query "'daft punk one more time'"
 ```
 
 By videoId — plays that id exactly:
@@ -90,6 +103,21 @@ with the videoId:
 adb shell am broadcast -p com.teamshryne.mediyo.debug -a com.teamshryne.mediyo.adb \
     --es cmd play --es videoId dQw4w9WgXcQ --es title "Never Gonna Give You Up"
 ```
+
+### sheet — open a bottom sheet
+
+Bottom sheets are invisible until something opens them, which makes them easy
+to regress unnoticed. This opens each one so it can be screenshotted. Requires
+something in the queue (a `play` or `search` first).
+
+```bash
+adb shell am broadcast -p com.teamshryne.mediyo.debug -a com.teamshryne.mediyo.adb \
+    --es cmd sheet --es target menu
+adb exec-out screencap -p > sheet.png
+```
+
+`--es target` is one of `menu` (track overflow menu), `comments`, `playlist`
+(add-to-playlist) or `sleep` (sleep timer).
 
 ### dump — log what is playing
 
@@ -127,6 +155,12 @@ These need the playback service alive, i.e. something already playing.
   app is up still lands. Anything older than 15 seconds is dropped rather than
   replayed, so a stale navigation cannot fire while you are looking at
   something else.
+- **Playback will not start from a GitHub-hosted runner.** YouTube blocks
+  datacenter IPs for anonymous streaming (`LOGIN_REQUIRED` / "Sign in to
+  confirm that you're not a bot"), which surfaces in logcat as
+  `SignInConfirmNotBotException`. Metadata, search, browsing and navigation all
+  work normally — only audio start is affected. Verifying real playback needs a
+  self-hosted runner on a residential IP.
 - The receiver is `exported`, so any app on the device can reach it. That is
   accepted for a debug-only build since release has no receiver to find;
   nothing destructive is exposed. Do not move it to `src/main`.
