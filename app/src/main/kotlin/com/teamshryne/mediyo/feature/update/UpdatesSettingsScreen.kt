@@ -36,10 +36,66 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.teamshryne.mediyo.BuildConfig
+import com.teamshryne.mediyo.data.update.UpdateChannel
+
+/**
+ * Picks the update track. The two are separate feeds rather than one feed
+ * with a preference: nightlies are published as prereleases, so they never
+ * appear in the stable feed at all.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ChannelCard(
+    channel: UpdateChannel,
+    onSelect: (UpdateChannel) -> Unit,
+) {
+    Card(
+        modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+    ) {
+        Column(
+            Modifier.padding(16.dp).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text("Update channel", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                UpdateChannel.entries.forEach { c ->
+                    val selected = c == channel
+                    Surface(
+                        onClick = { onSelect(c) },
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (selected) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.surfaceContainerHighest,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            c.label,
+                            modifier = Modifier.padding(vertical = 12.dp),
+                            textAlign = TextAlign.Center,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = if (selected) MaterialTheme.colorScheme.onPrimary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            Text(
+                when (channel) {
+                    UpdateChannel.STABLE -> "Signed releases. Nightly builds are never pushed to this channel."
+                    UpdateChannel.NIGHTLY -> "Daily builds from main. Untested by definition — only use this if you are happy to hit a broken build."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,6 +104,7 @@ fun UpdatesSettingsScreen(
     vm: UpdateViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsState()
+    val channel by vm.channel.collectAsState()
 
     Scaffold(
         // Zero insets: nested inside the outer app Scaffold, whose padding
@@ -96,7 +153,10 @@ fun UpdatesSettingsScreen(
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                             Text("Mediyo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                             Text(
-                                "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                                "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})" +
+                                    // A nightly build should say so: it is a build
+                                    // of main, not a release.
+                                    if (BuildConfig.CHANNEL == "nightly") " • nightly" else "",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -111,6 +171,12 @@ fun UpdatesSettingsScreen(
                         }
                     }
                 }
+            }
+            item {
+                ChannelCard(
+                    channel = channel,
+                    onSelect = { vm.setChannel(it) },
+                )
             }
             item {
                 Column(

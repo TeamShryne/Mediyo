@@ -59,12 +59,12 @@ class AppUpdater @Inject constructor(
         }
     }
 
-    suspend fun check(): UpdateCheck = withContext(Dispatchers.IO) {
+    suspend fun check(channel: UpdateChannel = UpdateChannel.STABLE): UpdateCheck = withContext(Dispatchers.IO) {
         // Updater is release-only: never hit the network from debug builds
         // (different applicationId/versioning, side-by-side installs).
         if (BuildConfig.DEBUG) return@withContext UpdateCheck.UpToDate
         try {
-            val conn = openGet(UpdateUrls.LATEST_META, readTimeoutMs = 15_000)
+            val conn = openGet(UpdateUrls.metaUrl(channel), readTimeoutMs = 15_000)
             conn.connect()
             if (conn.responseCode !in 200..299) {
                 return@withContext UpdateCheck.Failed("Server returned ${conn.responseCode}")

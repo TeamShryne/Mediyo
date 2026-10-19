@@ -52,7 +52,11 @@ jobs:
       - name: Build debug APK + lint
         run: |
           chmod +x gradlew || true
-          ./gradlew --no-daemon assembleDebug lintDebug --stacktrace
+          # -PenableR8=true minifies and resource-shrinks this APK, so the
+          # emulator tour below exercises the same R8 path as a release build.
+          # The release keystore is not involved: this is still the debug key
+          # and the .debug applicationId.
+          ./gradlew --no-daemon assembleDebug lintDebug --stacktrace -PenableR8=true
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/27.0.12077973
 
@@ -78,9 +82,139 @@ jobs:
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
+  # The emulator tour, in the same workflow as the build so it can take the
+  # APK straight from the artifact the build just produced — no second build,
+  # and no cross-run download.
+  #
+  # `needs: apk` with `if: always()`: a lint failure must not stop the tour,
+  # because the screenshots are how you see what the change actually looks
+  # like. If the *build* failed there is no artifact, the download step fails,
+  # and both checks report.
+  emulator:
+    name: Boot emulator + drive app
+    needs: [apk]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: write
+    env:
+      API_LEVEL: '34'
+      # Must match what android-emulator-runner picks below, otherwise
+      # sdkmanager installs one image and the action downloads another.
+      # `default` is the AOSP image: no Play services, which this app does not
+      # need, and it is materially smaller than google_apis.
+      SYSTEM_IMAGE: 'system-images;android-34;default;x86_64'
+      ANDROID_AVD_HOME: ${{ github.workspace }}/.android-avd
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # qemu links against these even with -noaudio, and the runner image ships
+      # without libpulse0. Without this the emulator dies at exec time with
+      # "libpulse.so.0: cannot open shared object file" and the boot wait below
+      # then spins until it times out.
+      - name: Emulator runtime libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libpulse0 libnss3 libxcursor1 libxdamage1 libxrandr2 libxi6 \
+            libxtst6 libasound2t64 libatk1.0-0t64 libatk-bridge2.0-0t64 \
+            libcups2t64 libdrm2 libxkbcommon0 libxcomposite1 libxfixes3 \
+            libgl1 libglx-mesa0
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install platform + build-tools + emulator image
+        run: |
+          sdkmanager --install "platform-tools" "platforms;android-34" "build-tools;34.0.0" \
+            "emulator" "$SYSTEM_IMAGE"
+          df -h / | tail -1
+
+      # The extracted system image is ~1.5GB and dominates the run time.
+      - name: Cache Android emulator image
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.ANDROID_SDK_ROOT }}/system-images
+            ${{ env.ANDROID_SDK_ROOT }}/emulator
+          key: emulator-${{ env.API_LEVEL }}-default-x86_64
+          restore-keys: emulator-${{ env.API_LEVEL }}-
+
+      # The APK the build job just produced.
+      - name: Download the built APK
+        uses: actions/download-artifact@v4
+        with:
+          name: mediyo-debug-apk
+          path: app/build/outputs/apk/debug
+
+      - name: Verify the APK is there
+        run: |
+          set -euo pipefail
+          APK=$(ls app/build/outputs/apk/debug/*.apk | head -1)
+          echo "using $APK"
+          echo "APK_PATH=$APK" >> "$GITHUB_ENV"
+
+      # android-emulator-runner needs KVM readable by the current user.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Prepare AVD home
+        run: mkdir -p "$ANDROID_AVD_HOME" && echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME"
+
+      - name: Boot emulator and drive the app
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ env.API_LEVEL }}
+          target: default
+          arch: x86_64
+          profile: Nexus 6
+          ram-size: 4096M
+          disable-animations: true
+          # Fail fast if the guest never boots, instead of polling until the
+          # job-level timeout.
+          emulator-boot-timeout: 600
+          script: scripts/emulator-smoke.sh
+
+      - name: Upload screenshots and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulator-screenshots
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Summarise
+        if: always()
+        run: |
+          if [ -f artifacts/summary.txt ]; then
+            echo "### Emulator smoke" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            cat artifacts/summary.txt >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Emulator smoke" >> "$GITHUB_STEP_SUMMARY"
+            echo "No summary produced." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   prune:
     name: Prune stale caches
-    needs: [apk]
+    # Waits for the tour too: the pruner deletes all but the 12 newest cache
+    # entries, and the emulator is reading the system-image cache it just
+    # wrote.
+    needs: [apk, emulator]
     runs-on: ubuntu-latest
     if: always()
     permissions:

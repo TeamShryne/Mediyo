@@ -46,6 +46,12 @@ android {
         // identifiable in Settings. Never fails the build when git is
         // unavailable (e.g. source export without .git).
         buildConfigField("String", "GIT_SHA", "\"${gitSha()}\"")
+        // Which update track this build belongs to: "stable" or "nightly".
+        // The nightly track is signed with the same key and shares the
+        // applicationId, so it replaces the release build in place rather
+        // than installing alongside it.
+        val channel = (project.findProperty("channel") as String?) ?: "stable"
+        buildConfigField("String", "CHANNEL", "\"$channel\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
@@ -67,6 +73,19 @@ android {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
             manifestPlaceholders["appName"] = "Mediyo Debug"
+            // -PenableR8=true produces a minified, resource-shrunk APK that
+            // still uses the debug key and the .debug applicationId, so CI can
+            // rehearse the release build's R8 behaviour on every PR without
+            // ever touching the release keystore.
+            //
+            // Release-only shrinking is exactly the class of bug that builds
+            // clean and then crashes on a user's phone: a missing keep rule
+            // for a class reached only by reflection.
+            isMinifyEnabled = (project.findProperty("enableR8") as String?) == "true"
+            if (isMinifyEnabled) {
+                isShrinkResources = true
+                proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            }
         }
     }
 

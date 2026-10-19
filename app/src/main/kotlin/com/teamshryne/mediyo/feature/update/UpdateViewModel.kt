@@ -4,12 +4,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.teamshryne.mediyo.BuildConfig
 import com.teamshryne.mediyo.data.update.AppUpdater
+import com.teamshryne.mediyo.data.update.UpdateChannel
 import com.teamshryne.mediyo.data.update.UpdateCheck
 import com.teamshryne.mediyo.data.update.UpdateInfo
+import com.teamshryne.mediyo.data.update.UpdatePrefs
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.File
 import javax.inject.Inject
@@ -17,6 +21,7 @@ import javax.inject.Inject
 @HiltViewModel
 class UpdateViewModel @Inject constructor(
     val updater: AppUpdater,
+    private val prefs: UpdatePrefs,
 ) : ViewModel() {
 
     sealed interface State {
@@ -36,6 +41,10 @@ class UpdateViewModel @Inject constructor(
     private val _state = MutableStateFlow<State>(State.Idle)
     val state: StateFlow<State> = _state.asStateFlow()
 
+    /** Which track this install follows. */
+    val channel: StateFlow<UpdateChannel> =
+        prefs.channelFlow.stateIn(viewModelScope, SharingStarted.Eagerly, UpdateChannel.STABLE)
+
     private var autoChecked = false
 
     /** Silent startup check: surfaces nothing unless an update is Available. No-op in debug. */
@@ -45,7 +54,7 @@ class UpdateViewModel @Inject constructor(
         autoChecked = true
         viewModelScope.launch {
             _state.value = State.Checking
-            _state.value = when (val r = updater.check()) {
+            _state.value = when (val r = updater.check(channel.value)) {
                 is UpdateCheck.Available -> State.Available(r.info)
                 else -> State.Idle
             }
@@ -59,11 +68,24 @@ class UpdateViewModel @Inject constructor(
         }
         viewModelScope.launch {
             _state.value = State.Checking
-            _state.value = when (val r = updater.check()) {
+            _state.value = when (val r = updater.check(channel.value)) {
                 is UpdateCheck.Available -> State.Available(r.info)
                 is UpdateCheck.UpToDate -> State.UpToDate
                 is UpdateCheck.Failed -> State.Error(r.message)
             }
+        }
+    }
+
+    /**
+     * Switch track. The two tracks are separate feeds, so switching means
+     * re-checking: the version you are on may not be the newest on the
+     * other track.
+     */
+    fun setChannel(channel: UpdateChannel) {
+        viewModelScope.launch {
+            prefs.setChannel(channel)
+            _state.value = State.Idle
+            manualCheck()
         }
     }
 
