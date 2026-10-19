@@ -44,6 +44,12 @@ adb exec-out screencap -p > shot.png
 
 See [docs/adb-control.md](docs/adb-control.md) for the full command set.
 
+## Releases and nightlies
+
+Two update tracks: tagged **stable** releases, and a daily **nightly** build of `main` that users opt into via *Settings → App updates → Nightly*. Nightlies are the proving ground — a release should be a commit that has already survived as a nightly.
+
+See [docs/releases.md](docs/releases.md) for how to cut a release, publish a nightly, and how the version codes are ordered.
+
 ## Storage and cache
 
 Open **Settings → Storage & Cache** to manage local data. Available controls include:

@@ -24,7 +24,22 @@ object UpdateUrls {
 
     /**
      * GitHub resolves /releases/latest/download/<asset> to the newest
-     * release's asset, so the check needs no API calls or rate limits.
+     * *non-prerelease* release's asset, so the check needs no API calls or
+     * rate limits — and nightlies, published as prereleases, stay invisible
+     * to stable users.
      */
     const val LATEST_META = "https://github.com/$REPO/releases/latest/download/update.json"
+
+    /**
+     * The rolling `nightly` release, whose assets are replaced by each daily
+     * build. Nightlies are prereleases, so they need their own tag to be
+     * addressable at all.
+     */
+    const val NIGHTLY_META = "https://github.com/$REPO/releases/download/nightly/update.json"
+
+    /** Metadata endpoint for a given channel. */
+    fun metaUrl(channel: UpdateChannel): String = when (channel) {
+        UpdateChannel.STABLE -> LATEST_META
+        UpdateChannel.NIGHTLY -> NIGHTLY_META
+    }
 }
