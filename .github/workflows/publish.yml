@@ -160,6 +160,7 @@ jobs:
           echo "apkName=$APK_NAME" >> "$GITHUB_OUTPUT"
           echo "major=$MAJOR" >> "$GITHUB_OUTPUT"
           echo "minor=$MINOR" >> "$GITHUB_OUTPUT"
+          echo "seq=$SEQ" >> "$GITHUB_OUTPUT"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -321,6 +322,12 @@ jobs:
           SEQ: ${{ steps.version.outputs.seq }}
         run: |
           set -euo pipefail
+          # A missing value here would otherwise surface as git's "not a valid
+          # tag name", which says nothing about the real cause.
+          if [ -z "$SEQ" ]; then
+            echo "::error::SEQ is empty — the resolve step did not export it"
+            exit 1
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
