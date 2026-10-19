@@ -62,14 +62,19 @@ fun TrackMenuSheet(
     }
     var showArtists by remember(track) { mutableStateOf(false) }
     BackHandler(enabled = showArtists) { showArtists = false }
-    ModalBottomSheet(onDismissRequest = onDismiss, shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)) {
-        // navigationBarsPadding, not a fixed bottom pad: the app is edge-to-edge,
-        // so the sheet paints behind the nav bar and a hardcoded pad leaves the
-        // last row underneath the back/home/recents buttons.
+    // windowInsets rather than navigationBarsPadding() on the content: the sheet
+    // consumes insets before its content sees them, so an inner padding resolves
+    // to 0 (verified: the layout did not move by a single pixel). This pads the
+    // content while the surface still reaches the bottom edge, which leaves the
+    // nav buttons sitting on the sheet's own background.
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        windowInsets = WindowInsets.systemBars
+    ) {
         Column(
             Modifier
                 .padding(horizontal = 8.dp, vertical = 8.dp)
-                .navigationBarsPadding()
                 .padding(bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
