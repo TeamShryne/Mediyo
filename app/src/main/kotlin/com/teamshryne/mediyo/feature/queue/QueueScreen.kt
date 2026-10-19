@@ -81,13 +81,10 @@ class QueueVm @Inject constructor(
 // ── Hold & adjust (long-press drag to reorder) ─────────────────────────────
 
 /** Distance from the viewport edge where an in-flight drag starts auto-scrolling. */
-private val DragEdgeZone = 88.dp
+private val DragEdgeZone = 120.dp
 
 /** Peak auto-scroll speed while a dragged row sits inside the edge zone. */
-private val DragScrollSpeed = 900.dp
-
-/** Where a row sits right now — the list refreshes it as items are reordered. */
-private class ReorderAnchor(var index: Int)
+private val DragScrollSpeed = 1600.dp
 
 /**
  * Hold and adjust: long-press any row, drag it, and it swaps places live.
@@ -104,6 +101,7 @@ private class QueueReorder(
     private val scope: CoroutineScope,
     private val edgeZonePx: Float,
     private val scrollSpeedPx: Float,
+    private val isDraggable: (Int) -> Boolean,
     private val onMove: (from: Int, to: Int) -> Unit
 ) {
     /** Index of the row under the finger, or -1 when nothing is being dragged. */
@@ -117,20 +115,35 @@ private class QueueReorder(
     private var autoScroll: Job? = null
 
     /**
-     * Drag gesture for one row. Keyed on [anchor], never on the row index: rows
-     * swap indexes mid-drag, and restarting the detector would drop the gesture.
+     * Hold-and-adjust detector, mounted on the **full-screen** container rather
+     * than on the row.
+     *
+     * A row-sized detector only receives events while the finger is over that
+     * row's bounds, so the moment you drag upward past the header — exactly the
+     * move that should pull earlier tracks into view — the gesture dies and the
+     * row settles where it stood. Mounted on the root, the finger stays in
+     * bounds all the way to the screen edge; the row being dragged is resolved
+     * on drag start by hit-testing the list layout, using [topInset] to map the
+     * touch point into list coordinates.
      */
-    fun dragModifier(anchor: ReorderAnchor, enabled: Boolean): Modifier =
-        if (!enabled) Modifier else Modifier.pointerInput(anchor) {
+    fun dragModifier(enabled: () -> Boolean, topInset: () -> Float): Modifier =
+        Modifier.pointerInput(Unit) {
             detectDragGesturesAfterLongPress(
-                onDragStart = {
-                    if (index == -1) {
-                        index = anchor.index
-                        offset = 0f
-                        autoScroll = scope.launch { autoScrollLoop() }
-                    }
+                onDragStart = { pos ->
+                    if (!enabled()) return@detectDragGesturesAfterLongPress
+                    val y = pos.y - topInset()
+                    val row = listState.layoutInfo.visibleItemsInfo.firstOrNull {
+                        y >= it.offset && y < it.offset + it.size && isDraggable(it.index)
+                    }?.index ?: -1
+                    if (row < 0) return@detectDragGesturesAfterLongPress
+                    index = row
+                    offset = 0f
+                    autoScroll = scope.launch { autoScrollLoop() }
                 },
                 onDrag = { change, amount ->
+                    // Nothing under the finger (header, bottom bar, padding) —
+                    // leave the events alone so the list behaves normally.
+                    if (index < 0) return@detectDragGesturesAfterLongPress
                     change.consume()
                     offset += amount.y
                     commit()
@@ -155,9 +168,11 @@ private class QueueReorder(
             val dt = if (last == 0L) 0f else ((now - last) / 1_000_000_000f).coerceIn(0f, 0.05f)
             last = now
             val velocity = edgeVelocity()
-            if (velocity != 0f) {
-                val scrolled = listState.scrollBy(velocity * dt)
-                if (scrolled == 0f) break
+            if (velocity == 0f) continue
+            val scrolled = listState.scrollBy(velocity * dt)
+            // Hitting either end of the queue is normal, not a reason to tear
+            // the loop down — the user can still drag back into the middle.
+            if (scrolled != 0f) {
                 // Scrolling moves every row, dragged one included — carry the
                 // same distance into the offset so it stays under the finger.
                 offset += scrolled
@@ -191,7 +206,8 @@ private class QueueReorder(
         val center = dragged.offset + dragged.size / 2f + offset
         var target = from
         for (other in info.visibleItemsInfo) {
-            if (other.index == from) continue
+            // Skip the dragged row and the trailing autoplay footer.
+            if (other.index == from || !isDraggable(other.index)) continue
             val otherCenter = other.offset + other.size / 2f
             if (other.index < from && center < otherCenter) target = minOf(target, other.index)
             else if (other.index > from && center > otherCenter) target = maxOf(target, other.index)
@@ -205,6 +221,12 @@ private class QueueReorder(
         Snapshot.withMutableSnapshot { onMove(from, target) }
     }
 }
+
+private fun Modifier.reorderDrag(
+    reorder: QueueReorder,
+    enabled: () -> Boolean,
+    topInset: () -> Float
+): Modifier = reorder.dragModifier(enabled, topInset)
 
 // ── Full Screen Queue ────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -230,12 +252,19 @@ fun QueueScreen(
     var showAddSheet by remember { mutableStateOf<Track?>(null) }
     val menuVm: com.teamshryne.mediyo.core.design.MediaMenuVm = hiltViewModel()
 
+    // Touch points reach the detector in the Scaffold's coordinate space; the list
+    // starts below the header, so remember that inset to map a touch onto a row.
+    val listTopInset = remember { mutableFloatStateOf(0f) }
+    // The detector captures its lambdas once, so the lock flag has to be read
+    // through state or hold-and-adjust would freeze at the first composition.
+    val canReorder = rememberUpdatedState(!lockQueue)
     val reorder = remember(listState, scope, density) {
         QueueReorder(
             listState = listState,
             scope = scope,
             edgeZonePx = with(density) { DragEdgeZone.toPx() },
             scrollSpeedPx = with(density) { DragScrollSpeed.toPx() },
+            isDraggable = { i -> i in vm.state.value.entries.indices },
             onMove = { from, to -> vm.move(from, to) }
         )
     }
@@ -256,12 +285,22 @@ fun QueueScreen(
     }
 
     LaunchedEffect(currentIdx) {
+        // A reorder moves the current track with it, and this effect would then
+        // yank the list back to it — which is what made a held row snap away
+        // mid-drag. Never fight the finger.
+        if (reorder.index >= 0) return@LaunchedEffect
         if (currentIdx in qs.entries.indices) {
             try { listState.animateScrollToItem((currentIdx - 2).coerceAtLeast(0)) } catch (_: Throwable) {}
         }
     }
 
     Scaffold(
+        // The hold-and-adjust detector lives on the Scaffold (full-screen), not
+        // on the rows: a row only sees the finger while it hovers that row, so
+        // dragging upward past the header used to kill the gesture.
+        modifier = Modifier
+            .fillMaxSize()
+            .reorderDrag(reorder, enabled = { canReorder.value }, topInset = { listTopInset.floatValue }),
         topBar = {
             TopAppBar(
                 title = {
@@ -330,6 +369,8 @@ fun QueueScreen(
             }
         }
     ) { pad ->
+        // The LazyColumn sits exactly `pad.top` below the Scaffold's top edge.
+        SideEffect { listTopInset.floatValue = with(density) { pad.calculateTopPadding().toPx() } }
         if (qs.entries.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(pad).padding(32.dp), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -347,8 +388,6 @@ fun QueueScreen(
                 itemsIndexed(qs.entries, key = { idx, _ -> keys[idx] }) { idx, t ->
                     val isActive = idx == currentIdx
                     val isPlaying = isActive && (playerState?.isPlaying == true)
-                    val anchor = remember { ReorderAnchor(idx) }
-                    anchor.index = idx
                     val onRowClick: () -> Unit = { if (idx == currentIdx) player?.toggle() else { vm.playAt(idx); player?.playAt(idx) } }
                     val dismissState = rememberSwipeToDismissBoxState(
                         positionalThreshold = { it * 0.4f },
@@ -380,7 +419,6 @@ fun QueueScreen(
                                         reorder = reorder,
                                         index = idx,
                                         canReorder = true,
-                                        modifier = reorder.dragModifier(anchor, enabled = true),
                                         onClick = onRowClick,
                                         onMore = { menuTrack = t; menuIdx = idx }
                                     )
