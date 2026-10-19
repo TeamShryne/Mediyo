@@ -108,16 +108,23 @@ jobs:
             # ── Nightly ──────────────────────────────────────────────────────
             MODE=nightly
             # The band is the minor line of the latest *stable* release, so the
-            # next release always outranks every nightly before it. With no
-            # release yet, start on the 0.1 line.
+            # next release always outranks every nightly before it.
+            #
+            # A stable release is required first, and not just for ordering: the
+            # nightly channel only exists in builds that know about it. The
+            # currently-installed release has no channel preference and always
+            # reads the stable feed, so a nightly published before it would be
+            # received by nobody. Cutting the stable release first also moves
+            # the band up, so every user of that release is offered the
+            # nightly the moment they opt in.
             LATEST=$(gh release list --limit 30 --json tagName,isPrerelease \
                         --jq '[.[] | select(.isPrerelease == false)][0].tagName // ""')
             if [ -z "$LATEST" ]; then
-              echo "No stable release yet — nightlies start on the 0.1 line."
-              BASE_VERSION="0.1.0"
-            else
-              BASE_VERSION="${LATEST#v}"
+              echo "::error::no stable release yet — cut one before publishing nightlies."
+              echo "::error::the nightly channel only exists in builds that support it."
+              exit 1
             fi
+            BASE_VERSION="${LATEST#v}"
             MAJOR="${BASE_VERSION%%.*}"
             REST="${BASE_VERSION#*.}"
             MINOR="${REST%%.*}"
@@ -128,6 +135,14 @@ jobs:
             VERSION="${BASE_VERSION}-nightly.${SEQ}"
             APK_NAME="mediyo-nightly-${MAJOR}.${MINOR}.${SEQ}.apk"
             TAG=nightly
+
+            # Sanity: the nightly must outrank the release it is based on, or
+            # nobody on that release would ever be offered it.
+            LATEST_CODE=$(scripts/version-code.sh "$MAJOR" "$MINOR" 0 release)
+            if [ "$CODE" -le "$LATEST_CODE" ]; then
+              echo "::error::nightly code $CODE does not outrank $LATEST ($LATEST_CODE)"
+              exit 1
+            fi
           fi
 
           echo "mode=$MODE tag=$TAG version=$VERSION code=$CODE apk=$APK_NAME"
