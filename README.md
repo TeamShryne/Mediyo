@@ -32,6 +32,18 @@ To build locally, you will need a compatible Android development environment, th
 
 For the native core, see [TeamShryne/mediyo-core](https://github.com/TeamShryne/mediyo-core).
 
+## Controlling a debug build over adb
+
+Debug builds can be searched, played and navigated with `adb` alone, which makes scripted UI testing and screenshots possible. Release builds expose nothing.
+
+```bash
+adb shell am start -n com.teamshryne.mediyo.debug/com.teamshryne.mediyo.MainActivity
+adb shell am broadcast -p com.teamshryne.mediyo.debug -a com.teamshryne.mediyo.adb --es cmd play --es query "daft punk one more time"
+adb exec-out screencap -p > shot.png
+```
+
+See [docs/adb-control.md](docs/adb-control.md) for the full command set.
+
 ## Storage and cache
 
 Open **Settings → Storage & Cache** to manage local data. Available controls include:
