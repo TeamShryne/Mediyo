@@ -1,6 +1,7 @@
 package com.teamshryne.mediyo
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -50,7 +51,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -100,6 +103,7 @@ import com.teamshryne.mediyo.feature.podcast.PodcastScreen
 import com.teamshryne.mediyo.feature.profile.ProfileScreen
 import com.teamshryne.mediyo.feature.queue.QueueScreen
 import com.teamshryne.mediyo.feature.search.SearchScreen
+import com.teamshryne.mediyo.feature.search.SearchVm
 import com.teamshryne.mediyo.feature.settings.AppearanceScreen
 import com.teamshryne.mediyo.feature.settings.AppearanceVm
 import com.teamshryne.mediyo.feature.settings.PlayerBackgroundScreen
@@ -115,6 +119,13 @@ import com.teamshryne.mediyo.core.design.navigateArtist
 import com.teamshryne.mediyo.core.design.navigateChannel
 import com.teamshryne.mediyo.core.design.navigatePodcast
 import com.teamshryne.mediyo.feature.update.UpdatesSettingsScreen
+import com.teamshryne.mediyo.core.design.isEpisode
+import com.teamshryne.mediyo.debug.AdbBridgeEntryPoint
+import com.teamshryne.mediyo.debug.AdbCommand
+import com.teamshryne.mediyo.debug.AdbControl
+import com.teamshryne.mediyo.domain.model.PlayOrigin
+import com.teamshryne.mediyo.domain.model.Track
+import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.android.AndroidEntryPoint
 
 sealed class Tab(val route: String, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
@@ -196,6 +207,9 @@ private fun AppShell() {
         else -> tabs.firstOrNull { it.route == currentRoute }?.label ?: "Mediyo"
     }
 
+    // Hoisted out of SearchScreen so the search state survives tab switches and
+    // can be driven from adb (see the AdbControl collector below).
+    val searchVm: SearchVm = hiltViewModel()
     val appearanceVm: AppearanceVm = hiltViewModel()
     val tabStyle by appearanceVm.style.collectAsState()
     val density = LocalDensity.current
@@ -214,6 +228,50 @@ private fun AppShell() {
             launchSingleTop = true
             popUpTo(nav.graph.findStartDestination().id) { saveState = true }
             restoreState = true
+        }
+    }
+
+    // adb control — debug builds only. Nothing in a release APK can emit on
+    // AdbControl (its receiver is declared in src/debug only), and the
+    // constant-false BuildConfig.DEBUG here lets R8 drop all of it.
+    if (BuildConfig.DEBUG) {
+        val adbScope = rememberCoroutineScope()
+        val appContext = context.applicationContext
+        LaunchedEffect(Unit) {
+            AdbControl.commands.collect { cmd ->
+                if (!AdbControl.isFresh(cmd)) {
+                    AdbControl.log("dropped stale command: $cmd")
+                    return@collect
+                }
+                when (cmd) {
+                    is AdbCommand.Go -> {
+                        // navigate throws on an unknown route rather than
+                        // failing silently, so an agent finds out either way.
+                        val err = runCatching { nav.navigate(cmd.route) }.exceptionOrNull()
+                        AdbControl.log(
+                            if (err == null) "navigated to ${cmd.route}"
+                            else "no route '${cmd.route}': ${err.message}"
+                        )
+                    }
+
+                    is AdbCommand.Search -> {
+                        selectTab(Tab.Search)
+                        searchVm.query = cmd.query
+                        searchVm.submit()
+                        AdbControl.log("search '${cmd.query}' submitted")
+                    }
+
+                    is AdbCommand.Play ->
+                        adbScope.launch { playFromAdb(appContext, playerVm, cmd) }
+
+                    is AdbCommand.Dump -> AdbControl.log(
+                        "dump title=${playerState.title} artist=${playerState.artist} " +
+                            "playing=${playerState.isPlaying} queue=${playerState.queueSize} " +
+                            "index=${playerState.queueIndex} shuffle=${playerState.shuffle} " +
+                            "liked=${playerState.liked} origin=${playerState.originLabel}"
+                    )
+                }
+            }
         }
     }
 
@@ -263,7 +321,7 @@ private fun AppShell() {
                     popExitTransition = { popExit() }
                 ) {
                 composable(Tab.Home.route) { HomeScreen(nav, playerVm) }
-                composable(Tab.Search.route) { SearchScreen(nav, playerVm) }
+                composable(Tab.Search.route) { SearchScreen(nav, playerVm, searchVm) }
                 composable(Tab.Library.route) { LibraryScreen(nav, playerVm) }
                 composable(Tab.Settings.route) { SettingsScreen(nav) }
                 composable("settings/lyrics") { LyricsSettingsScreen(nav) }
@@ -459,6 +517,56 @@ private fun AppShell() {
                 onDismiss = { showSleepSheet = false }
             )
         }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// adb control
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Backs `am broadcast --es cmd play`. With a query it searches, queues every
+ * song it finds (so the player has somewhere to go on `next`) and starts the
+ * best match; with a videoId it plays that id directly.
+ *
+ * The title is unknown for the videoId path unless the caller supplies one —
+ * there is no id -> metadata call in the core — so it falls back to the id.
+ */
+private suspend fun playFromAdb(
+    appContext: Context,
+    playerVm: PlayerViewModel,
+    cmd: AdbCommand.Play
+) {
+    try {
+        val videoId = cmd.videoId
+        if (!videoId.isNullOrEmpty()) {
+            val label = cmd.title ?: videoId
+            playerVm.playTrack(Track(videoId = videoId, title = label), PlayOrigin.Single(videoId))
+            AdbControl.log("playing videoId=$videoId as '$label'")
+            return
+        }
+
+        val query = cmd.query
+        if (query.isNullOrEmpty()) {
+            AdbControl.log("play needs a query or a videoId")
+            return
+        }
+        val bridge = EntryPointAccessors
+            .fromApplication(appContext, AdbBridgeEntryPoint::class.java)
+            .bridge()
+        val songs = bridge.search(query).results.filter { it.videoId != null && !it.isEpisode() }
+        if (songs.isEmpty()) {
+            AdbControl.log("no playable results for '$query'")
+            return
+        }
+        // Exact title match beats "first result" — search ranking for a song
+        // name usually has it first anyway, but not for every query.
+        val pick = songs.firstOrNull { it.title.trim().equals(query.trim(), ignoreCase = true) }
+            ?: songs.first()
+        playerVm.playFrom(songs, pick)
+        AdbControl.log("playing '${pick.title}' (${songs.size} song(s) queued)")
+    } catch (t: Throwable) {
+        AdbControl.log("play failed: ${t.message}")
     }
 }
 
