@@ -96,21 +96,37 @@ class SheetManager @Inject constructor() {
     private val _comments = MutableStateFlow<String?>(null)
     val comments: StateFlow<String?> = _comments.asStateFlow()
 
-    fun showTrackMenu(request: TrackMenuRequest) { _trackMenu.value = request }
+    fun showTrackMenu(request: TrackMenuRequest) {
+        _mediaMenu.value = null
+        _addToPlaylist.value = null
+        _comments.value = null
+        _trackMenu.value = request
+    }
     fun dismissTrackMenu() { _trackMenu.value = null }
 
     /** Chain from a menu: closes any menu, opens the playlist picker. */
     fun openAddToPlaylist(track: Track) {
         _trackMenu.value = null
         _mediaMenu.value = null
+        _comments.value = null
         _addToPlaylist.value = track
     }
     fun dismissAddToPlaylist() { _addToPlaylist.value = null }
 
-    fun showMediaMenu(request: MediaMenuRequest) { _mediaMenu.value = request }
+    fun showMediaMenu(request: MediaMenuRequest) {
+        _trackMenu.value = null
+        _addToPlaylist.value = null
+        _comments.value = null
+        _mediaMenu.value = request
+    }
     fun dismissMediaMenu() { _mediaMenu.value = null }
 
-    fun showComments(videoId: String) { _comments.value = videoId }
+    fun showComments(videoId: String) {
+        _trackMenu.value = null
+        _mediaMenu.value = null
+        _addToPlaylist.value = null
+        _comments.value = videoId
+    }
     fun dismissComments() { _comments.value = null }
 }
 
