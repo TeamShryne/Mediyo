@@ -460,7 +460,7 @@ fun QueueScreen(
             onDismiss = { menuTrack = null; menuIdx = null },
             isLiked = false,
             onLike = { player?.toggleLike(track) },
-            onAddToPlaylist = { showAddSheet = track },
+            onAddToPlaylist = { menuTrack = null; menuIdx = null; showAddSheet = track },
             onPlayNext = { player?.addNext(track) },
             onAddToQueue = { player?.addToQueue(track) },
             onShowArtist = { name, id ->
