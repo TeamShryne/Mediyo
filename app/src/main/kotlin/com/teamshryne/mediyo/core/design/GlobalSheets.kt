@@ -6,6 +6,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
@@ -143,12 +144,20 @@ private val SheetScrim = Color.Black.copy(alpha = 0.32f)
 fun SheetStatusBar(open: Boolean) {
     val view = LocalView.current
     if (view.isInEditMode) return
+    // Matches what the menu sheets render with, so the nav bar strip the
+    // buttons sit on is the same surface as the sheet above it.
+    val sheetColor = MaterialTheme.colorScheme.surfaceContainerHigh
     SideEffect {
         val window = (view.context as? Activity)?.window ?: return@SideEffect
         // Without this the platform paints its own contrast veil over a
         // translucent status bar, which is a different shade to our scrim.
         if (window.isStatusBarContrastEnforced) window.isStatusBarContrastEnforced = false
+        // Same story for the nav bar, and the reason it matters here: a sheet's
+        // list is scrollable, so without an opaque strip its items slide behind
+        // the back/home/recents buttons instead of ending above them.
+        if (window.isNavigationBarContrastEnforced) window.isNavigationBarContrastEnforced = false
         window.statusBarColor = if (open) SheetScrim.toArgb() else android.graphics.Color.TRANSPARENT
+        window.navigationBarColor = if (open) sheetColor.toArgb() else android.graphics.Color.TRANSPARENT
     }
 }
 
