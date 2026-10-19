@@ -85,7 +85,8 @@ fun PlaybackSettingsSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        // Matches the nav-bar strip SheetStatusBar paints while this is open.
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
     ) {
         Column(
             Modifier

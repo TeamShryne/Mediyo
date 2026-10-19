@@ -2,22 +2,16 @@ name: Emulator
 
 # Boots an API 34 emulator, installs the debug APK, drives it through the adb
 # control surface (docs/adb-control.md) and uploads screenshots so the UI can be
-# inspected without a device. Runs on every app change; dispatch it manually to
-# re-collect screenshots without touching code.
+# inspected without a device.
+#
+# Runs *after* the Android build workflow completes and reuses its APK artifact
+# rather than building a second time. Also dispatchable by hand, in which case
+# it builds the APK itself.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'app/**'
-      - 'scripts/**'
-      - '.github/workflows/emulator.yml'
-  pull_request:
-    branches: [main]
-    paths:
-      - 'app/**'
-      - 'scripts/**'
-      - '.github/workflows/emulator.yml'
+  workflow_run:
+    workflows: ["Android"]
+    types: [completed]
 
 concurrency:
   group: emulator-${{ github.ref }}
@@ -32,6 +26,8 @@ jobs:
     name: Boot emulator + drive app
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # Only run when the upstream build actually produced a working APK.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     permissions:
       contents: read
       actions: write
@@ -92,11 +88,31 @@ jobs:
           gradle-version: 8.6
           gradle-home-cache-cleanup: true
 
+      # Reuse the APK the Android workflow just built, so the emulator tour
+      # tests exactly the artifact that was about to be released.
+      - name: Fetch APK from the Android workflow run
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v4
+        with:
+          name: mediyo-debug-apk
+          path: app/build/outputs/apk/debug
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Manual dispatch has no upstream run to take an APK from.
       - name: Build debug APK
+        if: github.event_name != 'workflow_run'
         run: |
           chmod +x gradlew || true
           ./gradlew --no-daemon assembleDebug --stacktrace
           ls -la app/build/outputs/apk/debug/
+
+      - name: Verify the APK is there
+        run: |
+          set -euo pipefail
+          APK=$(ls app/build/outputs/apk/debug/*.apk | head -1)
+          echo "using $APK"
+          echo "APK_PATH=$APK" >> "$GITHUB_ENV"
 
       # android-emulator-runner needs KVM readable by the current user.
       - name: Enable KVM

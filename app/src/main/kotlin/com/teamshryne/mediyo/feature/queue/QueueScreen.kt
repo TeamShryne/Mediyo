@@ -451,6 +451,9 @@ fun QueueScreen(
 
     menuTrack?.let { track ->
         val idx = menuIdx
+        // Hosted here, not in GlobalSheets, so it needs the system-bar
+        // treatment itself.
+        com.teamshryne.mediyo.core.design.SheetStatusBar(open = true)
         com.teamshryne.mediyo.core.design.TrackMenuSheet(
             track = track,
             show = true,
@@ -469,6 +472,7 @@ fun QueueScreen(
         )
     }
     showAddSheet?.let { t ->
+        com.teamshryne.mediyo.core.design.SheetStatusBar(open = true)
         com.teamshryne.mediyo.feature.playlist.AddToPlaylistSheet(track = t, onDismiss = { showAddSheet = null })
     }
 }

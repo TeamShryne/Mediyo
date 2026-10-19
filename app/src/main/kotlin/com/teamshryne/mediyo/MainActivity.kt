@@ -119,7 +119,11 @@ import com.teamshryne.mediyo.core.design.navigateArtist
 import com.teamshryne.mediyo.core.design.navigateChannel
 import com.teamshryne.mediyo.core.design.navigatePodcast
 import com.teamshryne.mediyo.feature.update.UpdatesSettingsScreen
+import com.teamshryne.mediyo.core.design.isAlbum
+import com.teamshryne.mediyo.core.design.isArtist
 import com.teamshryne.mediyo.core.design.isEpisode
+import com.teamshryne.mediyo.core.design.isPlaylist
+import com.teamshryne.mediyo.core.design.isPodcast
 import com.teamshryne.mediyo.debug.AdbBridgeEntryPoint
 import com.teamshryne.mediyo.debug.AdbCommand
 import com.teamshryne.mediyo.debug.AdbControl
@@ -291,6 +295,49 @@ private fun AppShell() {
                                 }
                             }
 
+                            "media" -> {
+                                // The search-result overflow menu. There is no
+                                // search result to hand it, so synthesise one
+                                // from whatever is playing.
+                                val t = track
+                                if (t == null) {
+                                    AdbControl.log("sheet media needs something in the queue")
+                                } else {
+                                    sheetVm.showMediaMenu(
+                                        com.teamshryne.mediyo.core.design.MediaMenuRequest(
+                                            item = com.teamshryne.mediyo.data.mediyo.FfiSearchResult(
+                                                title = t.title,
+                                                videoId = t.videoId,
+                                                browseId = null,
+                                                browseParams = null,
+                                                playlistId = null,
+                                                category = "Song",
+                                                year = null,
+                                                duration = t.duration,
+                                                explicit = false,
+                                                thumbnails = emptyList(),
+                                                artists = t.artists,
+                                                artistIds = t.artistIds,
+                                                album = t.album,
+                                                albumId = null,
+                                                info = null,
+                                                isTopResult = false,
+                                                channelName = null,
+                                                channelId = null
+                                            ),
+                                            nav = nav,
+                                            onPlayTracks = { tracks, idx, origin -> playerVm.playTracks(tracks, idx, origin) },
+                                            onEnqueueTracks = { playerVm.addToQueueList(it) },
+                                            onAddToPlaylist = { playerVm.addNext(it) },
+                                            onPlayNext = { playerVm.addNext(it) },
+                                            onAddToQueue = { playerVm.addToQueue(it) },
+                                            onComments = { playerVm.currentTrack()?.videoId?.let { sheetVm.showComments(it) } }
+                                        )
+                                    )
+                                    AdbControl.log("sheet media opened for '${t.title}'")
+                                }
+                            }
+
                             "playlist" -> if (track == null) {
                                 AdbControl.log("sheet playlist needs something in the queue")
                             } else {
@@ -304,6 +351,20 @@ private fun AppShell() {
                             }
                         }
                     }
+
+                    is AdbCommand.Overlay -> when (cmd.target) {
+                        "player" -> {
+                            showFullPlayer = true
+                            AdbControl.log("overlay player opened")
+                        }
+                        "queue" -> {
+                            showQueueOverlay = true
+                            AdbControl.log("overlay queue opened")
+                        }
+                    }
+
+                    is AdbCommand.Resolve ->
+                        adbScope.launch { resolveIds(appContext, cmd.query) }
 
                     is AdbCommand.Dump -> AdbControl.log(
                         "dump title=${playerState.title} artist=${playerState.artist} " +
@@ -559,6 +620,47 @@ private fun AppShell() {
                 onDismiss = { showSleepSheet = false }
             )
         }
+    }
+}
+
+/**
+ * Search and report the browse ids of the top hits, so a caller can navigate
+ * to the screens that need one (artist, album, playlist) without guessing.
+ *
+ * One `resolve <kind> id=<id> title=<title>` line per hit, on the MediyoAdb
+ * tag. Ids are grouped by kind and only the first few of each are reported —
+ * enough to drive a screenshot tour, not a dump of every result.
+ */
+private suspend fun resolveIds(appContext: Context, query: String) {
+    try {
+        val bridge = EntryPointAccessors
+            .fromApplication(appContext, AdbBridgeEntryPoint::class.java)
+            .bridge()
+        val results = bridge.search(query).results
+        val kinds = listOf("artist", "album", "playlist", "podcast", "channel", "song")
+        for (kind in kinds) {
+            val hits = results.filter { r ->
+                val b = r.browseId
+                when (kind) {
+                    "artist" -> b != null && (r.isArtist() || r.pageType.contains("ARTIST"))
+                    "album" -> b != null && (r.isAlbum() || r.pageType.contains("ALBUM"))
+                    "playlist" -> b != null && (r.isPlaylist() || r.pageType.contains("PLAYLIST"))
+                    "podcast" -> b != null && (r.isPodcast() || r.pageType.contains("PODCAST"))
+                    "channel" -> b != null && r.pageType.contains("USER_CHANNEL")
+                    "song" -> r.videoId != null && !r.isEpisode()
+                    else -> false
+                }
+            }.take(2)
+            for (h in hits) {
+                val id = if (kind == "song") h.videoId else h.browseId
+                if (!id.isNullOrBlank()) {
+                    AdbControl.log("resolve $kind id=$id title=${h.title}")
+                }
+            }
+        }
+        AdbControl.log("resolve done for '$query' (${results.size} results)")
+    } catch (t: Throwable) {
+        AdbControl.log("resolve failed: ${t.message}")
     }
 }
 

@@ -79,9 +79,21 @@ sealed interface AdbCommand {
 
     /**
      * Open one of the bottom sheets so it can be screenshotted. [target] is
-     * `menu`, `comments`, `playlist` or `sleep`.
+     * `menu`, `media`, `comments`, `playlist` or `sleep`.
      */
     data class Sheet(override val at: Long, val target: String) : AdbCommand
+
+    /**
+     * Open a full-screen overlay: `player` (expanded player) or `queue`.
+     */
+    data class Overlay(override val at: Long, val target: String) : AdbCommand
+
+    /**
+     * Search and report the browse ids of the top hits, so a caller can then
+     * navigate to screens that need one (artist, album, playlist). The ids go
+     * to logcat, one `resolve <kind> id=<id> title=<title>` line per hit.
+     */
+    data class Resolve(override val at: Long, val query: String) : AdbCommand
 }
 
 /**

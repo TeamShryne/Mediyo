@@ -594,6 +594,13 @@ fun FullPlayer(
         if (showAddSheet && state.videoId != null) {
             com.teamshryne.mediyo.feature.playlist.AddToPlaylistSheet(track = trackForMenu, onDismiss = { showAddSheet = false })
         }
+        // These sheets are hosted here rather than in GlobalSheets, so they need
+        // the system-bar treatment themselves: the status bar dims with the
+        // scrim and the nav bar takes the sheet's surface, instead of the
+        // buttons sitting on top of scrolling rows.
+        com.teamshryne.mediyo.core.design.SheetStatusBar(
+            open = showMenu || showAddSheet || showPlaybackSheet
+        )
         if (showMenu && state.videoId != null) {
             TrackMenuSheet(
                 track = trackForMenu,

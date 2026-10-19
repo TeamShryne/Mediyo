@@ -60,7 +60,7 @@ fun SleepTimerSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         windowInsets = WindowInsets.ime
     ) {
         Column(

@@ -10,8 +10,9 @@ set -uo pipefail
 PKG="${PKG:-com.teamshryne.mediyo.debug}"
 ACTIVITY="${ACTIVITY:-com.teamshryne.mediyo.MainActivity}"
 ACTION="${ACTION:-com.teamshryne.mediyo.adb}"
-APK="${APK:-app/build/outputs/apk/debug/app-debug.apk}"
+APK="${APK:-${APK_PATH:-app/build/outputs/apk/debug/app-debug.apk}}"
 OUT="${OUT:-artifacts}"
+QUERY="${QUERY:-daft punk one more time}"
 
 mkdir -p "$OUT/screenshots"
 
@@ -29,6 +30,20 @@ send() {
 # two words" arrives as just "two". The inner single quotes survive one
 # round of that re-splitting and reach the receiver intact.
 q() { printf "'%s'" "$1"; }
+
+N=0
+shot() {
+  N=$((N + 1))
+  local name
+  name=$(printf "%02d-%s" "$N" "$1")
+  sleep "$2"
+  adb exec-out screencap -p > "$OUT/screenshots/$name.png" 2>/dev/null
+  if [ -s "$OUT/screenshots/$name.png" ]; then
+    log "captured $name.png"
+  else
+    log "WARNING: empty screenshot $name.png"
+  fi
+}
 
 # Wait for the guest, then land on the launcher with animations off so
 # screenshots are deterministic.
@@ -53,17 +68,7 @@ fi
 # The notification permission dialog would sit on top of the first screen.
 adb shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS >/dev/null 2>&1 || true
 
-shot() {
-  sleep "$2"
-  adb exec-out screencap -p > "$OUT/screenshots/$1.png" 2>/dev/null
-  if [ -s "$OUT/screenshots/$1.png" ]; then
-    log "captured $1.png"
-  else
-    log "WARNING: empty screenshot $1.png"
-  fi
-}
-
-focus() { adb shell dumpsys window 2>/dev/null | grep -m1 -E 'mCurrentFocus|mFocusedApp' || true; }
+focus() { adb shell dumpsys window 2>/dev/null | grep -m1 -E 'mCurrentFocus' || true; }
 
 step "launching"
 adb shell am start -n "$PKG/$ACTIVITY" >/dev/null 2>&1
@@ -71,49 +76,99 @@ for _ in $(seq 1 30); do
   adb shell pidof "$PKG" >/dev/null 2>&1 && break
   sleep 1
 done
-shot 01-home 10
-log "focus: $(focus)"
 
+# ── Tabs ────────────────────────────────────────────────────────────────────
+for t in home search library settings; do
+  step "tab: $t"
+  send go --es route "$t"
+  shot "tab-$t" 7
+done
+
+# ── Settings sub-screens ────────────────────────────────────────────────────
+for t in settings/lyrics settings/updates settings/appearance settings/appearance/tabs \
+         settings/appearance/player settings/equalizer settings/storage; do
+  step "screen: $t"
+  send go --es route "$t"
+  shot "screen-${t//\//-}" 6
+done
+
+# ── Library pages ───────────────────────────────────────────────────────────
+for t in liked history downloads profile; do
+  step "screen: $t"
+  send go --es route "$t"
+  shot "screen-$t" 6
+done
+
+# ── Search, and the ids needed for the browse pages ────────────────────────
 step "search"
-send search --es query "$(q "daft punk one more time")"
-shot 02-search 12
+send search --es query "$(q "$QUERY")"
+shot "screen-search" 12
 
+step "resolve ids"
+send resolve --es query "$(q "$QUERY")"
+sleep 6
+adb logcat -d -s MediyoAdb:D > "$OUT/resolve.log" 2>/dev/null
+id_for() { grep -m1 "resolve $1 id=" "$OUT/resolve.log" 2>/dev/null | sed 's/.* id=\([^ ]*\).*/\1/'; }
+
+for kind in artist album playlist; do
+  id=$(id_for "$kind")
+  if [ -n "$id" ]; then
+    step "screen: $kind/$id"
+    send go --es route "$kind" --es arg "$id"
+    shot "screen-$kind" 10
+  else
+    log "no $kind id resolved, skipping"
+  fi
+done
+
+# ── Playback ────────────────────────────────────────────────────────────────
 step "play"
-send play --es query "$(q "daft punk one more time")"
-shot 03-player 20
+send play --es query "$(q "$QUERY")"
+shot "screen-player-mini" 18
 
-step "state dump"
-send dump
+step "overlay: expanded player"
+send overlay --es target player
+shot "overlay-player" 8
+
+step "sheet: track menu (from player)"
+send sheet --es target menu
+shot "sheet-menu-from-player" 6
+adb shell input keyevent KEYCODE_BACK >/dev/null 2>&1
 sleep 2
 
-step "navigate: liked"
-send go --es route liked
-shot 04-liked 6
+step "overlay: queue"
+send overlay --es target queue
+shot "overlay-queue" 8
+adb shell input keyevent KEYCODE_BACK >/dev/null 2>&1
+sleep 2
 
-step "navigate: settings"
-send go --es route settings
-shot 05-settings 5
+# ── Every sheet ─────────────────────────────────────────────────────────────
+step "sheet: media menu"
+send sheet --es target media
+shot "sheet-media-menu" 6
 
-# Sheets: the easiest surface to regress without anyone noticing, and they are
-# only visible when something is actually open.
-step "sheets"
-send go --es route search
-sleep 4
-send sheet --es target menu
-shot 07-sheet-menu 5
+step "sheet: comments"
 send sheet --es target comments
-shot 08-sheet-comments 8
+shot "sheet-comments" 12
+
+step "sheet: add to playlist"
 send sheet --es target playlist
-shot 09-sheet-playlist 5
+shot "sheet-add-to-playlist" 8
+
+step "sheet: sleep timer"
 send sheet --es target sleep
-shot 10-sheet-sleep 5
+shot "sheet-sleep-timer" 8
+
+step "sheet: track menu (root host)"
+send sheet --es target menu
+shot "sheet-menu-root" 6
 
 step "collecting logs"
 adb logcat -d -s MediyoAdb:D > "$OUT/mediyo-adb.log" 2>/dev/null
 adb logcat -d -s MediyoSheet:D > "$OUT/mediyo-sheet.log" 2>/dev/null
 adb logcat -d > "$OUT/logcat.txt" 2>/dev/null
-log "mediyo-sheet.log (nav bar inset):"
-sed 's/^/    /' "$OUT/mediyo-sheet.log" 2>/dev/null | head -5
+log "nav bar inset:"
+sed 's/^/    /' "$OUT/mediyo-sheet.log" 2>/dev/null | head -3
 
 ALIVE="$(adb shell pidof "$PKG" 2>/dev/null | tr -d '\r')"
 # `grep -c` prints 0 *and* exits 1 when nothing matches, so a trailing `|| echo 0`
