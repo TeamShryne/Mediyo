@@ -599,7 +599,8 @@ fun FullPlayer(
         // scrim and the nav bar takes the sheet's surface, instead of the
         // buttons sitting on top of scrolling rows.
         com.teamshryne.mediyo.core.design.SheetStatusBar(
-            open = showMenu || showAddSheet || showPlaybackSheet
+            open = showMenu || showAddSheet || showPlaybackSheet,
+            key = "player"
         )
         if (showMenu && state.videoId != null) {
             TrackMenuSheet(

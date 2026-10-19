@@ -2,9 +2,11 @@ package com.teamshryne.mediyo.core.design
 
 import android.app.Activity
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.graphics.Color
@@ -129,19 +131,59 @@ class SheetHostVm @Inject constructor(
 private val SheetScrim = Color.Black.copy(alpha = 0.32f)
 
 /**
- * Dim the status-bar strip while a sheet is open.
+ * Registry of "a sheet is open somewhere".
  *
- * `ModalBottomSheet` draws its scrim inside the composition, and on this theme
- * that stops short of the status-bar strip — so the strip stays at full
- * brightness while everything under it greys out, and the seam is clearly
- * visible. Painting the sheet's own scrim colour into the window's status bar
- * makes the two match exactly, because it *is* the same translucent black.
+ * Sheets are hosted in more than one place — the root overlay, the expanded
+ * player, the queue — and each host wants the system bars restyled while its
+ * sheet is up. They cannot each write the window themselves: whoever composes
+ * last wins, so a closed global sheet would undo an open player sheet. Hosts
+ * register here instead, and [SheetSystemBars] at the root does the writing.
+ */
+object SheetBars {
+    private val open = mutableSetOf<String>()
+    private val _anyOpen = mutableStateOf(false)
+    val anyOpen: Boolean get() = _anyOpen.value
+
+    fun acquire(key: String) {
+        open += key
+        _anyOpen.value = true
+    }
+
+    fun release(key: String) {
+        open -= key
+        _anyOpen.value = open.isNotEmpty()
+    }
+}
+
+/**
+ * Registers that a sheet is open, so the system bars are restyled for it.
  *
- * Ignored from Android 15 on, where `statusBarColor` is deprecated and a no-op;
- * the sheet scrim is the only thing drawing there on those releases anyway.
+ * [key] identifies the host, not the sheet, so two sheets in the same host
+ * cannot release each other.
  */
 @Composable
-fun SheetStatusBar(open: Boolean) {
+fun SheetStatusBar(open: Boolean, key: String) {
+    DisposableEffect(key, open) {
+        if (open) SheetBars.acquire(key) else SheetBars.release(key)
+        onDispose { SheetBars.release(key) }
+    }
+}
+
+/**
+ * The single writer of the system bar colours. Lives at the app root so no
+ * two hosts can fight over the window.
+ *
+ * - Status bar: the sheet's scrim colour, so the strip dims with the rest of
+ *   the screen instead of staying bright above the scrim's edge.
+ * - Navigation bar: the sheet's surface, so the back/home/recents buttons sit
+ *   on a clean strip rather than on rows of a scrolling list.
+ *
+ * `statusBarColor` is ignored from Android 15 on, where it is deprecated and a
+ * no-op; `navigationBarColor` is likewise deprecated there.
+ */
+@Composable
+fun SheetSystemBars() {
+    val anyOpen = SheetBars.anyOpen
     val view = LocalView.current
     if (view.isInEditMode) return
     // Matches what the menu sheets render with, so the nav bar strip the
@@ -150,14 +192,11 @@ fun SheetStatusBar(open: Boolean) {
     SideEffect {
         val window = (view.context as? Activity)?.window ?: return@SideEffect
         // Without this the platform paints its own contrast veil over a
-        // translucent status bar, which is a different shade to our scrim.
+        // translucent bar, which is a different shade to our scrim.
         if (window.isStatusBarContrastEnforced) window.isStatusBarContrastEnforced = false
-        // Same story for the nav bar, and the reason it matters here: a sheet's
-        // list is scrollable, so without an opaque strip its items slide behind
-        // the back/home/recents buttons instead of ending above them.
         if (window.isNavigationBarContrastEnforced) window.isNavigationBarContrastEnforced = false
-        window.statusBarColor = if (open) SheetScrim.toArgb() else android.graphics.Color.TRANSPARENT
-        window.navigationBarColor = if (open) sheetColor.toArgb() else android.graphics.Color.TRANSPARENT
+        window.statusBarColor = if (anyOpen) SheetScrim.toArgb() else android.graphics.Color.TRANSPARENT
+        window.navigationBarColor = if (anyOpen) sheetColor.toArgb() else android.graphics.Color.TRANSPARENT
     }
 }
 
@@ -212,7 +251,10 @@ fun GlobalSheets(host: SheetHostVm = hiltViewModel()) {
     val mediaReq by m.mediaMenu.collectAsState()
     val commentsVid by m.comments.collectAsState()
 
-    SheetStatusBar(open = trackReq != null || addTrack != null || mediaReq != null || commentsVid != null)
+    SheetStatusBar(
+        open = trackReq != null || addTrack != null || mediaReq != null || commentsVid != null,
+        key = "global"
+    )
 
     // Read here, outside the sheet, where the inset is still live.
     val navBottom = navBarInset()

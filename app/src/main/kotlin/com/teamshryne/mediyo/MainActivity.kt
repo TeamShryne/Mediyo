@@ -180,6 +180,8 @@ private fun AppShell() {
     }
 
     val playerVm: PlayerViewModel = hiltViewModel()
+    // Single writer of the system bar colours for every sheet host in the app.
+    com.teamshryne.mediyo.core.design.SheetSystemBars()
     val playerState by playerVm.state.collectAsState()
     // All bottom sheets render at root (GlobalSheets) so their dim covers
     // the full window including system-bar regions.
@@ -604,7 +606,7 @@ private fun AppShell() {
         }
 
         if (showSleepSheet) {
-            com.teamshryne.mediyo.core.design.SheetStatusBar(open = true)
+            com.teamshryne.mediyo.core.design.SheetStatusBar(open = true, key = "sleep")
             com.teamshryne.mediyo.feature.sleeptimer.SleepTimerSheet(
                 state = sleepState,
                 onSetTimer = { ms -> playerVm.sleepState.value // trigger via manager directly through vm
