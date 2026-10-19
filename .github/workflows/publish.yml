@@ -23,11 +23,9 @@ on:
   push:
     tags:
       - "v*.*.*"
-  schedule:
-    # 03:17 UTC. Deliberately off the hour: GitHub's scheduler is heavily
-    # oversubscribed on the hour, and a nightly that starts late is a nightly
-    # that lands in someone's working day.
-    - cron: '17 3 * * *'
+  # Nightlies are published by hand, when there is a reason to. There is
+  # deliberately no schedule: a nightly that lands on its own is a nightly
+  # nobody chose to ship.
   workflow_dispatch:
     inputs:
       version:
