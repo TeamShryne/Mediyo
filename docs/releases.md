@@ -116,19 +116,29 @@ tracks, so the two cannot drift.
 
 ## Publishing a nightly
 
-By hand:
+By hand, when there is a reason to:
 
 ```bash
 gh workflow run publish.yml
 ```
 
-Or let the cron do it — daily at 03:17 UTC, deliberately off the hour because
-GitHub's scheduler is oversubscribed on the hour.
+There is deliberately **no schedule**. A nightly that lands on its own is a
+nightly nobody chose to ship, and it burns a release slot for no reason.
+
+Each publish increments the nightly's sequence within its minor line, so
+successive nightlies are 8501, 8502, 8503… and each one outranks the last.
+The sequence is capped at 499 by `scripts/version-code.sh`, which fails with
+"bump the minor version" rather than colliding with the next release's band —
+so a line of nightlies is 500 builds long before you have to think about it.
+
+Two nightlies published in a row do not cancel each other: the workflow's
+concurrency group has `cancel-in-progress: false`, so the second one queues
+behind the first.
 
 The nightly run marks the commit with a `nightly-<major>.<minor>.<seq>` git tag
 for archaeology, and republishes the rolling `nightly` release with that
 build's assets. The asset name carries the sequence, so the download URL
-changes every night and cannot be served stale from a CDN cache.
+changes every time and cannot be served stale from a CDN cache.
 
 ## Nightlies and the release keystore
 
