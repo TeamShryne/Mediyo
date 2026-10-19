@@ -44,6 +44,7 @@ import com.teamshryne.mediyo.playback.PlaybackQueueManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -149,7 +150,7 @@ private class QueueReorder(
 
     private suspend fun autoScrollLoop() {
         var last = 0L
-        while (coroutineContext.isActive && index >= 0) {
+        while (currentCoroutineContext().isActive && index >= 0) {
             val now = withFrameNanos { it }
             val dt = if (last == 0L) 0f else ((now - last) / 1_000_000_000f).coerceIn(0f, 0.05f)
             last = now
