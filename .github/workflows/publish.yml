@@ -1,0 +1,349 @@
+name: Publish
+
+# One workflow for both update tracks.
+#
+# A release is a tag (v1.2.3); a nightly is a daily build of main. They share
+# the build, the signing and the update.json contract, because a divergence
+# there would mean a fix landing in one track's APK and not the other's — and
+# nobody would notice until a user reported it.
+#
+# They live in one file rather than two calling a shared reusable workflow
+# because passing secrets to a local reusable workflow makes the *caller* fail
+# to register on this repository: GitHub reports only "this run likely failed
+# because of a workflow file issue", with no jobs and no logs. Bisected with
+# probe workflows — a reusable call without a `secrets:` block runs fine, and
+# every one with a `secrets:` block does not, whatever secret it passes or
+# whether that secret exists. Referencing the secrets here sidesteps it.
+#
+# The version code formula lives in scripts/version-code.sh and the updater
+# contract in scripts/make-update-json.sh, so both tracks cannot drift there
+# either.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  schedule:
+    # 03:17 UTC. Deliberately off the hour: GitHub's scheduler is heavily
+    # oversubscribed on the hour, and a nightly that starts late is a nightly
+    # that lands in someone's working day.
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. 0.1.0). Leave empty to publish a nightly."
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Manual "Run workflow" with a version just cuts the tag; the tag push
+  # triggers `publish`, which is the same path a pushed tag takes.
+  cut-tag:
+    if: github.event_name == 'workflow_dispatch' && inputs.version != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create and push tag
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          VERSION="${VERSION#v}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version must be semver like 0.1.0 (got '${{ inputs.version }}')"
+            exit 1
+          fi
+          TAG="v$VERSION"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "::error::tag $TAG already exists"
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Mediyo $TAG"
+          git push origin "$TAG"
+          echo "Pushed $TAG — the tag build will publish the release."
+
+  publish:
+    if: github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.version == '')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Tags are needed to count the nightlies already published on this
+          # minor line, which is the nightly's version sequence.
+          fetch-depth: 0
+
+      - name: Resolve version
+        id: version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            # ── Release ──────────────────────────────────────────────────────
+            MODE=release
+            TAG="${GITHUB_REF_NAME}"
+            VERSION="${TAG#v}"
+            if ! [[ "$VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+              echo "::error::tag must be like v1.2.3 (got '$TAG')"
+              exit 1
+            fi
+            MAJOR="${BASH_REMATCH[1]}"
+            MINOR="${BASH_REMATCH[2]}"
+            PATCH="${BASH_REMATCH[3]}"
+            CODE=$(scripts/version-code.sh "$MAJOR" "$MINOR" "$PATCH" release)
+            APK_NAME="mediyo-$TAG.apk"
+          else
+            # ── Nightly ──────────────────────────────────────────────────────
+            MODE=nightly
+            # The band is the minor line of the latest *stable* release, so the
+            # next release always outranks every nightly before it. With no
+            # release yet, start on the 0.1 line.
+            LATEST=$(gh release list --limit 30 --json tagName,isPrerelease \
+                        --jq '[.[] | select(.isPrerelease == false)][0].tagName // ""')
+            if [ -z "$LATEST" ]; then
+              echo "No stable release yet — nightlies start on the 0.1 line."
+              BASE_VERSION="0.1.0"
+            else
+              BASE_VERSION="${LATEST#v}"
+            fi
+            MAJOR="${BASE_VERSION%%.*}"
+            REST="${BASE_VERSION#*.}"
+            MINOR="${REST%%.*}"
+            # Sequence: how many nightlies this minor line already has.
+            # Monotonic within the line, reset by the next release.
+            SEQ=$(( $(git tag -l "nightly-$MAJOR.$MINOR.*" | wc -l) + 1 ))
+            CODE=$(scripts/version-code.sh "$MAJOR" "$MINOR" 0 nightly "$SEQ")
+            VERSION="${BASE_VERSION}-nightly.${SEQ}"
+            APK_NAME="mediyo-nightly-${MAJOR}.${MINOR}.${SEQ}.apk"
+            TAG=nightly
+          fi
+
+          echo "mode=$MODE tag=$TAG version=$VERSION code=$CODE apk=$APK_NAME"
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "apkName=$APK_NAME" >> "$GITHUB_OUTPUT"
+          echo "major=$MAJOR" >> "$GITHUB_OUTPUT"
+          echo "minor=$MINOR" >> "$GITHUB_OUTPUT"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install platform + build-tools + NDK
+        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "ndk;27.0.12077973"
+
+      - name: Verify vendored mediyo-core AAR
+        run: |
+          set -euo pipefail
+          test -f app/libs/mediyo.aar || { echo "::error::app/libs/mediyo.aar missing — rebuild it in mediyo-core (make aar) and copy it over"; exit 1; }
+          ls -la app/libs/
+
+      - name: Gradle cache (heavy)
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.6
+          gradle-home-cache-cleanup: true
+
+      - name: Decode upload keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::missing secret ANDROID_KEYSTORE_BASE64"
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/mediyo-release.jks"
+          keytool -list -keystore "$RUNNER_TEMP/mediyo-release.jks" \
+            -storepass "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" 2>&1 | head -3
+
+      - name: Build signed release APK
+        run: |
+          chmod +x gradlew || true
+          ./gradlew --no-daemon assembleRelease --stacktrace \
+            -PversionCode="${{ steps.version.outputs.code }}" \
+            -PversionName="${{ steps.version.outputs.version }}" \
+            -Pchannel="${{ steps.version.outputs.mode }}"
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/mediyo-release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Verify signature + package
+        run: |
+          set -euo pipefail
+          BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/*/ | sort -V | tail -1)
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          echo "APK=$APK"
+          "$BT/apksigner" verify --print-certs "$APK" | head -5
+          "$BT/apksigner" verify "$APK" # strict: fails if not properly signed
+          # NB: aapt exits 1 on the pre-existing @android:drawable/sym_def_app_icon
+          # reference, so capture output and assert on what matters instead.
+          BADGING=$("$BT/aapt" dump badging "$APK" 2>/dev/null || true)
+          echo "$BADGING" | grep -E "^package:|launchable-activity|application-label:" | head -5
+          echo "$BADGING" | grep -q "package: name='com.teamshryne.mediyo'" \
+            || { echo "::error::unexpected package name"; exit 1; }
+          echo "$BADGING" | grep -q "versionCode='${{ steps.version.outputs.code }}'" \
+            || { echo "::error::unexpected versionCode"; exit 1; }
+          echo "$BADGING" | grep -q "versionName='${{ steps.version.outputs.version }}'" \
+            || { echo "::error::unexpected versionName"; exit 1; }
+          echo "$BADGING" | grep -q "application-label:'Mediyo'" \
+            || { echo "::error::unexpected app label"; exit 1; }
+
+      - name: Stage assets
+        id: meta
+        env:
+          MODE: ${{ steps.version.outputs.mode }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          CODE: ${{ steps.version.outputs.code }}
+          APK_NAME: ${{ steps.version.outputs.apkName }}
+        run: |
+          set -euo pipefail
+          SRC_APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          cp "$SRC_APK" "$APK_NAME"
+          SHA=$(sha256sum "$APK_NAME" | cut -d' ' -f1)
+          echo "$SHA  $APK_NAME" > "$APK_NAME.sha256"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+          if [ "$MODE" = "release" ]; then
+            APK_URL="https://github.com/${{ github.repository }}/releases/download/$TAG/$APK_NAME"
+          else
+            APK_URL="https://github.com/${{ github.repository }}/releases/download/nightly/$APK_NAME"
+          fi
+          # The updater contract — one script for both tracks so they cannot
+          # drift.
+          scripts/make-update-json.sh "$VERSION" "$CODE" "$APK_NAME" "$APK_URL" "$SHA"
+
+      - name: Publish release
+        if: steps.version.outputs.mode == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          CODE: ${{ steps.version.outputs.code }}
+          APK_NAME: ${{ steps.version.outputs.apkName }}
+          SHA: ${{ steps.meta.outputs.sha }}
+        run: |
+          set -euo pipefail
+
+          # Changelog since previous tag. Match v* so the nightly tags, which
+          # point at ordinary commits, are not mistaken for a release.
+          PREV=$(git describe --tags --abbrev=0 --match "v*" "$TAG^" 2>/dev/null || echo "")
+          if [ -n "$PREV" ]; then
+            CHANGELOG="Changes since $PREV:"
+            CHANGELOG+=$'\n'"$(git log "$PREV..$TAG" --pretty=format:'- %s (%h)' --reverse)"
+          else
+            CHANGELOG="First release."
+            CHANGELOG+=$'\n'"$(git log -30 "$TAG" --pretty=format:'- %s (%h)' --reverse)"
+          fi
+
+          # A notes file rather than --notes: the body contains backticks and
+          # $ signs, and quoting that into a shell argument is a trap.
+          {
+            echo "## Mediyo $TAG (versionCode $CODE)"
+            echo
+            echo "$CHANGELOG"
+            echo
+            echo "### APK"
+            echo "- **$APK_NAME** — signed release (\`com.teamshryne.mediyo\`), installs side-by-side with the Debug build (\`com.teamshryne.mediyo.debug\`)."
+            echo "- SHA-256: \`$SHA\`"
+            echo
+            echo "### In-app updater"
+            echo "This release follows the updater contract (GitHub only, no server):"
+            echo "- Latest version: \`GET https://api.github.com/repos/${{ github.repository }}/releases/latest\` → \`tag_name\`"
+            echo "- Machine-readable: \`https://github.com/${{ github.repository }}/releases/download/$TAG/update.json\` (\`versionCode\` to compare, \`apkUrl\` to download, \`sha256\` to verify before install)."
+          } > notes.md
+
+          # Re-run safe: delete existing release for this tag if present.
+          gh release delete "$TAG" --cleanup-tag -y 2>/dev/null || true
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git push origin ":refs/tags/$TAG" 2>/dev/null || true
+          git tag -f -a "$TAG" -m "Mediyo $TAG"
+          git push origin "$TAG"
+          gh release create "$TAG" \
+            --title "Mediyo $TAG" \
+            --notes-file notes.md \
+            "$APK_NAME" "$APK_NAME.sha256" update.json
+
+      - name: Publish nightly
+        if: steps.version.outputs.mode == 'nightly'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          CODE: ${{ steps.version.outputs.code }}
+          APK_NAME: ${{ steps.version.outputs.apkName }}
+          MAJOR: ${{ steps.version.outputs.major }}
+          MINOR: ${{ steps.version.outputs.minor }}
+          SEQ: ${{ steps.version.outputs.seq }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Mark the commit so this nightly can be found later. A plain tag, no
+          # release object: the APK lives on the rolling release, and a dated
+          # release per build would double the storage for no benefit.
+          GIT_TAG="nightly-${MAJOR}.${MINOR}.${SEQ}"
+          git tag -f -a "$GIT_TAG" -m "Mediyo nightly ${VERSION}"
+          git push origin "$GIT_TAG" --force
+
+          # Recreate the rolling release so it holds exactly this build's
+          # assets. The asset name carries the sequence, so the download URL
+          # changes every night and cannot be served stale from a CDN cache.
+          #
+          # The tag is moved to the commit that was actually built — deleting
+          # the release without --cleanup-tag and re-tagging keeps it pointing
+          # at the build, rather than wherever the default branch happens to be.
+          gh release delete nightly -y 2>/dev/null || true
+          git tag -f -a nightly -m "Mediyo nightly ${VERSION}" "$GITHUB_SHA"
+          git push origin nightly --force
+
+          {
+            echo "Nightly build from \`$GITHUB_SHA\` on $(date -u +%Y-%m-%d)."
+            echo
+            echo "Untested by definition — this is a build of \`main\`, not a release."
+            echo "Opt in via **Settings → App updates → Nightly**."
+            echo
+            echo "- Version: \`$VERSION\` (versionCode \`$CODE\`)"
+            echo "- APK: \`$APK_NAME\`"
+            echo "- SHA-256: \`$(sha256sum "$APK_NAME" | cut -d' ' -f1)\`"
+          } > notes.md
+
+          gh release create nightly \
+            --title "Mediyo nightly ${VERSION}" \
+            --prerelease \
+            --notes-file notes.md \
+            "$APK_NAME" "$APK_NAME.sha256" update.json
+
+      - name: Upload artifacts (CI copy)
+        uses: actions/upload-artifact@v4
+        with:
+          name: mediyo-${{ steps.version.outputs.mode }}-${{ steps.version.outputs.version }}
+          path: |
+            ${{ steps.version.outputs.apkName }}
+            ${{ steps.version.outputs.apkName }}.sha256
+            update.json
+          if-no-files-found: error
+          retention-days: 7
