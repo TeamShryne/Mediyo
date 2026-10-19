@@ -110,9 +110,10 @@ shot 10-sheet-sleep 5
 
 step "collecting logs"
 adb logcat -d -s MediyoAdb:D > "$OUT/mediyo-adb.log" 2>/dev/null
+adb logcat -d -s MediyoSheet:D > "$OUT/mediyo-sheet.log" 2>/dev/null
 adb logcat -d > "$OUT/logcat.txt" 2>/dev/null
-log "mediyo-adb.log:"
-sed 's/^/    /' "$OUT/mediyo-adb.log" 2>/dev/null | head -20
+log "mediyo-sheet.log (nav bar inset):"
+sed 's/^/    /' "$OUT/mediyo-sheet.log" 2>/dev/null | head -5
 
 ALIVE="$(adb shell pidof "$PKG" 2>/dev/null | tr -d '\r')"
 # `grep -c` prints 0 *and* exits 1 when nothing matches, so a trailing `|| echo 0`
