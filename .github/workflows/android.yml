@@ -49,6 +49,13 @@ jobs:
           gradle-version: 8.6
           gradle-home-cache-cleanup: true
 
+      # The release path's version resolution, tested. It used to live inside
+      # the publish workflow, where nothing ran it until a release was
+      # published -- and a value computed but never exported shipped as a
+      # broken nightly.
+      - name: Test the version resolver
+        run: scripts/test-resolve-version.sh
+
       - name: Build debug APK + lint
         run: |
           chmod +x gradlew || true
