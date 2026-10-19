@@ -29,6 +29,20 @@ on:
         description: "Asset name for the published APK"
         required: true
         type: string
+    # Named explicitly, and mapped explicitly by the callers. Using
+    # `secrets: inherit` instead made every calling workflow fail to register:
+    # GitHub reported only "this run likely failed because of a workflow file
+    # issue", with no jobs and no logs. Naming them here keeps the contract
+    # visible rather than implied, and the callers stay valid.
+    secrets:
+      ANDROID_KEYSTORE_BASE64:
+        required: true
+      ANDROID_KEYSTORE_PASSWORD:
+        required: true
+      ANDROID_KEY_ALIAS:
+        required: true
+      ANDROID_KEY_PASSWORD:
+        required: true
     outputs:
       apkName:
         description: "Name of the published asset"
