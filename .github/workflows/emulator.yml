@@ -4,11 +4,18 @@ name: Emulator
 # control surface (docs/adb-control.md) and uploads screenshots so the UI can be
 # inspected without a device.
 #
-# Runs *after* the Android build workflow completes and reuses its APK artifact
-# rather than building a second time. Also dispatchable by hand, in which case
-# it builds the APK itself.
+# Two ways in:
+#   - pull_request: the merge gate. Runs alongside the Android build, so it
+#     builds its own APK (the Gradle cache makes that cheap) and reports a
+#     check on the PR's merge commit.
+#   - workflow_run of the Android workflow: after a build lands on main, it
+#     downloads that run's APK artifact instead of building again.
+#
+# A PR-triggered Android run also fires workflow_run, so that path is skipped
+# for pull_request events to avoid running the tour twice per PR.
 on:
   workflow_dispatch:
+  pull_request:
   workflow_run:
     workflows: ["Android"]
     types: [completed]
@@ -26,8 +33,12 @@ jobs:
     name: Boot emulator + drive app
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    # Only run when the upstream build actually produced a working APK.
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    # The upstream build must have produced a working APK, and a PR-triggered
+    # Android run must not run the tour twice (its workflow_run does).
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'
     permissions:
       contents: read
       actions: write
@@ -88,8 +99,8 @@ jobs:
           gradle-version: 8.6
           gradle-home-cache-cleanup: true
 
-      # Reuse the APK the Android workflow just built, so the emulator tour
-      # tests exactly the artifact that was about to be released.
+      # After a build lands on main, reuse the APK that build produced, so the
+      # tour tests exactly the artifact that was about to be released.
       - name: Fetch APK from the Android workflow run
         if: github.event_name == 'workflow_run'
         uses: actions/download-artifact@v4
@@ -99,7 +110,9 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Manual dispatch has no upstream run to take an APK from.
+      # A PR runs this workflow in parallel with the Android build, so there is
+      # no upstream artifact to take yet. Building here is cheap — the Gradle
+      # cache is already warm from the same PR's other workflow.
       - name: Build debug APK
         if: github.event_name != 'workflow_run'
         run: |
