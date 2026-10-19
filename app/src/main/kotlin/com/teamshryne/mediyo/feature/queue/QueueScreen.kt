@@ -6,8 +6,11 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -17,10 +20,14 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -35,6 +42,9 @@ import com.teamshryne.mediyo.domain.model.thumbSized
 import com.teamshryne.mediyo.feature.player.PlayerViewModel
 import com.teamshryne.mediyo.playback.PlaybackQueueManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -67,6 +77,134 @@ class QueueVm @Inject constructor(
     suspend fun setLock(v: Boolean) = prefs.setLock(v)
 }
 
+// ── Hold & adjust (long-press drag to reorder) ─────────────────────────────
+
+/** Distance from the viewport edge where an in-flight drag starts auto-scrolling. */
+private val DragEdgeZone = 88.dp
+
+/** Peak auto-scroll speed while a dragged row sits inside the edge zone. */
+private val DragScrollSpeed = 900.dp
+
+/** Where a row sits right now — the list refreshes it as items are reordered. */
+private class ReorderAnchor(var index: Int)
+
+/**
+ * Hold and adjust: long-press any row, drag it, and it swaps places live.
+ *
+ * The dragged row rides the finger on a translation layer (GPU only, never
+ * layout) while the reorder itself is committed through [onMove]. Near the
+ * viewport edges the list auto-scrolls so long queues stay reachable.
+ *
+ * Geometry is read from [listState] every frame instead of assumed, so the drag
+ * stays correct whatever the row height is.
+ */
+private class QueueReorder(
+    private val listState: LazyListState,
+    private val scope: CoroutineScope,
+    private val edgeZonePx: Float,
+    private val scrollSpeedPx: Float,
+    private val onMove: (from: Int, to: Int) -> Unit
+) {
+    /** Index of the row under the finger, or -1 when nothing is being dragged. */
+    var index by mutableIntStateOf(-1)
+        private set
+
+    /** Finger offset layered on top of the dragged row's laid-out position. */
+    var offset by mutableFloatStateOf(0f)
+        private set
+
+    private var autoScroll: Job? = null
+
+    /**
+     * Drag gesture for one row. Keyed on [anchor], never on the row index: rows
+     * swap indexes mid-drag, and restarting the detector would drop the gesture.
+     */
+    fun dragModifier(anchor: ReorderAnchor, enabled: Boolean): Modifier =
+        if (!enabled) Modifier else Modifier.pointerInput(anchor) {
+            detectDragGesturesAfterLongPress(
+                onDragStart = {
+                    if (index == -1) {
+                        index = anchor.index
+                        offset = 0f
+                        autoScroll = scope.launch { autoScrollLoop() }
+                    }
+                },
+                onDrag = { change, amount ->
+                    change.consume()
+                    offset += amount.y
+                    commit()
+                },
+                onDragEnd = { reset() },
+                onDragCancel = { reset() }
+            )
+        }
+
+    /** Lock toggled mid-drag (or the list went away) — drop the gesture. */
+    fun reset() {
+        autoScroll?.cancel()
+        autoScroll = null
+        index = -1
+        offset = 0f
+    }
+
+    private fun autoScrollLoop() {
+        var last = 0L
+        while (isActive && index >= 0) {
+            val now = withFrameNanos { it }
+            val dt = if (last == 0L) 0f else ((now - last) / 1_000_000_000f).coerceIn(0f, 0.05f)
+            last = now
+            val velocity = edgeVelocity()
+            if (velocity != 0f) {
+                val scrolled = listState.scrollBy(velocity * dt)
+                if (scrolled == 0f) break
+                // Scrolling moves every row, dragged one included — carry the
+                // same distance into the offset so it stays under the finger.
+                offset += scrolled
+                commit()
+            }
+        }
+        autoScroll = null
+    }
+
+    private fun edgeVelocity(): Float {
+        val info = listState.layoutInfo
+        val item = info.visibleItemsInfo.firstOrNull { it.index == index } ?: return 0f
+        val center = item.offset + item.size / 2f + offset
+        val top = info.viewportStartOffset.toFloat()
+        val bottom = info.viewportEndOffset.toFloat()
+        return when {
+            center < top + edgeZonePx ->
+                -scrollSpeedPx * ((top + edgeZonePx - center) / edgeZonePx).coerceIn(0f, 1f)
+            center > bottom - edgeZonePx ->
+                scrollSpeedPx * ((center - (bottom - edgeZonePx)) / edgeZonePx).coerceIn(0f, 1f)
+            else -> 0f
+        }
+    }
+
+    /** Reorder once the dragged row's centre crosses a neighbour's centre. */
+    private fun commit() {
+        val from = index
+        if (from < 0) return
+        val info = listState.layoutInfo
+        val dragged = info.visibleItemsInfo.firstOrNull { it.index == from } ?: return
+        val center = dragged.offset + dragged.size / 2f + offset
+        var target = from
+        for (other in info.visibleItemsInfo) {
+            if (other.index == from) continue
+            val otherCenter = other.offset + other.size / 2f
+            if (other.index < from && center < otherCenter) target = minOf(target, other.index)
+            else if (other.index > from && center > otherCenter) target = maxOf(target, other.index)
+        }
+        if (target == from) return
+        val targetOffset = info.visibleItemsInfo.firstOrNull { it.index == target }?.offset ?: return
+        // The row's laid-out slot jumps by the distance between the two slots,
+        // so carry that into the offset or it snaps under the finger.
+        offset += (dragged.offset - targetOffset).toFloat()
+        index = target
+        Snapshot.withMutableSnapshot { onMove(from, target) }
+    }
+}
+
 // ── Full Screen Queue ────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -84,11 +222,37 @@ fun QueueScreen(
     val lockQueue by vm.lockFlow.collectAsState(initial = false)
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
     val listState = rememberLazyListState()
     var menuTrack by remember { mutableStateOf<Track?>(null) }
     var menuIdx by remember { mutableStateOf<Int?>(null) }
     var showAddSheet by remember { mutableStateOf<Track?>(null) }
     val menuVm: com.teamshryne.mediyo.core.design.MediaMenuVm = hiltViewModel()
+
+    val reorder = remember(listState, scope, density) {
+        QueueReorder(
+            listState = listState,
+            scope = scope,
+            edgeZonePx = with(density) { DragEdgeZone.toPx() },
+            scrollSpeedPx = with(density) { DragScrollSpeed.toPx() },
+            onMove = { from, to -> vm.move(from, to) }
+        )
+    }
+    // Locking mid-drag must not strand the row in the air.
+    LaunchedEffect(lockQueue) { if (lockQueue) reorder.reset() }
+
+    // Stable per-row keys (videoId + occurrence). Index-based keys would give
+    // every shifted row a brand new identity mid-drag, which tears down its
+    // drag gesture; occurrence numbering keeps duplicates unique.
+    val keys = remember(qs.entries) {
+        val seen = HashMap<String, Int>()
+        qs.entries.map { t ->
+            val id = t.videoId ?: t.title
+            val n = seen.getOrDefault(id, 0)
+            seen[id] = n + 1
+            "$id#$n"
+        }
+    }
 
     LaunchedEffect(currentIdx) {
         if (currentIdx in qs.entries.indices) {
@@ -179,9 +343,12 @@ fun QueueScreen(
                 contentPadding = PaddingValues(top = 6.dp, bottom = 12.dp),
                 modifier = Modifier.fillMaxSize().padding(pad)
             ) {
-                itemsIndexed(qs.entries, key = { idx, t -> "${t.videoId}_${idx}_${t.title.hashCode()}" }) { idx, t ->
+                itemsIndexed(qs.entries, key = { idx, _ -> keys[idx] }) { idx, t ->
                     val isActive = idx == currentIdx
                     val isPlaying = isActive && (playerState?.isPlaying == true)
+                    val anchor = remember { ReorderAnchor(idx) }
+                    anchor.index = idx
+                    val onRowClick: () -> Unit = { if (idx == currentIdx) player?.toggle() else { vm.playAt(idx); player?.playAt(idx) } }
                     val dismissState = rememberSwipeToDismissBoxState(
                         positionalThreshold = { it * 0.4f },
                         confirmValueChange = { value ->
@@ -209,26 +376,27 @@ fun QueueScreen(
                                         track = t,
                                         isActive = isActive,
                                         isPlaying = isPlaying,
-                                        lockQueue = lockQueue,
-                                        showReorder = true,
-                                        onClick = { if (idx == currentIdx) player?.toggle() else { vm.playAt(idx); player?.playAt(idx) } },
-                                        onMore = { menuTrack = t; menuIdx = idx },
-                                        onMoveUp = { if (idx > 0) vm.move(idx, idx - 1) },
-                                        onMoveDown = { if (idx < qs.entries.lastIndex) vm.move(idx, idx + 1) }
+                                        reorder = reorder,
+                                        index = idx,
+                                        canReorder = true,
+                                        modifier = reorder.dragModifier(anchor, enabled = true),
+                                        onClick = onRowClick,
+                                        onMore = { menuTrack = t; menuIdx = idx }
                                     )
                                 }
                             )
                         } else {
+                            // Same row, same handle, same size as the unlocked
+                            // branch — toggling the lock must not shift anything.
                             QueueRowContent(
                                 track = t,
                                 isActive = isActive,
                                 isPlaying = isPlaying,
-                                lockQueue = true,
-                                showReorder = false,
-                                onClick = { if (idx == currentIdx) player?.toggle() else { vm.playAt(idx); player?.playAt(idx) } },
-                                onMore = { menuTrack = t; menuIdx = idx },
-                                onMoveUp = {},
-                                onMoveDown = {}
+                                reorder = reorder,
+                                index = idx,
+                                canReorder = false,
+                                onClick = onRowClick,
+                                onMore = { menuTrack = t; menuIdx = idx }
                             )
                         }
                     }
@@ -276,15 +444,28 @@ private fun QueueRowContent(
     track: Track,
     isActive: Boolean,
     isPlaying: Boolean,
-    lockQueue: Boolean,
-    showReorder: Boolean,
+    reorder: QueueReorder,
+    index: Int,
+    canReorder: Boolean,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
-    onMore: () -> Unit,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit
+    onMore: () -> Unit
 ) {
+    val dragging = reorder.index == index
     Row(
-        Modifier.fillMaxWidth().background(if (isActive) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp)).combinedClickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 6.dp),
+        modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                if (dragging) {
+                    translationY = reorder.offset
+                    scaleX = 1.02f
+                    scaleY = 1.02f
+                }
+            }
+            .background(if (isActive) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(12.dp))
+            .combinedClickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AsyncImage(model = track.artworkUrl.thumbSized(ART_ROW_PX), contentDescription = null, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest))
@@ -296,14 +477,20 @@ private fun QueueRowContent(
         if (isActive && isPlaying) Icon(Icons.Filled.GraphicEq, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp).padding(end = 4.dp))
         else if (isActive) Icon(Icons.Filled.PlayArrow, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
         IconButton(onClick = onMore, modifier = Modifier.size(36.dp)) { Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp)) }
-        if (showReorder && !lockQueue) {
-            Column(verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(32.dp)) {
-                IconButton(onClick = onMoveUp, modifier = Modifier.size(20.dp)) { Icon(Icons.Filled.KeyboardArrowUp, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.8f)) }
-                Icon(Icons.Filled.DragHandle, contentDescription = "Drag", tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.6f), modifier = Modifier.size(14.dp))
-                IconButton(onClick = onMoveDown, modifier = Modifier.size(20.dp)) { Icon(Icons.Filled.KeyboardArrowDown, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.8f)) }
-            }
-        } else if (lockQueue) {
-            Icon(Icons.Filled.Lock, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.4f), modifier = Modifier.size(16.dp).padding(start = 4.dp))
-        }
+        QueueDragHandle(active = canReorder)
     }
+}
+
+/**
+ * Drag affordance. Rendered identically whether the queue is locked or not —
+ * only the alpha changes — so locking can never reflow a row.
+ */
+@Composable
+private fun QueueDragHandle(active: Boolean) {
+    Icon(
+        imageVector = Icons.Filled.DragHandle,
+        contentDescription = "Hold and drag to reorder",
+        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (active) 0.8f else 0.25f),
+        modifier = Modifier.size(22.dp)
+    )
 }
