@@ -281,12 +281,31 @@ jobs:
             CHANGELOG+=$'\n'"$(git log -30 "$TAG" --pretty=format:'- %s (%h)' --reverse)"
           fi
 
+          # User-facing notes, from CHANGELOG.md. A release without them fails
+          # rather than shipping the commit log to users.
+          NOTES=$(awk -v heading="^## $VERSION\$" '
+            $0 ~ heading { found=1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md)
+          if [ -z "$(echo "$NOTES" | tr -d '[:space:]')" ]; then
+            echo "::error::no user-facing notes for $VERSION"
+            echo "::error::add a '## $VERSION' section to CHANGELOG.md"
+            exit 1
+          fi
+
           # A notes file rather than --notes: the body contains backticks and
           # $ signs, and quoting that into a shell argument is a trap.
           {
-            echo "## Mediyo $TAG (versionCode $CODE)"
+            echo "$NOTES"
+            echo
+            echo "---"
+            echo
+            echo "<details><summary>Technical changes</summary>"
             echo
             echo "$CHANGELOG"
+            echo
+            echo "</details>"
             echo
             echo "### APK"
             echo "- **$APK_NAME** — signed release (\`com.teamshryne.mediyo\`), installs side-by-side with the Debug build (\`com.teamshryne.mediyo.debug\`)."

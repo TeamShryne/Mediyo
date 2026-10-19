@@ -71,6 +71,26 @@ based on.
 
 ## Cutting a release
 
+### Write the notes first
+
+Stable release notes come from `CHANGELOG.md`. Each version gets a section:
+
+```markdown
+## 0.9.0
+
+**Something a user would notice.** What changed, and why they would care.
+```
+
+The release reads that section and uses it as the release notes. **A release
+without a section fails** rather than shipping the commit log to users — so
+this cannot be forgotten at tag time.
+
+Write them for someone using the app, not for someone reading the git log: no
+commit hashes, no file names, no "refactored". The generated list of technical
+changes is still attached, collapsed under a "Technical changes" heading.
+
+### Then cut the tag
+
 Push a tag:
 
 ```bash
