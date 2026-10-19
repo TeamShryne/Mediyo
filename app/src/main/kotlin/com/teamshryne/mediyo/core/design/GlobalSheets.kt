@@ -1,8 +1,13 @@
 package com.teamshryne.mediyo.core.design
 
+import android.app.Activity
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import com.teamshryne.mediyo.data.mediyo.FfiSearchResult
@@ -18,15 +23,18 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Every bottom sheet in the app renders here, at the root overlay layer —
- * full window, so the dim covers status- and navigation-bar regions too.
+ * Every bottom sheet in the app renders here, at the root overlay layer.
  *
- * Background: `ModalBottomSheet` draws its scrim inline (it is not a
- * separate window), so a sheet composed inside a padded `Scaffold` content
- * box only dims that box. Screens under tab-bar navigation sit inside such
- * a box, which is why their sheets used to leave the system-bar strips
- * undimmed. Hosting all sheets in `AppShell`'s root `Box` fixes it for
- * every current and future sheet at once.
+ * Background: `ModalBottomSheet` draws its scrim inline (it is not a separate
+ * window), so a sheet composed inside a padded `Scaffold` content box only dims
+ * that box. Screens under tab-bar navigation sit inside such a box, which is
+ * why their sheets used to leave the content area undimmed. Hosting all sheets
+ * in `AppShell`'s root `Box` fixes that for every current and future sheet at
+ * once.
+ *
+ * The status-bar strip is a separate problem the root box does not solve: the
+ * scrim stops at the top of the window content there. [SheetStatusBar] paints
+ * the same colour into the window's status bar so the two match.
  *
  * Screens never hold sheet state anymore: overflow clicks call
  * `sheets.showTrackMenu(...)` etc. via [SheetHostVm], and [GlobalSheets]
@@ -108,6 +116,37 @@ class SheetHostVm @Inject constructor(
     fun showComments(videoId: String) = sheets.showComments(videoId)
 }
 
+/**
+ * Matches `ModalBottomSheet`'s default scrim, spelled out rather than read off
+ * `ModalBottomSheetDefaults` so it cannot drift with an API change.
+ */
+private val SheetScrim = Color.Black.copy(alpha = 0.32f)
+
+/**
+ * Dim the status-bar strip while a sheet is open.
+ *
+ * `ModalBottomSheet` draws its scrim inside the composition, and on this theme
+ * that stops short of the status-bar strip — so the strip stays at full
+ * brightness while everything under it greys out, and the seam is clearly
+ * visible. Painting the sheet's own scrim colour into the window's status bar
+ * makes the two match exactly, because it *is* the same translucent black.
+ *
+ * Ignored from Android 15 on, where `statusBarColor` is deprecated and a no-op;
+ * the sheet scrim is the only thing drawing there on those releases anyway.
+ */
+@Composable
+fun SheetStatusBar(open: Boolean) {
+    val view = LocalView.current
+    if (view.isInEditMode) return
+    SideEffect {
+        val window = (view.context as? Activity)?.window ?: return@SideEffect
+        // Without this the platform paints its own contrast veil over a
+        // translucent status bar, which is a different shade to our scrim.
+        if (window.isStatusBarContrastEnforced) window.isStatusBarContrastEnforced = false
+        window.statusBarColor = if (open) SheetScrim.toArgb() else android.graphics.Color.TRANSPARENT
+    }
+}
+
 /** Render in `AppShell`'s root overlay `Box`, after the queue overlay. */
 @Composable
 fun GlobalSheets(host: SheetHostVm = hiltViewModel()) {
@@ -116,6 +155,8 @@ fun GlobalSheets(host: SheetHostVm = hiltViewModel()) {
     val addTrack by m.addToPlaylist.collectAsState()
     val mediaReq by m.mediaMenu.collectAsState()
     val commentsVid by m.comments.collectAsState()
+
+    SheetStatusBar(open = trackReq != null || addTrack != null || mediaReq != null || commentsVid != null)
 
     trackReq?.let { r ->
         TrackMenuSheet(

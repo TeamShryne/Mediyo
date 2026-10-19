@@ -543,6 +543,7 @@ private fun AppShell() {
         }
 
         if (showSleepSheet) {
+            com.teamshryne.mediyo.core.design.SheetStatusBar(open = true)
             com.teamshryne.mediyo.feature.sleeptimer.SleepTimerSheet(
                 state = sleepState,
                 onSetTimer = { ms -> playerVm.sleepState.value // trigger via manager directly through vm

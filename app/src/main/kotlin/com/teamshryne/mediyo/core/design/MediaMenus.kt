@@ -262,7 +262,14 @@ fun MediaMenuSheet(
     if (!show) return
     val scope = rememberCoroutineScope()
     ModalBottomSheet(onDismissRequest = onDismiss, shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)) {
-        Column(Modifier.padding(horizontal = 8.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        // See TrackMenu.kt: inset for the nav bar rather than a fixed pad.
+        Column(
+            Modifier
+                .padding(horizontal = 8.dp)
+                .navigationBarsPadding()
+                .padding(bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
             MenuHeader(item = item)
             if (vm.error != null) {
                 Text(

@@ -63,7 +63,16 @@ fun TrackMenuSheet(
     var showArtists by remember(track) { mutableStateOf(false) }
     BackHandler(enabled = showArtists) { showArtists = false }
     ModalBottomSheet(onDismissRequest = onDismiss, shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)) {
-        Column(Modifier.padding(horizontal = 8.dp, vertical = 8.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        // navigationBarsPadding, not a fixed bottom pad: the app is edge-to-edge,
+        // so the sheet paints behind the nav bar and a hardcoded pad leaves the
+        // last row underneath the back/home/recents buttons.
+        Column(
+            Modifier
+                .padding(horizontal = 8.dp, vertical = 8.dp)
+                .navigationBarsPadding()
+                .padding(bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
             if (showArtists && artistEntries.size > 1) {
                 // ── Artist picker ──
                 Row(
