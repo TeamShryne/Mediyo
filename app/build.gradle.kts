@@ -46,6 +46,12 @@ android {
         // identifiable in Settings. Never fails the build when git is
         // unavailable (e.g. source export without .git).
         buildConfigField("String", "GIT_SHA", "\"${gitSha()}\"")
+        // Which update track this build belongs to: "stable" or "nightly".
+        // The nightly track is signed with the same key and shares the
+        // applicationId, so it replaces the release build in place rather
+        // than installing alongside it.
+        val channel = (project.findProperty("channel") as String?) ?: "stable"
+        buildConfigField("String", "CHANNEL", "\"$channel\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }

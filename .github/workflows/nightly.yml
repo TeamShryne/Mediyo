@@ -1,0 +1,169 @@
+name: Nightly
+
+# A daily build from main, published as a prerelease.
+#
+# Nightlies are the proving ground for releases: a release should be a commit
+# that has already survived as a nightly for a few days. They are signed with
+# the *same* key as releases and carry the same applicationId, so a nightly
+# install replaces the release build in place and the other way round —
+# a nightly with a different key or package would be a separate app the user
+# has to uninstall, losing their library and settings.
+#
+# Published as a prerelease on purpose: GitHub's releases/latest resolves to
+# the newest *non*-prerelease, so keeping nightlies out of that namespace is
+# what stops them being pushed to stable users. The updater reaches them
+# through the rolling `nightly` tag instead, which only users who opted into
+# the Nightly channel read.
+
+on:
+  schedule:
+    # 03:17 UTC. Deliberately off the hour: GitHub's scheduler is heavily
+    # oversubscribed on the hour and a nightly that starts late is a nightly
+    # that lands in someone's working day.
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  nightly:
+    name: Build and publish nightly
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Tags are needed to count the nightlies already published on this
+          # minor line, which is the nightly's version sequence.
+          fetch-depth: 0
+
+      - name: Resolve version
+        id: version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # The nightly's band is the minor line of the latest *stable*
+          # release, so that the next release always outranks every nightly
+          # before it. With no release yet, start on 0.1.
+          TAG=$(gh release list --limit 30 --json tagName,isPrerelease \
+                  --jq '[.[] | select(.isPrerelease == false)][0].tagName // ""')
+          if [ -z "$TAG" ]; then
+            echo "No stable release yet — nightlies start on the 0.1 line."
+            MAJOR=0; MINOR=1; BASE_VERSION="0.1.0"
+          else
+            BASE_VERSION="${TAG#v}"
+            MAJOR="${BASE_VERSION%%.*}"
+            REST="${BASE_VERSION#*.}"
+            MINOR="${REST%%.*}"
+          fi
+
+          # Sequence: how many nightlies this minor line already has. Monotonic
+          # within the line, and reset by the next release (which moves the
+          # band to the next minor).
+          SEQ=$(( $(git tag -l "nightly-$MAJOR.$MINOR.*" | wc -l) + 1 ))
+
+          CODE=$(scripts/version-code.sh "$MAJOR" "$MINOR" 0 nightly "$SEQ")
+          VERSION="${BASE_VERSION}-nightly.${SEQ}"
+          APK_NAME="mediyo-nightly-${MAJOR}.${MINOR}.${SEQ}.apk"
+
+          echo "base=$BASE_VERSION major=$MAJOR minor=$MINOR seq=$SEQ"
+          echo "version=$VERSION code=$CODE apk=$APK_NAME"
+          echo "base=$BASE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "major=$MAJOR" >> "$GITHUB_OUTPUT"
+          echo "minor=$MINOR" >> "$GITHUB_OUTPUT"
+          echo "seq=$SEQ" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "apkName=$APK_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Build signed APK
+        uses: ./.github/workflows/build-apk.yml
+        with:
+          versionCode: ${{ steps.version.outputs.code }}
+          versionName: ${{ steps.version.outputs.version }}
+          channel: nightly
+          apkName: ${{ steps.version.outputs.apkName }}
+        secrets: inherit
+
+      - name: Publish nightly
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          CODE: ${{ steps.version.outputs.code }}
+          APK_NAME: ${{ steps.version.outputs.apkName }}
+          SEQ: ${{ steps.version.outputs.seq }}
+          MAJOR: ${{ steps.version.outputs.major }}
+          MINOR: ${{ steps.version.outputs.minor }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Mark the commit so this nightly can be found later. A plain tag,
+          # no release object: the APK lives on the rolling release, and a
+          # dated tag per build would double the storage for no benefit.
+          GIT_TAG="nightly-${MAJOR}.${MINOR}.${SEQ}"
+          git tag -f -a "$GIT_TAG" -m "Mediyo nightly ${VERSION}"
+          git push origin "$GIT_TAG" --force
+
+          # Fetch the built APK out of the reusable workflow's artifact.
+          mkdir -p dist
+          gh run download "${{ github.run_id }}" -n "built-apk-${APK_NAME}" -D dist || true
+          test -f "dist/$APK_NAME" || { echo "::error::built APK not found in artifacts"; exit 1; }
+          cp "dist/$APK_NAME" "$APK_NAME"
+          SHA=$(sha256sum "$APK_NAME" | cut -d' ' -f1)
+          echo "$SHA  $APK_NAME" > "$APK_NAME.sha256"
+
+          # The updater contract — shared with the release track so the two
+          # cannot drift.
+          scripts/make-update-json.sh "$VERSION" "$CODE" "$APK_NAME" \
+            "https://github.com/${{ github.repository }}/releases/download/nightly/$APK_NAME" \
+            "$SHA"
+
+          # Recreate the rolling release so it holds exactly this build's
+          # assets. The asset name carries the sequence, so the download URL
+          # changes every night and cannot be served stale from a CDN cache.
+          #
+          # The tag is moved to the commit that was actually built — deleting
+          # the release without --cleanup-tag and re-tagging keeps it pointing
+          # at the build, rather than wherever the default branch happens to be.
+          gh release delete nightly -y 2>/dev/null || true
+          git tag -f -a nightly -m "Mediyo nightly ${VERSION}" "$GITHUB_SHA"
+          git push origin nightly --force
+
+          {
+            echo "Nightly build from \`$GITHUB_SHA\` on $(date -u +%Y-%m-%d)."
+            echo
+            echo "Untested by definition — this is a build of \`main\`, not a release."
+            echo "Opt in via **Settings → App updates → Nightly**."
+            echo
+            echo "- Version: \`$VERSION\` (versionCode \`$CODE\`)"
+            echo "- APK: \`$APK_NAME\`"
+            echo "- SHA-256: \`$SHA\`"
+          } > notes.md
+
+          gh release create nightly \
+            --title "Mediyo nightly ${VERSION}" \
+            --prerelease \
+            --notes-file notes.md \
+            "$APK_NAME" "$APK_NAME.sha256" update.json
+
+          echo "Published nightly $VERSION (code $CODE)"
+
+      - name: Upload artifacts (CI copy)
+        uses: actions/upload-artifact@v4
+        with:
+          name: mediyo-nightly-${{ steps.version.outputs.seq }}
+          path: |
+            ${{ steps.version.outputs.apkName }}
+            ${{ steps.version.outputs.apkName }}.sha256
+            update.json
+          if-no-files-found: error
+          retention-days: 7
