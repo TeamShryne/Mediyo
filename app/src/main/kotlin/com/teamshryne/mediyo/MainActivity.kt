@@ -108,6 +108,7 @@ import com.teamshryne.mediyo.feature.settings.AppearanceScreen
 import com.teamshryne.mediyo.feature.settings.AppearanceVm
 import com.teamshryne.mediyo.feature.settings.PlayerBackgroundScreen
 import com.teamshryne.mediyo.feature.settings.TabBarStyleScreen
+import com.teamshryne.mediyo.feature.settings.LyricsAppearanceScreen
 import com.teamshryne.mediyo.feature.settings.LyricsSettingsScreen
 import com.teamshryne.mediyo.feature.settings.SettingsScreen
 import com.teamshryne.mediyo.feature.update.UpdateDialog
@@ -428,7 +429,7 @@ private fun AppShell() {
                 composable(Tab.Search.route) { SearchScreen(nav, playerVm, searchVm) }
                 composable(Tab.Library.route) { LibraryScreen(nav, playerVm) }
                 composable(Tab.Settings.route) { SettingsScreen(nav) }
-                composable("settings/lyrics") { LyricsSettingsScreen(nav) }
+                composable("settings/content/lyrics") { LyricsSettingsScreen(nav) }
                 composable("settings/updates") { UpdatesSettingsScreen(nav) }
                 composable("playlist/{id}") { PlaylistScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
                 composable("album/{id}") { AlbumScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
@@ -464,6 +465,7 @@ private fun AppShell() {
                 composable("downloads") { DownloadsScreen(nav, playerVm) }
                 composable("settings/appearance/tabs") { TabBarStyleScreen(nav) }
                 composable("settings/appearance/player") { PlayerBackgroundScreen(nav) }
+                composable("settings/appearance/lyrics") { LyricsAppearanceScreen(nav) }
                 }
                 }
             }

@@ -62,7 +62,7 @@ Destinations:
 | `localPlaylist/{id}` | a saved local playlist |
 | `section/{kind}/{id}?params=…&title=…` | "see all" sub-lists |
 | `liked`, `history`, `downloads`, `profile` | library pages |
-| `settings/lyrics`, `settings/updates`, `settings/appearance`, `settings/appearance/tabs`, `settings/appearance/player`, `settings/equalizer`, `settings/storage` | settings |
+| `settings/content/lyrics`, `settings/updates`, `settings/appearance`, `settings/appearance/tabs`, `settings/appearance/player`, `settings/appearance/lyrics`, `settings/equalizer`, `settings/storage` | settings |
 
 An unknown route is reported rather than thrown:
 
