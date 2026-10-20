@@ -54,6 +54,7 @@ import com.teamshryne.mediyo.domain.model.toDomainTrack
 import com.teamshryne.mediyo.domain.repository.UserEventRepository
 import com.teamshryne.mediyo.core.design.navigateAlbum
 import com.teamshryne.mediyo.core.design.navigateArtist
+import com.teamshryne.mediyo.core.design.navigateChannel
 import com.teamshryne.mediyo.core.design.navigatePlaylist
 import com.teamshryne.mediyo.core.design.navigatePodcast
 import com.teamshryne.mediyo.domain.repository.UserEventTypes
