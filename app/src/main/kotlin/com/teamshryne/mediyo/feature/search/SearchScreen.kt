@@ -33,6 +33,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -88,6 +89,12 @@ class SearchVm @Inject constructor(
     var recents by mutableStateOf<List<String>>(emptyList())
     /** Suggestion panel is allowed to be open (not dismissed by a scroll). */
     var suggestOpen by mutableStateOf(false)
+    /**
+     * The YouTube-Music-style search overlay floats on top of the results.
+     * It owns the focused text field; the field in the list header only
+     * opens it.
+     */
+    var overlayOpen by mutableStateOf(false)
     private var suggestJob: kotlinx.coroutines.Job? = null
     /**
      * Guards against out-of-order responses: only the newest request may
@@ -128,6 +135,39 @@ class SearchVm @Inject constructor(
                 recents = emptyList()
             } catch (_: Throwable) { }
         }
+    }
+
+    /** Drop a single entry from the recent-search history. */
+    fun removeRecent(q: String) {
+        viewModelScope.launch {
+            try {
+                events.deleteByLabel(UserEventTypes.SEARCH, q)
+                loadRecents()
+            } catch (_: Throwable) { }
+        }
+    }
+
+    /** Open the search overlay above the results. */
+    fun openOverlay() {
+        if (overlayOpen) return
+        overlayOpen = true
+        // A fresh overlay always shows its completions again, even for a
+        // query the user scrolled away from earlier.
+        dismissedFor = null
+        suggestOpen = true
+        if (query.isBlank()) loadRecents() else onQueryChange(query)
+    }
+
+    /** Close the search overlay; the results underneath stay as they were. */
+    fun closeOverlay() {
+        if (!overlayOpen) return
+        overlayOpen = false
+        dismissSuggest()
+    }
+
+    /** Put [q] in the field without running the search (the arrow action). */
+    fun fillQuery(q: String) {
+        onQueryChange(q)
     }
 
     /** Called on every keystroke: updates the query and refreshes suggestions. */
@@ -249,6 +289,7 @@ fun SearchScreen(
 ) {
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     // Menus render at the root overlay (GlobalSheets) for full-window dim.
     val sheets: com.teamshryne.mediyo.core.design.SheetHostVm = hiltViewModel()
 
@@ -265,18 +306,32 @@ fun SearchScreen(
     )
 
     // Scrolling the results dismisses the suggestion panel — for the current
-    // query only, so the next keystroke re-opens it naturally.
+    // query only, so the next keystroke re-opens it naturally. While the
+    // overlay is up the results are background only: scrolling them must not
+    // tear the completions away.
     LaunchedEffect(listState) {
         snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
             .distinctUntilChanged()
-            .collect { vm.dismissSuggest() }
+            .collect { if (!vm.overlayOpen) vm.dismissSuggest() }
     }
-    // Back closes the panel before it leaves the screen.
-    BackHandler(enabled = vm.suggestVisible) { vm.dismissSuggest() }
+    // Back closes the overlay first, then the suggestion panel.
+    BackHandler(enabled = vm.overlayOpen) {
+        vm.closeOverlay()
+        focusManager.clearFocus()
+    }
+    BackHandler(enabled = !vm.overlayOpen && vm.suggestVisible) { vm.dismissSuggest() }
+
+    // The view model outlives this screen (it is hoisted for the whole app),
+    // so make sure no overlay is left behind when the user leaves the tab.
+    DisposableEffect(Unit) {
+        onDispose { vm.closeOverlay() }
+    }
 
     fun open(r: FfiSearchResult) {
         vm.logTap(r)
         vm.dismissSuggest()
+        // A tap on a result ends the search overlay, whatever opened it.
+        vm.closeOverlay()
         when {
             r.videoId != null && r.category.contains("Episode", true) ->
                 nav.navigate("episode/${r.detailId.ifBlank { r.videoId }}")
@@ -299,48 +354,52 @@ fun SearchScreen(
         contentPadding = PaddingValues(top = 4.dp, bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        item(key = "search_header") {
-            Text(
-                "Search",
-                style = MaterialTheme.typography.displaySmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(horizontal = 20.dp)
-            )
-        }
-
-        stickyHeader(key = "search_bar") {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.background)
-                    .padding(horizontal = 20.dp)
-                    .height(FIELD_BLOCK_HEIGHT),
-                verticalArrangement = Arrangement.Center
-            ) {
-                OutlinedTextField(
-                    value = vm.query,
-                    onValueChange = { vm.onQueryChange(it) },
-                    placeholder = { Text("Songs, artists, albums…", color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    leadingIcon = { Icon(Icons.Filled.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    trailingIcon = if (vm.query.isNotEmpty()) {
-                        {
-                            IconButton(onClick = { vm.onQueryChange("") }) {
-                                Icon(Icons.Filled.Close, contentDescription = "Clear", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    } else null,
-                    singleLine = true,
-                    shape = RoundedCornerShape(28.dp),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { vm.submit() }),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                        unfocusedBorderColor = Color.Transparent,
-                        focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
-                    ),
-                    modifier = Modifier.fillMaxWidth()
+        // While the search overlay is up it owns the whole top of the screen
+        // (title included) — the results underneath start right below it.
+        if (!vm.overlayOpen) {
+            item(key = "search_header") {
+                Text(
+                    "Search",
+                    style = MaterialTheme.typography.displaySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(horizontal = 20.dp)
                 )
+            }
+
+            stickyHeader(key = "search_bar") {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.background)
+                        .padding(horizontal = 20.dp)
+                        .height(FIELD_BLOCK_HEIGHT),
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    OutlinedTextField(
+                        value = vm.query,
+                        onValueChange = { vm.onQueryChange(it) },
+                        placeholder = { Text("Songs, artists, albums…", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                        leadingIcon = { Icon(Icons.Filled.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                        singleLine = true,
+                        // The header field is only the entry point: tapping it
+                        // hands the editing over to the overlay, which is the
+                        // field that actually takes the keyboard.
+                        readOnly = true,
+                        shape = RoundedCornerShape(28.dp),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = { vm.submit() }),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            unfocusedBorderColor = Color.Transparent,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { vm.openOverlay() }
+                            .onFocusChanged { if (it.isFocused) vm.openOverlay() }
+                    )
+                }
             }
         }
 
@@ -405,6 +464,9 @@ fun SearchScreen(
         }
 
         when {
+            // The overlay carries the history while it is up — rendering the
+            // same rows behind it would just duplicate them.
+            vm.overlayOpen && !vm.hasSearched -> Unit
             !vm.hasSearched -> if (vm.query.isBlank()) {
                 if (vm.recents.isNotEmpty()) {
                     item(key = "recent_header") {
@@ -508,11 +570,10 @@ fun SearchScreen(
         item(key = "search_footer") { LoadingFooter(vm.loadingMore && !vm.loading) }
     }
 
-    // ── Sticky-field divider + suggestion overlay ────────────────────────
+    // ── Sticky-field divider + search overlay ────────────────────────────
     // The field lives in the sticky header above (fixed height, so it can
-    // never reflow the list); these overlays dock to that same height.
-    // At list-top the panel briefly covers the title — standard dropdown
-    // behaviour; once scrolled it docks exactly under the stuck field.
+    // never reflow the list); the divider marks where the results slide
+    // under the stuck field.
     val scrolled by remember {
         derivedStateOf {
             listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 8
@@ -521,7 +582,7 @@ fun SearchScreen(
     // Divider only once content is sliding underneath, so the bar doesn't
     // draw a permanent line over the idle state.
     AnimatedVisibility(
-        visible = scrolled,
+        visible = scrolled && !vm.overlayOpen,
         enter = fadeIn(tween(160)),
         exit = fadeOut(tween(160)),
         modifier = Modifier.align(Alignment.TopCenter)
@@ -532,28 +593,40 @@ fun SearchScreen(
         )
     }
 
-    // ── Suggestion overlay ─────────────────────────────────────────────
-    // Floats above the results so it can never reflow them, and closes with
-    // a height + fade animation when the user scrolls into the results.
+    // ── Search overlay ──────────────────────────────────────────────────
+    // Floats on top of the results: the field, the recent searches and the
+    // live completions. The results stay visible below it.
     AnimatedVisibility(
-        visible = vm.suggestVisible,
+        visible = vm.overlayOpen,
         enter = fadeIn(tween(140)) + expandVertically(tween(220)),
-        exit = fadeOut(tween(120)) + shrinkVertically(tween(200)),
+        exit = fadeOut(tween(120)) + shrinkVertically(tween(180)),
         modifier = Modifier.align(Alignment.TopCenter)
     ) {
-        Box(Modifier.padding(top = FIELD_BLOCK_HEIGHT, start = 12.dp, end = 12.dp)) {
-            SuggestDropdown(
-                texts = vm.suggestTexts,
-                entities = vm.suggestEntities,
-                modifier = Modifier.fillMaxWidth(),
-                onText = {
-                    vm.query = it.query.ifBlank { it.text }
-                    vm.runSearch(null)
-                },
-                onEntity = { open(it) },
-                onMenu = { openMenu(it) }
-            )
-        }
+        SearchOverlay(
+            query = vm.query,
+            recents = vm.recents,
+            suggestTexts = vm.suggestTexts,
+            suggestEntities = vm.suggestEntities,
+            showSuggestions = vm.suggestVisible,
+            onQueryChange = { vm.onQueryChange(it) },
+            onClose = {
+                vm.closeOverlay()
+                focusManager.clearFocus()
+            },
+            onSubmit = { q ->
+                vm.query = q
+                vm.runSearch(null)
+                vm.closeOverlay()
+                focusManager.clearFocus()
+            },
+            onFill = { vm.fillQuery(it) },
+            onRemoveRecent = { vm.removeRecent(it) },
+            onOpenEntity = {
+                open(it)
+                vm.closeOverlay()
+                focusManager.clearFocus()
+            }
+        )
     }
     }
 
@@ -790,66 +863,5 @@ private fun ResultRow(item: FfiSearchResult, onClick: () -> Unit, onMenu: () -> 
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         TrackOverflowIcon(onClick = onMenu)
-    }
-}
-
-/**
- * Live completions under the search field (core Suggest endpoint): query
- * completions fill the field and run, entity results open directly.
- */
-@Composable
-private fun SuggestDropdown(
-    texts: List<FfiSuggestText>,
-    entities: List<com.teamshryne.mediyo.data.mediyo.FfiSearchResult>,
-    onText: (FfiSuggestText) -> Unit,
-    onEntity: (com.teamshryne.mediyo.data.mediyo.FfiSearchResult) -> Unit,
-    onMenu: (com.teamshryne.mediyo.data.mediyo.FfiSearchResult) -> Unit = {},
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .padding(vertical = 4.dp)
-    ) {
-        texts.take(4).forEach { t ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clickable { onText(t) }
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Filled.Search, null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(Modifier.width(12.dp))
-                Text(
-                    t.text,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-        if (texts.isNotEmpty() && entities.isNotEmpty()) {
-            HorizontalDivider(
-                Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHighest
-            )
-            Text(
-                "Top results",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-            )
-        }
-        entities.take(3).forEach { r ->
-            TopResultMiniRow(item = r, onClick = { onEntity(r) }, onMenu = { onMenu(r) })
-        }
     }
 }

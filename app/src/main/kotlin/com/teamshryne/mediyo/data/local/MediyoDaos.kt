@@ -240,6 +240,10 @@ interface UserEventDao {
     @Query("DELETE FROM user_events WHERE type = :type")
     suspend fun clearType(type: String)
 
+    /** Drop every event of [type] whose label matches exactly (one search term). */
+    @Query("DELETE FROM user_events WHERE type = :type AND label = :label")
+    suspend fun deleteByLabel(type: String, label: String)
+
     /** Keep only the newest [keep] events. For a future settings retention option. */
     @Query("DELETE FROM user_events WHERE id NOT IN (SELECT id FROM user_events ORDER BY createdAt DESC LIMIT :keep)")
     suspend fun prune(keep: Int)
