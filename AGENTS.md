@@ -124,14 +124,13 @@ fix(lyrics): refactor the renderer in LyricsView.kt to handle overlapping lines
 <!-- /notes -->
 ```
 
-### And the changelog, for now
+### And the changelog
 
-Until the release-notes rewrite lands, the release workflow also reads the
-user-facing entries from the **Unreleased** section of `CHANGELOG.md` (see
-`docs/releases.md`). Keep the two in step: the entries in `CHANGELOG.md` and
-the blocks in the pull request description say the same thing in the same
-words. The rewrite deletes `CHANGELOG.md` and makes the blocks the only
-source — from then on, stop touching the changelog.
+There is no changelog. `CHANGELOG.md` was deleted when the release notes moved
+into the change: the notes in the commit bodies are what a release publishes,
+so writing them a second time by hand was the thing that used to go wrong.
+Do not bring it back, and do not add a notes file of your own — the block in
+the pull request description is the whole of it.
 
 ## Working on the code
 
