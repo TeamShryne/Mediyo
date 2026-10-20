@@ -23,24 +23,26 @@ app found by queueing — and the way it looks for those is deliberately
 random, so the same handful never comes back and the shelf never settles into
 one artist on repeat.
 
-**The new shelves look like quick picks.** "Because you heard &lt;song&gt;" uses
-the same columns of four, with the same snapping and the same overflow menu.
-
 **Home finally tells you *why* it is showing you something.** The shelves now
 read "Because you heard <song>", "Because you loved it", "Because you liked
 it", "Because you were away" and "Because it's late" — the last one follows
 the clock. The "Because you heard" shelves are new songs, found by looking at
-the neighbours of your music and branching out from there, so they are
-adjacent to what you like without repeating it.
+the neighbours of your music and branching out from there, and they use the
+same columns of four as quick picks.
 
-**Quick picks scroll sideways, and never run out.** The row of songs at the top
-of Home is now a horizontal shelf instead of a small grid, and it holds far
-more than before. It starts with the songs you are most likely to want next,
-then fills with songs you have never heard: the app looks for neighbours of
-your music, branches off those to look even further out, and mixes the
-results so the shelf does not turn into one artist on repeat. Scroll to the
-end and it simply keeps going — new songs each time, never the same ones
-twice.
+**Home stops moving while you listen.** The shelves used to rearrange
+themselves whenever a song started, which made the screen impossible to trust
+mid-listen. Home now holds still: it refreshes when the app opens, when you
+pull the screen down to refresh, and for the first few songs of a session —
+so the app visibly reacts when you first start listening, then leaves you
+alone.
+
+**A tap is not a play.** A song only counts once you have listened to it for
+ten seconds. Before that it never reaches your history or the algorithm, so a
+mis-tap cannot look like taste and send the recommendations chasing it.
+
+**Pull down to refresh.** Drag the home screen downwards and it reloads — the
+shelves, the new songs and everything else.
 
 **The lyrics keep up when you slow a song down.** The word-by-word highlight
 used to run ahead of the music and then jump back to the right place, so a

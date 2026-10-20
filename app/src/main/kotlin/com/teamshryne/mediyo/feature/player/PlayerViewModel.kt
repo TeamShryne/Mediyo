@@ -143,6 +143,21 @@ class PlayerViewModel @Inject constructor(
     private var lastHistoryVideoId: String? = null
     private var lastHistoryAt: Long = 0
 
+    // ── The ten-second rule ────────────────────────────────────────────────
+    // A tap is not a play. A play is something you listened to: until the
+    // track has been heard for ten seconds it must not reach the history,
+    // the play log, or anything the algorithm reads — otherwise a mis-tap
+    // looks like taste, and the home screen chases a signal that was never
+    // there.
+    /** Listening time banked for the current track (position deltas only). */
+    private var listenedMs = 0L
+    /** The position the last tick sampled, to measure the delta against. */
+    private var lastSampledPos = 0L
+    /** The play waiting to be confirmed, with the moment it started. */
+    private var pendingPlay: Pair<Track, PlayOrigin>? = null
+    private var pendingPlayStartedAt = 0L
+    /** Set once the pending play has been written to the history. */
+    private var playConfirmed = false
     init {
         startTicker()
         setupAutoNext()
@@ -423,6 +438,16 @@ class PlayerViewModel @Inject constructor(
                 // ExoPlayer itself reports IDLE during that window, not BUFFERING.
                 val buffering = resolving || player.playbackState == ExoPlayer.STATE_BUFFERING
                 val playing = player.isPlaying
+                // Listening time is the position that actually advanced while
+                // playing. A forward seek jumps the position without anyone
+                // hearing anything, so a jump bigger than a couple of ticks
+                // is not listening and is not counted.
+                val advanced = if (playing) (pos - lastSampledPos).coerceIn(0L, MAX_TICK_DELTA_MS) else 0L
+                lastSampledPos = pos
+                if (advanced > 0) {
+                    listenedMs += advanced
+                    confirmPlayIfDue()
+                }
                 _state.value = _state.value.copy(
                     positionMs = pos,
                     positionSampleElapsedMs = sampledAt,
@@ -537,7 +562,7 @@ class PlayerViewModel @Inject constructor(
             applyPlaybackParams()
             player.play()
             _state.value = _state.value.copy(isPlaying = true, isBuffering = false)
-            maybeRecordHistory(cur, origin)
+            armPlayConfirmation(cur, origin)
             prefetchNextForPlayback()
         } catch (_: Throwable) {
             _state.value = _state.value.copy(isBuffering = false)
@@ -576,7 +601,32 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    private fun maybeRecordHistory(track: Track, origin: PlayOrigin) {
+    /**
+     * Arm the ten-second rule for a track that just started.
+     *
+     * The play is not written yet: it waits until the track has actually
+     * been heard for [CONFIRM_PLAY_MS]. If the user skips away before that,
+     * nothing is recorded and the track never reaches the algorithm.
+     */
+    private fun armPlayConfirmation(track: Track, origin: PlayOrigin) {
+        pendingPlay = track to origin
+        pendingPlayStartedAt = System.currentTimeMillis()
+        listenedMs = 0L
+        lastSampledPos = 0L
+        playConfirmed = false
+    }
+
+    /** The play has now been heard long enough to count. Write it down. */
+    private fun confirmPlayIfDue() {
+        if (playConfirmed) return
+        if (listenedMs < CONFIRM_PLAY_MS) return
+        val (track, origin) = pendingPlay ?: return
+        playConfirmed = true
+        recordHistory(track, origin, pendingPlayStartedAt)
+    }
+
+    /** Write a confirmed play to the history. */
+    private fun recordHistory(track: Track, origin: PlayOrigin, startedAt: Long) {
         val now = System.currentTimeMillis()
         if (track.videoId == lastHistoryVideoId && now - lastHistoryAt < 10_000) return
         lastHistoryVideoId = track.videoId
@@ -584,7 +634,18 @@ class PlayerViewModel @Inject constructor(
         val shuffled = _state.value.shuffle
         val index = queueManager.currentState().index
         viewModelScope.launch {
-            try { historyRepo.record(track, origin, now, shuffled, index) } catch (_: Throwable) {}
+            try { historyRepo.record(track, origin, startedAt, shuffled, index) } catch (_: Throwable) {}
+        }
+        // The home screen reacts to this: a confirmed play is real taste.
+        viewModelScope.launch {
+            try {
+                events.log(
+                    UserEventTypes.PLAY_CONFIRMED,
+                    videoId = track.videoId,
+                    label = track.title.take(80),
+                    meta = "origin=${origin.label()}"
+                )
+            } catch (_: Throwable) {}
         }
     }
 
@@ -593,8 +654,15 @@ class PlayerViewModel @Inject constructor(
      * (position vs duration) feeds completions / skips / totalPlayMs rollups
      * and finalizes its play-event row. Called before every media-item swap
      * and when the ViewModel is cleared (app kill).
+     *
+     * A track that never reached the ten-second line leaves no trace at all:
+     * it was never recorded, so there is nothing to roll up.
      */
     private fun finalizeSession() {
+        if (!playConfirmed) return
+        // A track is finalized once. A reload of the same track would
+        // otherwise roll its listening time up a second time.
+        playConfirmed = false
         val vid = _state.value.videoId ?: return
         val pos = runCatching { player.currentPosition }.getOrDefault(_state.value.positionMs)
         val dur = runCatching { if (player.duration > 0) player.duration else 0L }
@@ -814,6 +882,19 @@ class PlayerViewModel @Inject constructor(
 
     companion object {
         private const val SKIP_DEBOUNCE_MS = 280L
+
+        /**
+         * How long a track has to be heard before it counts as a play.
+         * Ten seconds is past any accidental tap and short enough that a
+         * real listen is never lost.
+         */
+        private const val CONFIRM_PLAY_MS = 10_000L
+
+        /**
+         * The most a single tick may add to the listening time. The ticker
+         * runs every 500 ms, so anything bigger is a seek, not listening.
+         */
+        private const val MAX_TICK_DELTA_MS = 2_000L
     }
 
     private fun FfiSearchResult.toEntry() = QueueEntry(
