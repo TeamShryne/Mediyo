@@ -11,8 +11,16 @@ The technical change list is still generated, but it is collapsed below a
 
 ## Unreleased
 
-_Notes for the next release go here. Delete this line once you have written
-them for a version._
+**The lyrics keep up when you slow a song down.** The word-by-word highlight
+used to run ahead of the music and then jump back to the right place, so a
+half-speed song looked like it was stuttering. It now follows the playback
+speed, and the same goes for the moment you tap a line to jump there — the
+lyrics move with you right away.
+
+**You decide how the lyrics look.** *Settings → Lyrics* has a new appearance
+section with a live preview: change the text size, the font weight (anything
+from medium to black) and the distance between the lines. The player picks the
+new look up straight away.
 
 ## 0.8.0
 
