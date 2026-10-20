@@ -33,9 +33,9 @@ same columns of four as quick picks.
 **Home stops moving while you listen.** The shelves used to rearrange
 themselves whenever a song started, which made the screen impossible to trust
 mid-listen. Home now holds still: it refreshes when the app opens, when you
-pull the screen down to refresh, and for the first few songs of a session —
-so the app visibly reacts when you first start listening, then leaves you
-alone.
+pull the screen down to refresh, and for the first few songs you play after
+installing the app — so the app visibly reacts while it is still learning
+what you like, then leaves you alone.
 
 **A tap is not a play.** A song only counts once you have listened to it for
 ten seconds. Before that it never reaches your history or the algorithm, so a

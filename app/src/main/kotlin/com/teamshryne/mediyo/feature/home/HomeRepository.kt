@@ -66,6 +66,17 @@ class HomeRepository @Inject constructor(
     fun flowQuickPicks(): Flow<List<Track>> = flowScored().map { it.take(8).map { s -> s.track } }
 
     /**
+     * Every play ever recorded, since the app was installed.
+     *
+     * This is what decides whether home may still update itself: the first
+     * handful of songs a listener ever plays get an instant reaction, and
+     * after that the shelves wait for the app to restart or for a pull to
+     * refresh.
+     */
+    fun flowTotalPlays(): Flow<Int> =
+        history.flowHistory().map { rows -> rows.sumOf { it.playCount } }
+
+    /**
      * Liked songs, as playable tracks. They were a count and nothing else —
      * a track you liked but never played never showed up anywhere.
      */

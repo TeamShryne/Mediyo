@@ -73,9 +73,9 @@ import kotlinx.coroutines.sync.Mutex
 import javax.inject.Inject
 
 /**
- * How many confirmed plays at the start of a session may update home on
- * their own. After that the shelves wait for the app to restart or for the
- * user to pull the screen down.
+ * How many songs, ever since the app was installed, may still update home
+ * on their own. This is the "first songs" window — after it, the shelves
+ * only move when the app starts or when the user pulls to refresh.
  */
 private const val INSTANT_UPDATE_PLAYS = 5
 /**
@@ -83,9 +83,9 @@ private const val INSTANT_UPDATE_PLAYS = 5
  *
  * Home is a snapshot, not a live view. The shelves are re-read when the app
  * starts, when the user pulls the screen down to refresh, and — for the
- * first few plays of a session — as soon as a play is confirmed. After that
- * they stay put: a screen that reshuffles under your thumb while you listen
- * is a screen you cannot trust.
+ * first few songs played since the app was installed — as soon as a play is
+ * confirmed. After that they stay put: a screen that reshuffles under your
+ * thumb while you listen is a screen you cannot trust.
  */
 data class HomeSnapshot(
     val quickPicks: List<Track> = emptyList(),
@@ -137,15 +137,16 @@ class HomeVm @Inject constructor(
     var discoveryShelfLoading by mutableStateOf(true)
 
     /**
-     * The last confirmed play home has seen, and when this session started.
+     * The last confirmed play home has seen.
      *
-     * The first song of a session is the strongest signal a new listener
-     * gives, and the app should visibly react to it — so the first handful
-     * of plays refresh the shelves. After that, home waits for the app to
-     * start again or for the user to pull it down.
+     * The instant-update window is about the *install*, not the session: the
+     * first handful of songs a listener ever plays get a visible reaction,
+     * because that is when the app has the least idea what they want. After
+     * that — this session, next session, any session — home waits for the
+     * app to restart or for the user to pull it down.
      */
     private var lastPlayAt = 0L
-    private val sessionStart = System.currentTimeMillis()
+    private var seenAnyPlay = false
 
     /**
      * Called when a shelf reaches its end: expand the graph one round and
@@ -228,15 +229,20 @@ class HomeVm @Inject constructor(
         viewModelScope.launch {
             events.flowRecent(60).collect { list ->
                 // The list is newest-first, so the newest confirmed play is
-                // the head. Its timestamp is what says "a new play happened";
-                // the count is what says whether it may still update home.
-                val plays = list.filter {
-                    it.type == UserEventTypes.PLAY_CONFIRMED && it.createdAt >= sessionStart
+                // the head. Its timestamp is what says "a new play happened".
+                val latest = list.firstOrNull { it.type == UserEventTypes.PLAY_CONFIRMED }
+                    ?.createdAt ?: 0L
+                if (!seenAnyPlay) {
+                    // The first emission is whatever was already logged; it
+                    // is not a play that just happened.
+                    seenAnyPlay = true
+                    lastPlayAt = latest
+                    return@collect
                 }
-                val latest = plays.firstOrNull()?.createdAt ?: 0L
                 if (latest <= lastPlayAt) return@collect
                 lastPlayAt = latest
-                if (plays.size > INSTANT_UPDATE_PLAYS) return@collect
+                // Still inside the first songs of this install?
+                if (repo.flowTotalPlays().first() > INSTANT_UPDATE_PLAYS) return@collect
                 // Give the history write a moment to land before reading it.
                 delay(400)
                 refresh()
