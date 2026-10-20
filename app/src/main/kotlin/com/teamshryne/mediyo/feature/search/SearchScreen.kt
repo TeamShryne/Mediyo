@@ -305,12 +305,13 @@ fun SearchScreen(
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
-    // Measured height of the search bar: the panel docks exactly under it,
-    // whatever the font scale does to the pill.
-    var barHeightPx by remember { mutableIntStateOf(0) }
-    val barHeight = with(androidx.compose.ui.platform.LocalDensity.current) {
-        barHeightPx.toDp()
-    }.takeIf { it > 0.dp } ?: SEARCH_BAR_HEIGHT
+    // Measured heights: the pill (the panel docks under it) and the whole
+    // header (the results start below it), whatever the font scale does.
+    var pillHeightPx by remember { mutableIntStateOf(0) }
+    var headerHeightPx by remember { mutableIntStateOf(0) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val pillHeight = with(density) { pillHeightPx.toDp() }.takeIf { it > 0.dp } ?: SEARCH_BAR_HEIGHT
+    val headerHeight = with(density) { headerHeightPx.toDp() }.takeIf { it > 0.dp } ?: SEARCH_BAR_HEIGHT
     // Menus render at the root overlay (GlobalSheets) for full-window dim.
     val sheets: com.teamshryne.mediyo.core.design.SheetHostVm = hiltViewModel()
 
@@ -370,80 +371,11 @@ fun SearchScreen(
         // starts below it. Outer Scaffold padding already clears the status
         // bar — 4dp only.
         contentPadding = PaddingValues(
-            top = barHeight + 4.dp,
+            top = headerHeight + 4.dp,
             bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp
         ),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        item(key = "search_header") {
-            Text(
-                "Search",
-                style = MaterialTheme.typography.displaySmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(horizontal = 20.dp)
-            )
-        }
-
-        // Filter chips scroll with the results: a pinned chip row would change
-        // the header height when a search runs, shifting the list under the
-        // user's finger. They appear right after the title instead.
-        if (vm.hasSearched && vm.filters.isNotEmpty()) {
-            item(key = "search_chips") {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 20.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        item(key = "clear_filter") {
-                            val active = vm.selectedFilter != null
-                            AnimatedVisibility(
-                                visible = active,
-                                enter = fadeIn() + expandHorizontally(expandFrom = Alignment.Start),
-                                exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.Start)
-                            ) {
-                                // Themed clear-filter pill (plain Surface: full
-                                // control of the fill without chip-color APIs).
-                                Surface(
-                                    onClick = { scope.launch { vm.runSearch(null) } },
-                                    shape = RoundedCornerShape(20.dp),
-                                    color = MaterialTheme.colorScheme.primary
-                                ) {
-                                    Row(
-                                        Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            Icons.Filled.Close, null,
-                                            tint = MaterialTheme.colorScheme.onPrimary,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(Modifier.width(6.dp))
-                                        Text(
-                                            "Clear",
-                                            color = MaterialTheme.colorScheme.onPrimary,
-                                            style = MaterialTheme.typography.labelLarge
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        items(vm.filters, key = { it.label + "|" + (it.params ?: "") }) { f ->
-                            val isSel = vm.selectedFilter?.let { it.label == f.label && it.params == f.params } == true
-                            FilterChip(
-                                selected = isSel,
-                                onClick = {
-                                    if (isSel) scope.launch { vm.runSearch(null) }
-                                    else scope.launch { vm.runSearch(f) }
-                                },
-                                label = { Text(f.label.replaceFirstChar { it.uppercase() }) },
-                                shape = RoundedCornerShape(20.dp)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
         when {
             !vm.hasSearched -> if (vm.query.isBlank()) {
                 if (vm.recents.isNotEmpty()) {
@@ -548,10 +480,11 @@ fun SearchScreen(
         item(key = "search_footer") { LoadingFooter(vm.loadingMore && !vm.loading) }
     }
 
-    // ── The search bar ──────────────────────────────────────────────────
-    // Fixed at the top of the screen in every state — idle, typing and
-    // looking at results. It never moves, so the input is always where the
-    // user left it, and the suggestion panel docks right under it.
+    // ── The header ──────────────────────────────────────────────────────
+    // Fixed at the top of the screen in every state — the search bar and,
+    // once a search ran, the filter chips below it. Neither moves, so the
+    // input is always where the user left it and the filters are always
+    // reachable while the results scroll.
     val scrolled by remember {
         derivedStateOf {
             listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 8
@@ -562,7 +495,7 @@ fun SearchScreen(
             .align(Alignment.TopCenter)
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.background)
-            .onSizeChanged { barHeightPx = it.height }
+            .onSizeChanged { headerHeightPx = it.height }
     ) {
         SearchPill(
             query = vm.query,
@@ -584,9 +517,68 @@ fun SearchScreen(
                     focusManager.clearFocus()
                 }
             },
-            modifier = Modifier.onFocusChanged { if (it.isFocused) vm.openPanel() }
+            modifier = Modifier
+                .onFocusChanged { if (it.isFocused) vm.openPanel() }
+                .onSizeChanged { pillHeightPx = it.height }
         )
-        // Hairline under the bar, but only once the results slide under it.
+
+        // Filter chips live in the header, under the input: the results can
+        // scroll as far as they like, the filters stay put.
+        if (vm.hasSearched && vm.filters.isNotEmpty()) {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(top = 2.dp, bottom = 10.dp)
+            ) {
+                item(key = "clear_filter") {
+                    val active = vm.selectedFilter != null
+                    AnimatedVisibility(
+                        visible = active,
+                        enter = fadeIn() + expandHorizontally(expandFrom = Alignment.Start),
+                        exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.Start)
+                    ) {
+                        // Themed clear-filter pill (plain Surface: full
+                        // control of the fill without chip-color APIs).
+                        Surface(
+                            onClick = { scope.launch { vm.runSearch(null) } },
+                            shape = RoundedCornerShape(20.dp),
+                            color = MaterialTheme.colorScheme.primary
+                        ) {
+                            Row(
+                                Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Filled.Close, null,
+                                    tint = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    "Clear",
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    style = MaterialTheme.typography.labelLarge
+                                )
+                            }
+                        }
+                    }
+                }
+                items(vm.filters, key = { it.label + "|" + (it.params ?: "") }) { f ->
+                    val isSel = vm.selectedFilter?.let { it.label == f.label && it.params == f.params } == true
+                    FilterChip(
+                        selected = isSel,
+                        onClick = {
+                            if (isSel) scope.launch { vm.runSearch(null) }
+                            else scope.launch { vm.runSearch(f) }
+                        },
+                        label = { Text(f.label.replaceFirstChar { it.uppercase() }) },
+                        shape = RoundedCornerShape(20.dp)
+                    )
+                }
+            }
+        }
+
+        // Hairline under the header, but only once the results slide under it.
         AnimatedVisibility(
             visible = scrolled && !vm.panelOpen,
             enter = fadeIn(tween(160)),
@@ -622,7 +614,7 @@ fun SearchScreen(
                 open(it)
                 focusManager.clearFocus()
             },
-            modifier = Modifier.padding(top = barHeight)
+            modifier = Modifier.padding(top = pillHeight)
         )
     }
     }
