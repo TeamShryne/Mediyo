@@ -12,9 +12,7 @@ import com.teamshryne.mediyo.domain.repository.LyricsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -39,8 +37,7 @@ class LyricsViewModel @Inject constructor(
     val state: StateFlow<LyricsUiState> = _state
 
     /** Size / weight / line spacing chosen by the user. */
-    val style: StateFlow<LyricsStyle> = stylePrefs.styleFlow
-        .stateIn(viewModelScope, SharingStarted.Eagerly, LyricsStyle())
+    val style: StateFlow<LyricsStyle> = stylePrefs.live
 
     private var job: Job? = null
     private var lastKey: String? = null

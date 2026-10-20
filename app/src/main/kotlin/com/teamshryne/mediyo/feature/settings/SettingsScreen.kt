@@ -69,7 +69,7 @@ private val hubEntries = listOf(
         title = "Lyrics",
         subtitle = "Sources & priority",
         icon = Icons.Filled.MusicNote,
-        route = "settings/lyrics"
+        route = "settings/content/lyrics"
     ),
     SettingsEntry(
         id = "updates",
