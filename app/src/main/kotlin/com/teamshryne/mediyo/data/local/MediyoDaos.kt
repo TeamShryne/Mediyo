@@ -246,20 +246,25 @@ interface UserEventDao {
 }
 
 /**
- * The discovery graph pool: queue-expanded candidates waiting to be shown.
+ * The discovery catalogue: every track the queue graph has found, grouped by
+ * the taste seed it branched from. That grouping is what turns a pile of
+ * neighbours into "Because you heard X" shelves.
  *
- * Unserved items are the ones the user has not seen yet. The frontier query
- * picks items that were found but never used as a branch parent — those are
- * the seeds for the next hop outward.
+ * A track already in the catalogue is never rediscovered — the exclusion set
+ * for the next expansion is exactly this table.
  */
 @Dao
 interface DiscoveryDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(items: List<DiscoveryItemEntity>)
 
-    /** Never-shown material, oldest first so the pool drains in discovery order. */
-    @Query("SELECT * FROM discovery_items WHERE servedAt IS NULL ORDER BY addedAt ASC, rank ASC LIMIT :limit")
-    suspend fun unserved(limit: Int): List<DiscoveryItemEntity>
+    /** The whole catalogue, oldest first. */
+    @Query("SELECT * FROM discovery_items ORDER BY addedAt ASC, rank ASC")
+    suspend fun all(): List<DiscoveryItemEntity>
+
+    /** Every id already found: never rediscover these. */
+    @Query("SELECT videoId FROM discovery_items")
+    suspend fun knownIds(): List<String>
 
     /**
      * Found but not yet used as a branch parent — the next hop outward.
@@ -274,22 +279,12 @@ interface DiscoveryDao {
     )
     suspend fun frontier(limit: Int): List<DiscoveryItemEntity>
 
-    /** Already-shown ids: excluded from every later expansion. */
-    @Query("SELECT videoId FROM discovery_items WHERE servedAt IS NOT NULL")
-    suspend fun servedIds(): List<String>
-
-    @Query("UPDATE discovery_items SET servedAt = :now WHERE videoId IN (:ids)")
-    suspend fun markServed(ids: List<String>, now: Long)
-
     @Query("UPDATE discovery_items SET expandedAt = :now WHERE videoId IN (:ids)")
     suspend fun markExpanded(ids: List<String>, now: Long)
 
-    @Query("SELECT COUNT(*) FROM discovery_items WHERE servedAt IS NULL")
-    suspend fun unservedCount(): Int
-
-    /** Served rows are only kept as an exclusion set; drop them once stale. */
-    @Query("DELETE FROM discovery_items WHERE servedAt IS NOT NULL AND servedAt < :before")
-    suspend fun evictServed(before: Long)
+    /** The catalogue only grows; old branches can go. */
+    @Query("DELETE FROM discovery_items WHERE addedAt < :before")
+    suspend fun evict(before: Long)
 
     @Query("DELETE FROM discovery_items")
     suspend fun clearAll()

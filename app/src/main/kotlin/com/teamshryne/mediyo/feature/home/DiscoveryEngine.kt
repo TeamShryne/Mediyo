@@ -35,7 +35,9 @@ data class DiscoverySeed(
     /** Graph distance from the original taste seed (0 = the seed itself). */
     val depth: Int = 0,
     /** The taste seed this branch grew from. */
-    val rootSeedId: String = videoId
+    val rootSeedId: String = videoId,
+    /** The taste seed's title — what the shelf says it heard. */
+    val rootTitle: String = title
 )
 
 /** One discovered track, with the graph context it was found in. */
@@ -43,6 +45,7 @@ data class DiscoveryCandidate(
     val track: Track,
     val depth: Int,
     val rootSeedId: String,
+    val rootTitle: String,
     /** The track we queued from to find this one. */
     val parentVideoId: String,
     /** Position inside the source queue — the provider's own confidence order. */
@@ -126,6 +129,7 @@ object DiscoveryEngine {
                         // keeps a true distance from the taste seed.
                         depth = seed.depth + 1,
                         rootSeedId = seed.rootSeedId,
+                        rootTitle = seed.rootTitle,
                         parentVideoId = seed.videoId,
                         rank = index
                     )
@@ -143,7 +147,8 @@ object DiscoveryEngine {
                         artist = c.track.artists.joinToString(),
                         affinity = seed.affinity * 0.7,
                         depth = c.depth,
-                        rootSeedId = seed.rootSeedId
+                        rootSeedId = seed.rootSeedId,
+                        rootTitle = seed.rootTitle
                     )
                 }
             }

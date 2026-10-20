@@ -5,22 +5,20 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
- * One node of the discovery graph.
+ * One node of the discovery catalogue.
  *
  * A track found by queueing/radio, kept on device so home can keep offering
  * *new* material across launches instead of re-fetching the same
- * neighbourhoods every time the app opens.
+ * neighbourhoods every time the app opens. Grouped by [rootSeedId], which is
+ * what lets the catalogue be read back as "Because you heard X" shelves.
  *
- * - [servedAt] — set once the track has been handed to the user. Served
- *   tracks are never offered again and are excluded from later expansions,
- *   so the shelf keeps producing fresh songs instead of looping.
  * - [expandedAt] — set once the track has been used as a branch parent, i.e.
  *   we queued *from* it to find its own neighbours. Without this we would
  *   re-expand the same branch forever.
  */
 @Entity(
     tableName = "discovery_items",
-    indices = [Index("servedAt"), Index("expandedAt"), Index("addedAt")]
+    indices = [Index("expandedAt"), Index("addedAt")]
 )
 data class DiscoveryItemEntity(
     @PrimaryKey val videoId: String,
@@ -35,11 +33,12 @@ data class DiscoveryItemEntity(
     val depth: Int = 1,
     /** The taste seed that started this branch. */
     val rootSeedId: String,
+    /** The seed's title — what the shelf says it heard. */
+    val rootTitle: String? = null,
     /** The track we queued from to find this one. */
     val parentVideoId: String,
     /** Position inside the source queue — the provider's own confidence order. */
     val rank: Int = 0,
     val addedAt: Long = System.currentTimeMillis(),
-    val servedAt: Long? = null,
     val expandedAt: Long? = null
 )

@@ -153,13 +153,12 @@ val MIGRATION_8_9 = object : Migration(8, 9) {
                 "duration TEXT, " +
                 "depth INTEGER NOT NULL, " +
                 "rootSeedId TEXT NOT NULL, " +
+                "rootTitle TEXT, " +
                 "parentVideoId TEXT NOT NULL, " +
                 "rank INTEGER NOT NULL, " +
                 "addedAt INTEGER NOT NULL, " +
-                "servedAt INTEGER, " +
                 "expandedAt INTEGER)"
         )
-        db.execSQL("CREATE INDEX IF NOT EXISTS index_discovery_items_servedAt ON discovery_items(servedAt)")
         db.execSQL("CREATE INDEX IF NOT EXISTS index_discovery_items_expandedAt ON discovery_items(expandedAt)")
         db.execSQL("CREATE INDEX IF NOT EXISTS index_discovery_items_addedAt ON discovery_items(addedAt)")
     }

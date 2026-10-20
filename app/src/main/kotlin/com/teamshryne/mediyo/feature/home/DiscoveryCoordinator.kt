@@ -13,17 +13,28 @@ import javax.inject.Singleton
 import kotlinx.coroutines.flow.first
 
 /**
- * Grows the discovery pool.
+ * One direction of discovery: the tracks found by branching from a single
+ * taste seed. Read back as a "Because you heard X" shelf.
+ */
+data class DiscoveryShelf(
+    /** The seed's title — the shelf says it heard this. */
+    val title: String,
+    val seedVideoId: String,
+    val tracks: List<Track>
+)
+
+/**
+ * Grows the discovery catalogue.
  *
  * Local taste decides *where* to look (the seeds), the queue graph decides
- * *what* we find, and the pool on disk decides what the user gets to see and
- * what never comes back. The three layers are kept apart on purpose:
+ * *what* we find, and the catalogue on disk decides what the user gets to see
+ * and what never comes back. The three layers are kept apart on purpose:
  *
  * - seeds come from scored history (or, on a cold start, from the artists the
  *   user follows) so discovery still starts from taste;
  * - candidates come from queueing — and from queueing *again* from inside a
  *   previous queue, which is what reaches past the first neighbourhood;
- * - everything already played, liked or shown is excluded, so the shelf keeps
+ * - everything already played, liked or found is excluded, so the shelves keep
  *   producing material the user has never seen.
  */
 @Singleton
@@ -38,37 +49,21 @@ class DiscoveryCoordinator @Inject constructor(
     private val spentRoots = mutableSetOf<String>()
 
     /**
-     * Hand out up to [want] unseen tracks, expanding the graph first if the
-     * pool cannot cover the request. Returns only tracks the user has not
-     * been shown before.
+     * Expand the graph one round. Returns how many new tracks were found.
+     *
+     * The catalogue is what the exclusion set is built from, so a track that
+     * has been found is never found again: every round reaches further out.
      */
-    suspend fun grow(want: Int = 24): List<Track> {
-        var pending = store.unserved(want)
-        if (pending.size < MIN_POOL) {
-            expand()
-            pending = store.unserved(want)
-        }
-        return serve(pending)
-    }
-
-    /** Mark the batch as shown and map it back to playable tracks. */
-    private suspend fun serve(items: List<DiscoveryItemEntity>): List<Track> {
-        if (items.isEmpty()) return emptyList()
-        store.markServed(items.map { it.videoId })
-        return items.mapNotNull { it.toTrack() }
-    }
-
-    /** One expansion round: branch out, persist, remember what we branched from. */
-    private suspend fun expand() {
+    suspend fun expand(): Int {
         val known = home.flowKnownIds().first()
-        val served = store.servedIds()
+        val found = store.knownIds()
         // The seeds are known tracks on purpose — they are where we start
         // from. The exclusion set applies to what we *find*, never to where
         // we start.
-        val exclude = known + served
+        val exclude = known + found
 
         val seeds = pickSeeds(known)
-        if (seeds.isEmpty()) return
+        if (seeds.isEmpty()) return 0
 
         val candidates = DiscoveryEngine.expand(
             seeds = seeds,
@@ -82,16 +77,50 @@ class DiscoveryCoordinator @Inject constructor(
                 maxPerArtist = 2
             )
         )
-        if (candidates.isEmpty()) return
+        if (candidates.isEmpty()) return 0
 
         store.save(candidates.map { it.toEntity() })
         // The tracks we queued *from* are spent: expanding them again would
         // return the same neighbourhood.
         store.markExpanded(candidates.map { it.parentVideoId }.distinct())
 
-        // Served rows exist only as an exclusion set; they can go eventually.
-        store.evictServedBefore(System.currentTimeMillis() - SERVED_RETENTION_MS)
+        // The catalogue only grows; old branches can go eventually.
+        store.evict(System.currentTimeMillis() - CATALOGUE_RETENTION_MS)
+        return candidates.size
     }
+
+    /**
+     * The catalogue, one shelf per taste seed, biggest first.
+     *
+     * The shelf's first track (the one the carousel shows as its headline)
+     * is left out here, so no track appears in two places.
+     */
+    suspend fun catalogue(): List<DiscoveryShelf> {
+        val pool = store.all()
+        return pool.groupBy { it.rootSeedId }
+            .map { (root, items) ->
+                val sorted = items.sortedWith(compareBy({ it.depth }, { it.rank }))
+                val headline = sorted.firstOrNull { it.depth == 1 && it.rank == 0 }
+                DiscoveryShelf(
+                    title = items.firstOrNull()?.rootTitle?.takeIf { it.isNotBlank() }.orEmpty(),
+                    seedVideoId = root,
+                    tracks = sorted.filter { it.videoId != headline?.videoId }.map { it.toTrack() }
+                )
+            }
+            .filter { it.tracks.isNotEmpty() }
+            .sortedByDescending { it.tracks.size }
+            .take(MAX_SHELVES)
+    }
+
+    /**
+     * One track per direction: the shelf's headline, which the quick-picks
+     * carousel shows as its discovery column.
+     */
+    suspend fun headlines(): List<Track> =
+        store.all()
+            .filter { it.depth == 1 && it.rank == 0 }
+            .distinctBy { it.rootSeedId }
+            .map { it.toTrack() }
 
     /**
      * Seeds for the next hop.
@@ -119,7 +148,8 @@ class DiscoveryCoordinator @Inject constructor(
                     artist = it.artist,
                     affinity = FRONTIER_AFFINITY,
                     depth = it.depth,
-                    rootSeedId = it.rootSeedId
+                    rootSeedId = it.rootSeedId,
+                    rootTitle = it.rootTitle.orEmpty()
                 )
             }
         frontier.forEach { seeds[it.videoId] = it }
@@ -153,7 +183,8 @@ class DiscoveryCoordinator @Inject constructor(
                 artist = artist,
                 // Offset above the frontier so taste always outranks "found
                 // earlier" when the engine picks its branches.
-                affinity = 1.0 + s.score
+                affinity = 1.0 + s.score,
+                rootTitle = s.track.title
             )
             if (roots.size >= MAX_ROOTS) break
         }
@@ -179,7 +210,8 @@ class DiscoveryCoordinator @Inject constructor(
                 videoId = videoId,
                 title = track.title,
                 artist = track.artists.joinToString(),
-                affinity = 2.0
+                affinity = 2.0,
+                rootTitle = track.title
             )
         }
         return roots.values.toList()
@@ -205,6 +237,7 @@ class DiscoveryCoordinator @Inject constructor(
         duration = track.duration,
         depth = depth,
         rootSeedId = rootSeedId,
+        rootTitle = rootTitle,
         parentVideoId = parentVideoId,
         rank = rank
     )
@@ -240,12 +273,12 @@ class DiscoveryCoordinator @Inject constructor(
         /** Candidates kept per round. */
         const val MAX_CANDIDATES = 40
 
-        /** Below this many unseen tracks we go to the network. */
-        const val MIN_POOL = 6
+        /** How many "because you heard X" shelves home shows at once. */
+        const val MAX_SHELVES = 4
 
         /** Frontier tracks are interesting, but less than the taste roots. */
         const val FRONTIER_AFFINITY = 0.5
 
-        const val SERVED_RETENTION_MS = 30L * 24 * 60 * 60 * 1000
+        const val CATALOGUE_RETENTION_MS = 30L * 24 * 60 * 60 * 1000
     }
 }

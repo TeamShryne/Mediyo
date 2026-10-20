@@ -11,6 +11,19 @@ The technical change list is still generated, but it is collapsed below a
 
 ## Unreleased
 
+**Quick picks is a shelf of columns now.** It scrolls sideways and snaps from
+one column to the next, with the next one peeking in from the right so you
+know there is more. Every row has the artwork, the title and an overflow menu,
+and the column you are on is the one that stands out. There is a "Play all"
+button next to the heading too.
+
+**Home finally tells you *why* it is showing you something.** The shelves now
+read "Because you heard <song>", "Because you loved it", "Because you liked
+it", "Because you were away" and "Because it's late" — the last one follows
+the clock. The "Because you heard" shelves are new songs, found by looking at
+the neighbours of your music and branching out from there, so they are
+adjacent to what you like without repeating it.
+
 **Quick picks scroll sideways, and never run out.** The row of songs at the top
 of Home is now a horizontal shelf instead of a small grid, and it holds far
 more than before. It starts with the songs you are most likely to want next,

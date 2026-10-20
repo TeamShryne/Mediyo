@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -14,8 +16,10 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -40,6 +44,7 @@ import com.teamshryne.mediyo.core.design.MediaCard
 import com.teamshryne.mediyo.core.design.SectionHeader
 import com.teamshryne.mediyo.core.design.openRoute
 import com.teamshryne.mediyo.core.design.rememberGreeting
+import com.teamshryne.mediyo.core.design.TrackMenuRequest
 import com.teamshryne.mediyo.data.local.SavedCollectionEntity
 import com.teamshryne.mediyo.data.mediyo.FfiSearchResult
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
@@ -63,10 +68,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import javax.inject.Inject
-
-/** How many new songs one expansion round may contribute to the row. */
-private const val DISCOVERY_BATCH = 24
-
 @HiltViewModel
 class HomeVm @Inject constructor(
     private val repo: HomeRepository,
@@ -100,18 +101,25 @@ class HomeVm @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DaypartShelves(emptyList(), emptyList()))
     val saved = repo.flowSaved()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val likedTracks = repo.flowLikedTracks()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val likedCount = repo.flowLikedCount()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
     val playlistCount = repo.flowPlaylistCount()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     // ── Discovery graph: unfamiliar songs, grown on demand ────────────────
-    // The quick-picks shelf starts with the tracks most likely to be tapped
-    // and grows into the discovery graph: songs found by queueing, branched
-    // outward and mixed. Everything the user has already played, liked or
-    // been shown is excluded, so the shelf keeps producing new material.
-    private val _discovered = MutableStateFlow<List<Track>>(emptyList())
-    val discovered: StateFlow<List<Track>> = _discovered.asStateFlow()
+    // The quick-picks carousel shows the tracks most likely to be tapped next
+    // plus one headline per direction; the catalogue behind it becomes the
+    // "Because you heard X" shelves. Everything the user has already played,
+    // liked or been shown is excluded, so the shelves keep producing new
+    // material.
+    private val _headlines = MutableStateFlow<List<Track>>(emptyList())
+    val headlines: StateFlow<List<Track>> = _headlines.asStateFlow()
+
+    private val _because = MutableStateFlow<List<DiscoveryShelf>>(emptyList())
+    val because: StateFlow<List<DiscoveryShelf>> = _because.asStateFlow()
+
     var discoveryLoading by mutableStateOf(true)
     private val growLock = Mutex()
 
@@ -122,22 +130,20 @@ class HomeVm @Inject constructor(
     var discoveryShelfLoading by mutableStateOf(true)
 
     /**
-     * Called when the quick-picks row reaches its end: expand the graph one
-     * round and append whatever new songs it found.
+     * Called when a shelf reaches its end: expand the graph one round and
+     * re-read the catalogue.
      *
-     * A round that is already running is not queued behind: the row only ever
-     * needs the newest batch, and a pile of pending rounds would hammer the
-     * network for material the user scrolled past.
+     * A round that is already running is not queued behind: the shelf only
+     * ever needs the newest batch, and a pile of pending rounds would hammer
+     * the network for material the user scrolled past.
      */
-    fun growQuickPicks() {
+    fun expandDiscovery() {
         if (!growLock.tryLock()) return
         viewModelScope.launch {
             try {
-                val more = discovery.grow(DISCOVERY_BATCH)
-                if (more.isNotEmpty()) {
-                    _discovered.value = (_discovered.value + more)
-                        .distinctBy { it.uniqueKey() }
-                }
+                discovery.expand()
+                _because.value = discovery.catalogue()
+                _headlines.value = discovery.headlines()
             } catch (_: Throwable) {
             } finally {
                 discoveryLoading = false
@@ -148,7 +154,7 @@ class HomeVm @Inject constructor(
 
     init {
         // Open with a first round of discovery so the shelf is never empty.
-        growQuickPicks()
+        expandDiscovery()
         // One artist-page fetch per affinity artist feeds BOTH shelves:
         // release shelves (Albums / Singles) → new music, similar shelf → discovery.
         viewModelScope.launch {
@@ -233,11 +239,16 @@ fun HomeScreen(
 ) {
     val greeting = rememberGreeting()
     val scope = rememberCoroutineScope()
+    val menuScope = rememberCoroutineScope()
     val context = LocalContext.current
     val menuVm: com.teamshryne.mediyo.core.design.MediaMenuVm = hiltViewModel()
+    // Sheets render at the root overlay (GlobalSheets) for full-window dim.
+    val sheets: com.teamshryne.mediyo.core.design.SheetHostVm = hiltViewModel()
     var resolving by remember { mutableStateOf<String?>(null) }
     val quickPicks by vm.quickPicks.collectAsState()
-    val discovered by vm.discovered.collectAsState()
+    val headlines by vm.headlines.collectAsState()
+    val because by vm.because.collectAsState()
+    val likedTracks by vm.likedTracks.collectAsState()
     val weekTop by vm.weekTop.collectAsState()
     val onRepeat by vm.onRepeat.collectAsState()
     val rediscover by vm.rediscover.collectAsState()
@@ -260,6 +271,25 @@ fun HomeScreen(
         else player.playTrack(t, origin)
     }
 
+    /** The overflow menu on a quick-picks row. */
+    fun openMenu(t: Track) = sheets.showTrackMenu(
+        TrackMenuRequest(
+            track = t,
+            onAddToPlaylist = { sheets.openAddToPlaylist(t) },
+            onPlayNext = { player.addNext(t) },
+            onAddToQueue = { player.addToQueue(t) },
+            onGoToAlbum = t.albumId?.takeIf { it.isNotBlank() }?.let { { nav.navigateAlbum(it) } },
+            onOpenChannel = t.channelId?.takeIf { it.isNotBlank() }?.let { { nav.navigateChannel(it) } },
+            onShowArtist = { name, id ->
+                menuScope.launch {
+                    (id?.takeIf { it.isNotBlank() } ?: menuVm.resolveArtistIdByName(name))
+                        ?.let { nav.navigateArtist(it) }
+                }
+            },
+            onComments = { t.videoId?.let { sheets.showComments(it) } }
+        )
+    )
+
     fun openSaved(item: SavedCollectionEntity) {
         vm.logSavedTap(item)
         when (item.kind) {
@@ -275,23 +305,23 @@ fun HomeScreen(
     val daypartTitle: String?
     val daypartTracks: List<Track>
     if (hour in 5..10 && daypart.morning.isNotEmpty()) {
-        daypartTitle = "Morning light"
+        daypartTitle = "Because it's morning"
         daypartTracks = daypart.morning
     } else if ((hour >= 21 || hour < 5) && daypart.night.isNotEmpty()) {
-        daypartTitle = "After hours"
+        daypartTitle = "Because it's late"
         daypartTracks = daypart.night
     } else if (daypart.night.isNotEmpty()) {
-        daypartTitle = "After hours"
+        daypartTitle = "Because it's late"
         daypartTracks = daypart.night
     } else {
         daypartTitle = null
         daypartTracks = emptyList()
     }
 
-    // The quick-picks row: the tracks most likely to be tapped next, then
-    // the discovery graph — unfamiliar songs found by queueing and branching.
-    val quickRow = remember(quickPicks, discovered) {
-        (quickPicks + discovered).distinctBy { it.uniqueKey() }
+    // The quick-picks carousel: the tracks most likely to be tapped next,
+    // then one headline per direction from the discovery graph.
+    val quickRow = remember(quickPicks, headlines) {
+        (quickPicks + headlines).distinctBy { it.uniqueKey() }
     }
 
     // Every content section counts: otherwise a user whose history only
@@ -299,7 +329,8 @@ fun HomeScreen(
     val hasAnything = quickRow.isNotEmpty() || weekTop.isNotEmpty() || saved.isNotEmpty() ||
         recentSearches.isNotEmpty() || mixes.isNotEmpty() || episodes.isNotEmpty() ||
         onRepeat.isNotEmpty() || rediscover.isNotEmpty() || topArtists.isNotEmpty() ||
-        finishAlbums.isNotEmpty() || daypartTracks.isNotEmpty()
+        finishAlbums.isNotEmpty() || daypartTracks.isNotEmpty() || because.isNotEmpty() ||
+        likedTracks.isNotEmpty()
 
     LazyColumn(
         modifier = Modifier.fillMaxWidth(),
@@ -331,11 +362,37 @@ fun HomeScreen(
             if (quickRow.isNotEmpty()) {
                 item(key = "quick") {
                     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        SectionHeader("Quick picks")
-                        QuickPickRow(
+                        SectionHeader(
+                            "Quick picks",
+                            trailing = {
+                                OutlinedButton(
+                                    onClick = {
+                                        vm.logTap(quickRow.first())
+                                        player.playTracks(quickRow, 0, PlayOrigin.HomeShelf("Quick picks"))
+                                    },
+                                    shape = CircleShape,
+                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.PlayArrow, null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        "Play all",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        )
+                        QuickPicksCarousel(
                             tracks = quickRow,
+                            playingId = playingId,
                             onPick = { play(it, PlayOrigin.History("Home")) },
-                            onNearEnd = { vm.growQuickPicks() }
+                            onMenu = { openMenu(it) },
+                            onNearEnd = { vm.expandDiscovery() }
                         )
                     }
                 }
@@ -394,7 +451,7 @@ fun HomeScreen(
             if (onRepeat.isNotEmpty()) {
                 item(key = "repeat") {
                     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        SectionHeader("On repeat")
+                        SectionHeader("Because you loved it")
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -406,6 +463,37 @@ fun HomeScreen(
                                     artworkUrl = t.artworkUrl,
                                     round = false
                                 ) { play(t, PlayOrigin.History("Home")) }
+                            }
+                        }
+                    }
+                }
+            }
+            // The discovery catalogue: one shelf per taste seed, each holding
+            // the tracks the graph found by branching from it.
+            because.forEach { shelf ->
+                item(key = "because_${shelf.seedVideoId}") {
+                    BecauseShelf(
+                        shelf = shelf,
+                        onPick = { play(it, PlayOrigin.HomeShelf(shelf.title)) },
+                        onNearEnd = { vm.expandDiscovery() }
+                    )
+                }
+            }
+            if (likedTracks.isNotEmpty()) {
+                item(key = "liked") {
+                    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        SectionHeader("Because you liked it")
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            itemsIndexed(likedTracks, key = { i, t -> "${t.uniqueKey()}_$i" }) { _, t ->
+                                MediaCard(
+                                    title = t.title,
+                                    subtitle = t.artists.joinToString(),
+                                    artworkUrl = t.artworkUrl,
+                                    round = false
+                                ) { play(t, PlayOrigin.Liked(likedTracks.size)) }
                             }
                         }
                     }
@@ -460,7 +548,7 @@ fun HomeScreen(
             if (rediscover.isNotEmpty()) {
                 item(key = "rediscover") {
                     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        SectionHeader("Rediscover")
+                        SectionHeader("Because you were away")
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -480,7 +568,7 @@ fun HomeScreen(
             if (daypartTitle != null) {
                 item(key = "daypart") {
                     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        DaypartHeader(daypartTitle, night = daypartTitle == "After hours")
+                        DaypartHeader(daypartTitle, night = daypartTitle == "Because it's late")
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
