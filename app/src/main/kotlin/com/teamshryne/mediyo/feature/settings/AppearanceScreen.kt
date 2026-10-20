@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.BlurOn
 import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -43,6 +44,7 @@ import androidx.lifecycle.viewModelScope
 import com.teamshryne.mediyo.data.appearance.AppearancePrefs
 import com.teamshryne.mediyo.data.appearance.PlayerBgStyle
 import com.teamshryne.mediyo.data.appearance.TabStyle
+import com.teamshryne.mediyo.data.lyrics.LyricsStyle
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,6 +54,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import kotlin.math.roundToInt
 
 @HiltViewModel
 class AppearanceVm @Inject constructor(
@@ -120,15 +123,17 @@ class AppearanceVm @Inject constructor(
     }
 }
 
-/** Hub: tab bar style + player background, each opening its own screen. */
+/** Hub: tab bar style + player background + lyrics look, each opening its own screen. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppearanceScreen(
     nav: androidx.navigation.NavController? = null,
-    vm: AppearanceVm = hiltViewModel()
+    vm: AppearanceVm = hiltViewModel(),
+    lyricsVm: LyricsAppearanceVm = hiltViewModel()
 ) {
     val tab by vm.style.collectAsState()
     val bg by vm.bgStyle.collectAsState()
+    val lyrics by lyricsVm.styleFlow.collectAsState(initial = LyricsStyle())
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -171,6 +176,16 @@ fun AppearanceScreen(
                             title = "Player background",
                             subtitle = bg.title,
                             onClick = { nav?.navigate("settings/appearance/player") }
+                        )
+                        HorizontalDivider(
+                            Modifier.padding(horizontal = 16.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest
+                        )
+                        AppearanceHubRow(
+                            icon = Icons.Filled.Lyrics,
+                            title = "Lyrics appearance",
+                            subtitle = "${lyrics.fontSizeSp.roundToInt()}sp · ${lyrics.weight.label}",
+                            onClick = { nav?.navigate("settings/appearance/lyrics") }
                         )
                     }
                 }

@@ -108,6 +108,7 @@ import com.teamshryne.mediyo.feature.settings.AppearanceScreen
 import com.teamshryne.mediyo.feature.settings.AppearanceVm
 import com.teamshryne.mediyo.feature.settings.PlayerBackgroundScreen
 import com.teamshryne.mediyo.feature.settings.TabBarStyleScreen
+import com.teamshryne.mediyo.feature.settings.LyricsAppearanceScreen
 import com.teamshryne.mediyo.feature.settings.LyricsSettingsScreen
 import com.teamshryne.mediyo.feature.settings.SettingsScreen
 import com.teamshryne.mediyo.feature.update.UpdateDialog
@@ -464,6 +465,7 @@ private fun AppShell() {
                 composable("downloads") { DownloadsScreen(nav, playerVm) }
                 composable("settings/appearance/tabs") { TabBarStyleScreen(nav) }
                 composable("settings/appearance/player") { PlayerBackgroundScreen(nav) }
+                composable("settings/appearance/lyrics") { LyricsAppearanceScreen(nav) }
                 }
                 }
             }

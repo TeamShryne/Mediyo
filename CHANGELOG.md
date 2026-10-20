@@ -50,10 +50,11 @@ half-speed song looked like it was stuttering. It now follows the playback
 speed, and the same goes for the moment you tap a line to jump there — the
 lyrics move with you right away.
 
-**You decide how the lyrics look.** *Settings → Lyrics* has a new appearance
-section with a live preview: change the text size, the font weight (anything
-from medium to black) and the distance between the lines. The player picks the
-new look up straight away.
+**You decide how the lyrics look.** *Settings → Appearance → Lyrics appearance*
+is a new screen with a live preview: change the text size, the font weight
+(anything from medium to black) and the distance between the lines. The player
+picks the new look up straight away. Which lyrics you get — and which source
+wins — is still under *Settings → Lyrics*.
 
 ## 0.8.0
 

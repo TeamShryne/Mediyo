@@ -96,7 +96,7 @@ done
 
 # ── Settings sub-screens ────────────────────────────────────────────────────
 for t in settings/lyrics settings/updates settings/appearance settings/appearance/tabs \
-         settings/appearance/player settings/equalizer settings/storage; do
+         settings/appearance/player settings/appearance/lyrics settings/equalizer settings/storage; do
   step "screen: $t"
   send go --es route "$t"
   shot "screen-${t//\//-}" 6
