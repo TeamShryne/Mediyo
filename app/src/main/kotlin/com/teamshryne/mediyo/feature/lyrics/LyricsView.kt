@@ -35,7 +35,6 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -53,9 +52,9 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.util.VelocityTracker
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontStyle
@@ -92,6 +91,52 @@ private fun findCurrentLine(lines: List<LyricLine>, posMs: Long): Int {
         }
     }
     return if (posMs >= lines.last().beginMs) lines.lastIndex else -1
+}
+
+// ── Line measurement ─────────────────────────────────────────────────────────
+
+/** Horizontal padding of a lyric line, in dp. */
+private const val LYRIC_HORIZONTAL_PADDING_DP = 18
+
+/** Vertical padding of a lyric line, in dp. */
+private const val LYRIC_VERTICAL_PADDING_DP = 6
+
+/**
+ * Rendering data of a single lyric line, measured *before* the first frame.
+ *
+ * Measuring up front is what keeps the stack of lines from collapsing: a
+ * lyric line can wrap over several visual lines, so its height is only known
+ * once it has been measured. Guessing a constant height made long lines draw
+ * on top of the lines below them.
+ */
+private class MeasuredLyricLine(
+    /** Layout used for single-line (centered) lyrics. */
+    val centerLayout: TextLayoutResult,
+    /** Layout used for wrapped lyrics, which are left aligned. */
+    val startLayout: TextLayoutResult,
+    /** True when the line wraps over more than one visual line. */
+    val isMultiline: Boolean,
+    /** Rendered height in px, including the vertical padding around the text. */
+    val heightPx: Float
+)
+
+/**
+ * The text style of a lyric line. Background vocals keep a smaller, italic
+ * style so they read as a second voice.
+ */
+private fun lyricTextStyle(style: LyricsStyle, isBackground: Boolean): TextStyle {
+    val fontSize = if (isBackground) (style.fontSizeSp * 0.86f).sp else style.fontSizeSp.sp
+    return TextStyle(
+        fontSize = fontSize,
+        fontWeight = FontWeight(style.weight.weightValue),
+        fontStyle = if (isBackground) FontStyle.Italic else FontStyle.Normal,
+        lineHeight = (fontSize.value * 1.22f).sp,
+        letterSpacing = (-0.4).sp,
+        textAlign = TextAlign.Center,
+        color = Color.White,
+        platformStyle = PlatformTextStyle(includeFontPadding = false),
+        lineHeightStyle = LineHeightStyle(alignment = LineHeightStyle.Alignment.Center, trim = LineHeightStyle.Trim.Both)
+    )
 }
 
 // ── Entry ────────────────────────────────────────────────────────────────────
@@ -189,7 +234,6 @@ private fun SyncedLyricsContent(
     // Provider credit renders as a trailing footer item after the last line.
     val hasCredit = provider != null
     val creditIdx = lines.size
-    val itemCount = lines.size + if (hasCredit) 1 else 0
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
 
@@ -233,8 +277,7 @@ private fun SyncedLyricsContent(
         }
     }
 
-    // heights & positions — Metrolist anchor logic
-    val itemHeights = remember(track) { mutableStateMapOf<Int, Int>() }
+    // positions — Metrolist anchor logic
     var isAutoScrollEnabled by remember { mutableStateOf(true) }
     var userManualOffset by remember { mutableFloatStateOf(0f) }
     val velocityTracker = remember { VelocityTracker() }
@@ -258,50 +301,113 @@ private fun SyncedLyricsContent(
         val maxHeightPx = boxConstraints.maxHeight.toFloat()
         val maxWidthPx = boxConstraints.maxWidth
         val anchorY = maxHeightPx * ANCHOR_RATIO
-        // Placeholder height for lines that have not been measured yet — it
-        // follows the chosen font size so the first frame is not off.
+        // Placeholder height, only used if a line could not be measured.
         val fallbackH = with(density) {
             maxOf(FALLBACK_H_DP.value, style.fontSizeSp * 1.8f + 16f).dp.toPx()
         }
         // Distance between two lyric lines — user setting.
         val gapPx = with(density) { style.lineSpacingDp.dp.toPx() }
 
-        // positions map relative to active index (credit footer counts as last item)
-        val positions = remember(itemHeights.toMap(), currentIdx, lines, hasCredit, gapPx) {
+        // ── Measure the lines before the first frame ────────────────────────
+        // A lyric line can wrap over several visual lines, so its height is
+        // only known once it has been measured. Measuring up front (instead of
+        // waiting for the onSizeChanged callback of every line) means the
+        // stack is laid out correctly from the very first frame — including
+        // before the song starts, when no line is active yet.
+        val textMeasurer = rememberTextMeasurer()
+        val measureWidth = remember(maxWidthPx, density) {
+            val pad = with(density) { LYRIC_HORIZONTAL_PADDING_DP.dp.toPx().toInt() * 2 }
+            (maxWidthPx - pad).coerceAtLeast(200)
+        }
+        val verticalPaddingPx = with(density) { (LYRIC_VERTICAL_PADDING_DP * 2).dp.toPx() }
+        val measuredLines = remember(lines, style, measureWidth, density) {
+            lines.map { line ->
+                val isBg = line.words.any { it.isBackground }
+                val centerStyle = lyricTextStyle(style, isBg)
+                val startStyle = centerStyle.copy(textAlign = TextAlign.Start)
+                val centerLayout = textMeasurer.measure(
+                    text = line.text,
+                    style = centerStyle,
+                    constraints = Constraints(maxWidth = measureWidth)
+                )
+                val startLayout = textMeasurer.measure(
+                    text = line.text,
+                    style = startStyle,
+                    constraints = Constraints(maxWidth = measureWidth)
+                )
+                MeasuredLyricLine(
+                    centerLayout = centerLayout,
+                    startLayout = startLayout,
+                    isMultiline = centerLayout.lineCount > 1,
+                    heightPx = centerLayout.size.height + verticalPaddingPx
+                )
+            }
+        }
+        // Provider credit footer — measured the same way, it is the last item.
+        val creditTextStyle = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp)
+        val creditHeightPx = remember(provider?.label, creditTextStyle, measureWidth, density) {
+            if (provider == null) {
+                0f
+            } else {
+                val layout = textMeasurer.measure(
+                    text = "Lyrics from ${provider.label}",
+                    style = creditTextStyle,
+                    constraints = Constraints(maxWidth = measureWidth)
+                )
+                layout.size.height + with(density) { 20.dp.toPx() }
+            }
+        }
+        // Height of every item of the stack: the lyric lines, then the credit.
+        val itemHeights = remember(measuredLines, creditHeightPx, hasCredit) {
+            val heights = measuredLines.map { it.heightPx }.toMutableList()
+            if (hasCredit) heights.add(creditHeightPx)
+            heights
+        }
+
+        // The line that sits on the anchor point and drives the layout. Before
+        // the very first lyric line starts there is no active line (-1); the
+        // first upcoming line is used as the anchor so the lines still stack
+        // up instead of falling back to a guessed height.
+        val anchorIdx = remember(lines, currentIdx) {
+            when {
+                lines.isEmpty() -> -1
+                currentIdx < 0 -> 0
+                else -> currentIdx.coerceAtMost(lines.lastIndex)
+            }
+        }
+
+        // positions map relative to the anchor index (credit footer counts as last item)
+        val positions = remember(itemHeights, anchorIdx, gapPx) {
             val map = mutableMapOf<Int, Float>()
-            if (currentIdx == -1 || lines.isEmpty()) return@remember map
-            map[currentIdx] = 0f
+            if (anchorIdx == -1 || itemHeights.isEmpty()) return@remember map
+            map[anchorIdx] = 0f
             var y = 0f
-            for (i in currentIdx - 1 downTo 0) {
-                val h = itemHeights[i]?.toFloat() ?: fallbackH
-                y -= (h + gapPx)
+            for (i in anchorIdx - 1 downTo 0) {
+                y -= (itemHeights[i] + gapPx)
                 map[i] = y
             }
             y = 0f
-            for (i in currentIdx until itemCount - 1) {
-                val h = itemHeights[i]?.toFloat() ?: fallbackH
-                y += (h + gapPx)
+            for (i in anchorIdx until itemHeights.lastIndex) {
+                y += (itemHeights[i] + gapPx)
                 map[i + 1] = y
             }
             map
         }
 
-        val minOffset = remember(itemHeights.toMap(), lines, currentIdx, anchorY, hasCredit, gapPx) {
+        val minOffset = remember(itemHeights, lines, currentIdx, anchorY, hasCredit, gapPx) {
             if (lines.isEmpty() || currentIdx == -1) return@remember 0f
             var totalBelow = 0f
-            for (i in currentIdx until itemCount - 1) {
-                val h = itemHeights[i]?.toFloat() ?: fallbackH
-                totalBelow += h + gapPx
+            for (i in currentIdx until itemHeights.lastIndex) {
+                totalBelow += itemHeights[i] + gapPx
             }
-            val lastH = itemHeights[itemCount - 1]?.toFloat() ?: fallbackH
+            val lastH = itemHeights.last()
             with(density) { 80.dp.toPx() } - anchorY - totalBelow - lastH
         }
-        val maxOffset = remember(itemHeights.toMap(), lines, currentIdx, maxHeightPx, anchorY, gapPx) {
+        val maxOffset = remember(itemHeights, lines, currentIdx, maxHeightPx, anchorY, gapPx) {
             if (lines.isEmpty() || currentIdx == -1) return@remember 0f
             var totalAbove = 0f
             for (i in 0 until currentIdx) {
-                val h = itemHeights[i]?.toFloat() ?: fallbackH
-                totalAbove += h + gapPx
+                totalAbove += itemHeights[i] + gapPx
             }
             maxHeightPx - with(density) { 80.dp.toPx() } - anchorY + totalAbove
         }
@@ -370,7 +476,7 @@ private fun SyncedLyricsContent(
             // reveal stagger
             lines.forEachIndexed { idx, line ->
                 val distance = abs(idx - currentIdx)
-                val targetOffset = anchorY + (positions[idx] ?: ((idx - currentIdx) * (fallbackH + gapPx)))
+                val targetOffset = anchorY + (positions[idx] ?: ((idx - anchorIdx) * (fallbackH + gapPx)))
                 val animatedOffset by animateFloatAsState(
                     targetValue = targetOffset,
                     animationSpec = if (isInitialLayout) tween(0) else tween(680, (distance * 28).coerceAtMost(200), FastOutSlowInEasing),
@@ -380,35 +486,31 @@ private fun SyncedLyricsContent(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .onSizeChanged { itemHeights[idx] = it.height }
                         .offset { IntOffset(0, (animatedOffset + userManualOffset).roundToInt()) }
                 ) {
                     val isActive = idx == currentIdx
                     val displayedIdx = if (isAutoScrollEnabled) currentIdx else -1
-                    // pass available width to fix hidden words on right — measure with real constraints, not 1080
-                    val availableWidth = maxWidthPx
                     MetrolistLine(
                         line = line,
+                        measured = measuredLines[idx],
                         index = idx,
                         isActive = isActive,
                         isAutoScrollEnabled = isAutoScrollEnabled,
                         displayedIdx = displayedIdx,
                         smoothPos = smoothPos,
-                        availableWidthPx = availableWidth,
-                        style = style,
                         onSeek = onSeek
                     )
                 }
             }
-            LaunchedEffect(lines.size, itemHeights.size) {
-                if (itemHeights.size >= minOf(6, lines.size) && isInitialLayout) {
+            LaunchedEffect(track, lines.size, measuredLines.size) {
+                if (measuredLines.size >= minOf(6, lines.size) && isInitialLayout) {
                     isInitialLayout = false
                 }
             }
             // Provider credit footer — scrolls with the lyrics, sits after the last line
             if (hasCredit && provider != null) {
                 val distance = abs(creditIdx - currentIdx)
-                val targetOffset = anchorY + (positions[creditIdx] ?: ((creditIdx - currentIdx) * (fallbackH + gapPx)))
+                val targetOffset = anchorY + (positions[creditIdx] ?: ((creditIdx - anchorIdx) * (fallbackH + gapPx)))
                 val animatedOffset by animateFloatAsState(
                     targetValue = targetOffset,
                     animationSpec = if (isInitialLayout) tween(0) else tween(680, (distance * 28).coerceAtMost(200), FastOutSlowInEasing),
@@ -417,7 +519,6 @@ private fun SyncedLyricsContent(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .onSizeChanged { itemHeights[creditIdx] = it.height }
                         .offset { IntOffset(0, (animatedOffset + userManualOffset).roundToInt()) },
                     contentAlignment = Alignment.Center
                 ) {
@@ -438,13 +539,12 @@ private fun SyncedLyricsContent(
 @Composable
 private fun MetrolistLine(
     line: LyricLine,
+    measured: MeasuredLyricLine,
     index: Int,
     isActive: Boolean,
     isAutoScrollEnabled: Boolean,
     displayedIdx: Int,
     smoothPos: Long,
-    availableWidthPx: Int,
-    style: LyricsStyle,
     onSeek: (Long) -> Unit
 ) {
     // alpha like Metrolist — psychology-pleasing fade distance
@@ -462,7 +562,6 @@ private fun MetrolistLine(
     }
     val animatedAlpha by androidx.compose.animation.core.animateFloatAsState(targetValue = targetAlpha, animationSpec = tween(260), label = "alpha$index")
 
-    val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
 
     // mainText with syllable-accurate spaces — uses hasTrailingSpace from parser (no gap for Be+gging)
@@ -477,24 +576,6 @@ private fun MetrolistLine(
             ) to w.hasTrailingSpace
         }
     }
-
-    // no size pop — keep uniform size, only alpha/word-glow animates (per user request)
-    val isBg = line.words.any { it.isBackground }
-    // Size and weight come from the user's lyrics style; background vocals
-    // stay a little smaller so they read as a second voice.
-    val baseFontSize = if (isBg) (style.fontSizeSp * 0.86f).sp else style.fontSizeSp.sp
-    val baseStyleCenter = TextStyle(
-        fontSize = baseFontSize,
-        fontWeight = FontWeight(style.weight.weightValue),
-        fontStyle = if (isBg) FontStyle.Italic else FontStyle.Normal,
-        lineHeight = (baseFontSize.value * 1.22f).sp,
-        letterSpacing = (-0.4).sp,
-        textAlign = TextAlign.Center,
-        color = Color.White,
-        platformStyle = PlatformTextStyle(includeFontPadding = false),
-        lineHeightStyle = LineHeightStyle(alignment = LineHeightStyle.Alignment.Center, trim = LineHeightStyle.Trim.Both)
-    )
-    val baseStyleStart = remember(baseStyleCenter) { baseStyleCenter.copy(textAlign = TextAlign.Start) }
 
     val inactiveColor = Color.White.copy(alpha = animatedAlpha * 0.42f)
     val activeColor = Color.White
@@ -511,24 +592,17 @@ private fun MetrolistLine(
     // Unified rendering — Canvas for both active/inactive to keep exact center alignment (no Text vs Canvas jump)
     // fixes short single lines snapping to left when becoming active
     // Wrapped lines (>1 visual line) are left-aligned for readability; single lines stay centered.
-    val horizPadPx = with(density) { 18.dp.toPx().toInt() * 2 }
-    val measureWidth = (availableWidthPx - horizPadPx).coerceAtLeast(200)
-    val centerLayout = remember(mainText, baseStyleCenter, measureWidth) {
-        textMeasurer.measure(text = mainText, style = baseStyleCenter, constraints = Constraints(maxWidth = measureWidth))
-    }
-    val startLayout = remember(mainText, baseStyleStart, measureWidth) {
-        textMeasurer.measure(text = mainText, style = baseStyleStart, constraints = Constraints(maxWidth = measureWidth))
-    }
-    val isMultiline = centerLayout.lineCount > 1
-    val layout = if (isMultiline) startLayout else centerLayout
-    val height = with(density) { layout.size.height.toDp() }
+    // The layout was measured by the caller, so the height of the line is
+    // known before the first frame — no guessing, no overlapping lines.
+    val layout = if (measured.isMultiline) measured.startLayout else measured.centerLayout
+    val height = with(density) { measured.centerLayout.size.height.toDp() }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 18.dp, vertical = 6.dp)
+            .padding(horizontal = LYRIC_HORIZONTAL_PADDING_DP.dp, vertical = LYRIC_VERTICAL_PADDING_DP.dp)
             .clickable { onSeek(line.beginMs) },
-        contentAlignment = if (isMultiline) Alignment.CenterStart else Alignment.Center
+        contentAlignment = if (measured.isMultiline) Alignment.CenterStart else Alignment.Center
     ) {
         Canvas(
             modifier = Modifier

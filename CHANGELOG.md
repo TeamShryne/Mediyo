@@ -55,6 +55,13 @@ section with a live preview: change the text size, the font weight (anything
 from medium to black) and the distance between the lines. The player picks the
 new look up straight away.
 
+**The lyrics no longer pile on top of each other before a song starts.** While
+the track was still at 0:00 the lines were spaced as if every line was a single
+row of text, so the longer ones — the ones that wrap over several lines —
+were drawn on top of the lines below them. The lyrics are now measured before
+they are drawn, so each line gets the room it actually needs, and the screen
+reads the same way whether the song is playing or not.
+
 ## 0.8.0
 
 **Reorder your queue by dragging.** The up and down arrows are gone. Press and
