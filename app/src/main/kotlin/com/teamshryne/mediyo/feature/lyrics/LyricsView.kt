@@ -54,7 +54,7 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.PlatformTextStyle
-import androidx.compose.ui.text.TextLayout
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontStyle
@@ -111,9 +111,9 @@ private const val LYRIC_VERTICAL_PADDING_DP = 6
  */
 private class MeasuredLyricLine(
     /** Layout used for single-line (centered) lyrics. */
-    val centerLayout: TextLayout,
+    val centerLayout: TextLayoutResult,
     /** Layout used for wrapped lyrics, which are left aligned. */
-    val startLayout: TextLayout,
+    val startLayout: TextLayoutResult,
     /** True when the line wraps over more than one visual line. */
     val isMultiline: Boolean,
     /** Rendered height in px, including the vertical padding around the text. */
