@@ -11,6 +11,15 @@ The technical change list is still generated, but it is collapsed below a
 
 ## Unreleased
 
+**Quick picks scroll sideways, and never run out.** The row of songs at the top
+of Home is now a horizontal shelf instead of a small grid, and it holds far
+more than before. It starts with the songs you are most likely to want next,
+then fills with songs you have never heard: the app looks for neighbours of
+your music, branches off those to look even further out, and mixes the
+results so the shelf does not turn into one artist on repeat. Scroll to the
+end and it simply keeps going — new songs each time, never the same ones
+twice.
+
 **The lyrics keep up when you slow a song down.** The word-by-word highlight
 used to run ahead of the music and then jump back to the right place, so a
 half-speed song looked like it was stuttering. It now follows the playback

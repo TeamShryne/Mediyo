@@ -244,3 +244,53 @@ interface UserEventDao {
     @Query("DELETE FROM user_events WHERE id NOT IN (SELECT id FROM user_events ORDER BY createdAt DESC LIMIT :keep)")
     suspend fun prune(keep: Int)
 }
+
+/**
+ * The discovery graph pool: queue-expanded candidates waiting to be shown.
+ *
+ * Unserved items are the ones the user has not seen yet. The frontier query
+ * picks items that were found but never used as a branch parent — those are
+ * the seeds for the next hop outward.
+ */
+@Dao
+interface DiscoveryDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(items: List<DiscoveryItemEntity>)
+
+    /** Never-shown material, oldest first so the pool drains in discovery order. */
+    @Query("SELECT * FROM discovery_items WHERE servedAt IS NULL ORDER BY addedAt ASC, rank ASC LIMIT :limit")
+    suspend fun unserved(limit: Int): List<DiscoveryItemEntity>
+
+    /**
+     * Found but not yet used as a branch parent — the next hop outward.
+     *
+     * Deliberately *not* restricted to unserved rows: a track we already
+     * showed is still a perfectly good place to queue from, and its
+     * neighbourhood is where the new material is.
+     */
+    @Query(
+        "SELECT * FROM discovery_items WHERE expandedAt IS NULL " +
+            "ORDER BY depth ASC, addedAt ASC LIMIT :limit"
+    )
+    suspend fun frontier(limit: Int): List<DiscoveryItemEntity>
+
+    /** Already-shown ids: excluded from every later expansion. */
+    @Query("SELECT videoId FROM discovery_items WHERE servedAt IS NOT NULL")
+    suspend fun servedIds(): List<String>
+
+    @Query("UPDATE discovery_items SET servedAt = :now WHERE videoId IN (:ids)")
+    suspend fun markServed(ids: List<String>, now: Long)
+
+    @Query("UPDATE discovery_items SET expandedAt = :now WHERE videoId IN (:ids)")
+    suspend fun markExpanded(ids: List<String>, now: Long)
+
+    @Query("SELECT COUNT(*) FROM discovery_items WHERE servedAt IS NULL")
+    suspend fun unservedCount(): Int
+
+    /** Served rows are only kept as an exclusion set; drop them once stale. */
+    @Query("DELETE FROM discovery_items WHERE servedAt IS NOT NULL AND servedAt < :before")
+    suspend fun evictServed(before: Long)
+
+    @Query("DELETE FROM discovery_items")
+    suspend fun clearAll()
+}

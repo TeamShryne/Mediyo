@@ -54,17 +54,25 @@ import com.teamshryne.mediyo.core.design.navigatePodcast
 import com.teamshryne.mediyo.domain.repository.UserEventTypes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.Calendar
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import javax.inject.Inject
+
+/** How many new songs one expansion round may contribute to the row. */
+private const val DISCOVERY_BATCH = 24
 
 @HiltViewModel
 class HomeVm @Inject constructor(
     private val repo: HomeRepository,
     private val bridge: MediyoBridge,
-    private val events: UserEventRepository
+    private val events: UserEventRepository,
+    private val discovery: DiscoveryCoordinator
 ) : ViewModel() {
     val quickPicks = repo.flowQuickPicks()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -97,37 +105,50 @@ class HomeVm @Inject constructor(
     val playlistCount = repo.flowPlaylistCount()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
+    // ── Discovery graph: unfamiliar songs, grown on demand ────────────────
+    // The quick-picks shelf starts with the tracks most likely to be tapped
+    // and grows into the discovery graph: songs found by queueing, branched
+    // outward and mixed. Everything the user has already played, liked or
+    // been shown is excluded, so the shelf keeps producing new material.
+    private val _discovered = MutableStateFlow<List<Track>>(emptyList())
+    val discovered: StateFlow<List<Track>> = _discovered.asStateFlow()
+    var discoveryLoading by mutableStateOf(true)
+    private val growLock = Mutex()
+
     // ── Lazy network shelves: load once, hide silently on failure ──────────
     // Home must open instantly offline; these fill in below as they arrive.
-    var radioShelf by mutableStateOf<RadioShelf?>(null)
-    var radioLoading by mutableStateOf(true)
     var newReleases by mutableStateOf<List<FfiSearchResult>>(emptyList())
     var similarArtists by mutableStateOf<List<FfiSearchResult>>(emptyList())
-    var discoveryLoading by mutableStateOf(true)
+    var discoveryShelfLoading by mutableStateOf(true)
 
-    init {
-        // Because-you-played: two-hop radio off the top scored track,
-        // known tracks filtered so every card is actually new.
+    /**
+     * Called when the quick-picks row reaches its end: expand the graph one
+     * round and append whatever new songs it found.
+     *
+     * A round that is already running is not queued behind: the row only ever
+     * needs the newest batch, and a pile of pending rounds would hammer the
+     * network for material the user scrolled past.
+     */
+    fun growQuickPicks() {
+        if (!growLock.tryLock()) return
         viewModelScope.launch {
             try {
-                val seed = repo.flowScored().first().firstOrNull()?.track
-                val vid = seed?.videoId
-                if (vid != null) {
-                    val known = repo.flowKnownIds().first()
-                    val q = bridge.radioFor(vid)
-                    val tracks = (q?.items ?: emptyList()).map { it.toDomainTrack() }
-                        .filter { it.videoId != null && it.videoId !in known }
-                        // The queue can repeat a video; a duplicate Lazy key
-                        // crashes the row, so dedupe before it reaches the UI.
-                        .distinctBy { it.videoId }
-                        .take(12)
-                    if (tracks.isNotEmpty()) radioShelf = RadioShelf(seed.title, vid, tracks)
+                val more = discovery.grow(DISCOVERY_BATCH)
+                if (more.isNotEmpty()) {
+                    _discovered.value = (_discovered.value + more)
+                        .distinctBy { it.uniqueKey() }
                 }
             } catch (_: Throwable) {
             } finally {
-                radioLoading = false
+                discoveryLoading = false
+                growLock.unlock()
             }
         }
+    }
+
+    init {
+        // Open with a first round of discovery so the shelf is never empty.
+        growQuickPicks()
         // One artist-page fetch per affinity artist feeds BOTH shelves:
         // release shelves (Albums / Singles) → new music, similar shelf → discovery.
         viewModelScope.launch {
@@ -165,7 +186,7 @@ class HomeVm @Inject constructor(
                 similarArtists = similars.values.take(10)
             } catch (_: Throwable) {
             } finally {
-                discoveryLoading = false
+                discoveryShelfLoading = false
             }
         }
     }
@@ -216,6 +237,7 @@ fun HomeScreen(
     val menuVm: com.teamshryne.mediyo.core.design.MediaMenuVm = hiltViewModel()
     var resolving by remember { mutableStateOf<String?>(null) }
     val quickPicks by vm.quickPicks.collectAsState()
+    val discovered by vm.discovered.collectAsState()
     val weekTop by vm.weekTop.collectAsState()
     val onRepeat by vm.onRepeat.collectAsState()
     val rediscover by vm.rediscover.collectAsState()
@@ -266,9 +288,15 @@ fun HomeScreen(
         daypartTracks = emptyList()
     }
 
+    // The quick-picks row: the tracks most likely to be tapped next, then
+    // the discovery graph — unfamiliar songs found by queueing and branching.
+    val quickRow = remember(quickPicks, discovered) {
+        (quickPicks + discovered).distinctBy { it.uniqueKey() }
+    }
+
     // Every content section counts: otherwise a user whose history only
     // feeds some shelves sees "Nothing here yet" above real content.
-    val hasAnything = quickPicks.isNotEmpty() || weekTop.isNotEmpty() || saved.isNotEmpty() ||
+    val hasAnything = quickRow.isNotEmpty() || weekTop.isNotEmpty() || saved.isNotEmpty() ||
         recentSearches.isNotEmpty() || mixes.isNotEmpty() || episodes.isNotEmpty() ||
         onRepeat.isNotEmpty() || rediscover.isNotEmpty() || topArtists.isNotEmpty() ||
         finishAlbums.isNotEmpty() || daypartTracks.isNotEmpty()
@@ -297,14 +325,18 @@ fun HomeScreen(
             }
         }
 
-        if (!hasAnything && !vm.radioLoading && !vm.discoveryLoading) {
+        if (!hasAnything && !vm.discoveryLoading && !vm.discoveryShelfLoading) {
             item { EmptyHome { nav.navigate("search") } }
         } else {
-            if (quickPicks.isNotEmpty()) {
+            if (quickRow.isNotEmpty()) {
                 item(key = "quick") {
                     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         SectionHeader("Quick picks")
-                        QuickPickGrid(quickPicks) { play(it, PlayOrigin.History("Home")) }
+                        QuickPickRow(
+                            tracks = quickRow,
+                            onPick = { play(it, PlayOrigin.History("Home")) },
+                            onNearEnd = { vm.growQuickPicks() }
+                        )
                     }
                 }
             }
@@ -488,36 +520,9 @@ fun HomeScreen(
                     )
                 }
             }
-            val shelf = vm.radioShelf
-            if (shelf != null) {
-                item(key = "radio") {
-                    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        SectionHeader("Because you played ${shelf.seedTitle}")
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            itemsIndexed(shelf.tracks, key = { i, t -> "${t.uniqueKey()}_$i" }) { _, t ->
-                                MediaCard(
-                                    title = t.title,
-                                    subtitle = t.artists.joinToString(),
-                                    artworkUrl = t.artworkUrl,
-                                    round = false
-                                ) {
-                                    vm.logTap(t)
-                                    player.playTracks(
-                                        shelf.tracks,
-                                        shelf.tracks.indexOf(t).coerceAtLeast(0),
-                                        PlayOrigin.Radio(shelf.seedVideoId ?: t.videoId.orEmpty())
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            } else if (vm.radioLoading) {
-                item(key = "radio-loading") { ShelfLoading() }
-            }
+            // The old "Because you played X" radio shelf is gone: the
+            // discovery graph above is the same idea with several seeds,
+            // branched and mixed, so it supersedes it instead of competing.
             if (vm.newReleases.isNotEmpty()) {
                 item(key = "releases") {
                     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -560,7 +565,7 @@ fun HomeScreen(
                         }
                     }
                 }
-            } else if (vm.discoveryLoading) {
+            } else if (vm.discoveryShelfLoading) {
                 item(key = "discovery-loading") { ShelfLoading() }
             }
             if (saved.isNotEmpty()) {

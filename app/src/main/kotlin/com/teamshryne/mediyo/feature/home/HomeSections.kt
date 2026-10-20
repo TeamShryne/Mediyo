@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -35,6 +36,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,6 +49,7 @@ import com.teamshryne.mediyo.core.design.MediaCard
 import com.teamshryne.mediyo.core.design.MediaCardShimmer
 import com.teamshryne.mediyo.core.design.SectionHeader
 import com.teamshryne.mediyo.domain.model.Track
+import kotlinx.coroutines.flow.collect
 
 /** Fake search field: typing beats scrolling, so home offers it before anything else. */
 @Composable
@@ -71,11 +75,11 @@ fun HomeSearchBar(modifier: Modifier = Modifier, onOpen: () -> Unit) {
     }
 }
 
-/** One quick-pick tile: thumb + title, dense enough for six in a glance. */
+/** One quick-pick tile: thumb + title, dense enough for a glance. */
 @Composable
 private fun QuickPickTile(track: Track, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Row(
-        modifier.fillMaxWidth()
+        modifier.width(196.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .clickable(onClick = onClick)
@@ -101,20 +105,44 @@ private fun QuickPickTile(track: Track, onClick: () -> Unit, modifier: Modifier 
 }
 
 /**
- * Quick picks: 2 columns × up to 3 rows. The whole point is no scrolling —
- * your most-likely-next-tap is always above the fold.
+ * Quick picks: a horizontal shelf, and an endless one.
+ *
+ * The first tiles are the tracks the user is most likely to tap next; the
+ * rest is the discovery graph — songs found by queueing, branched outward and
+ * mixed so they are adjacent to the taste without repeating it. When the user
+ * reaches the end of the row the graph expands again and more new songs are
+ * appended, so the shelf never runs dry.
  */
 @Composable
-fun QuickPickGrid(tracks: List<Track>, modifier: Modifier = Modifier, onPick: (Track) -> Unit) {
-    Column(modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        tracks.chunked(2).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { t -> QuickPickTile(t, { onPick(t) }, Modifier.weight(1f)) }
-                if (row.size == 1) Spacer(Modifier.weight(1f))
+fun QuickPickRow(
+    tracks: List<Track>,
+    modifier: Modifier = Modifier,
+    onPick: (Track) -> Unit,
+    onNearEnd: () -> Unit
+) {
+    val listState = rememberLazyListState()
+    // Grow the shelf as the user approaches its end. The effect restarts when
+    // the row grows, so an exhausted row keeps asking for more.
+    LaunchedEffect(listState, tracks.size) {
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
+            .collect { last ->
+                if (tracks.isNotEmpty() && last >= tracks.size - GROW_THRESHOLD) onNearEnd()
             }
+    }
+    LazyRow(
+        state = listState,
+        modifier = modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        itemsIndexed(tracks, key = { i, t -> "${t.uniqueKey()}_$i" }) { _, t ->
+            QuickPickTile(t, { onPick(t) })
         }
     }
 }
+
+/** How close to the end of the row we start pulling more songs in. */
+private const val GROW_THRESHOLD = 4
 
 /**
  * Rotation feature: the week's #1 gets a hero card (identity — "my week in
