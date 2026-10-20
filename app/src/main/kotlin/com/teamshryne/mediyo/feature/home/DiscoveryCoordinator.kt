@@ -5,6 +5,7 @@ import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import com.teamshryne.mediyo.domain.model.Track
 import com.teamshryne.mediyo.domain.model.dbArtistIds
 import com.teamshryne.mediyo.domain.model.toDomainTrack
+import com.teamshryne.mediyo.domain.model.toDomainTracks
 import com.teamshryne.mediyo.domain.repository.ArtistRepository
 import com.teamshryne.mediyo.domain.repository.DiscoveryRepository
 import javax.inject.Inject
