@@ -69,11 +69,123 @@ Two reasons, and the second is the one that bites:
 release exists, and asserts the nightly's code outranks the release it is
 based on.
 
+## Where the notes come from
+
+The notes live in the change. Nothing else writes them, and nothing else has
+to.
+
+### The notes live in the change
+
+Every change a user can see carries its own release note, in a marked block in
+the commit body — which, for a squash merge, is the pull request
+description:
+
+<!-- notes -->
+**Quick picks is a shelf of columns now.** It scrolls sideways and snaps from
+one column to the next.
+<!-- /notes -->
+
+The block is what a release publishes. Everything outside it stays developer
+facing: the description of a pull request explains the change to whoever
+reviews it, the block explains it to the person using the app.
+
+**One block per change a user can see.** A pull request that adds a shelf of
+columns, a pull-to-refresh gesture and a new family of shelves is three
+things to a user, and the release notes read better as three notes than as
+one block of six paragraphs.
+
+`scripts/check-notes.sh` enforces this, and the **Release notes** job in the
+`Android` workflow runs it on every pull request: the note has to be there,
+and it has to read like something written for a person — no file names, no
+commit hashes, no "refactored". The pull request template carries the block,
+so its shape is always in front of the author.
+
+Which changes need one is decided by the conventional-commit type in the
+subject:
+
+| | needs a note |
+| --- | --- |
+| `feat`, `fix`, `perf` | yes |
+| `chore`, `ci`, `docs`, `test`, `refactor`, `build`, `style`, `release` | no |
+| any scope `release`, `ci`, `build`, `deps` | no, whatever the type |
+
+A change that needs no note can say so in a line of its own:
+
+```
+No-User-Note: this only moves the version resolver
+```
+
+The `no-user-note` label does not do this on its own: a label does not travel
+with a commit, and the check that runs on a push to main only sees the commit.
+Use the trailer.
+
+### The release reads them
+
+`scripts/collect-notes.sh` reads the same blocks and assembles them for a
+range of commits:
+
+```bash
+# the notes for the next release
+scripts/collect-notes.sh v0.8.0..HEAD
+
+# the notes for the next nightly: the commits since the last nightly
+scripts/collect-notes.sh nightly-0.8.1..HEAD --format json
+```
+
+The markdown output is the release notes, oldest change first. The json output
+is one entry per note — `{"commit": "<sha>", "text": "..."}` — with the
+commit it came from, so the app can tell two entries that say the same thing
+apart and skip the one it has already shown.
+
+Before it publishes, a release runs `scripts/check-range-notes.sh` over the
+same range: every change a user can see has to have said what it does for
+them, or the release does not ship. So a note that was never written cannot
+reach a user, even if the check on the pull request was skipped.
+
+A release with nothing a user would notice still says so — *"Internal fixes
+and stability improvements."* A nightly with no new commits says *"No changes
+since the last build."*
+
+### The app reads the history
+
+Every release and every nightly also publishes `changelog.json`: the whole
+history, with the notes, rebuilt from the tags by
+`scripts/make-changelog.sh` so it cannot drift from the commits.
+
+```json
+{
+  "entries": [
+    {
+      "version": "0.9.0",
+      "versionCode": 9000,
+      "channel": "stable",
+      "publishedAt": "2026-10-20T15:20:17Z",
+      "notes": [{ "commit": "23d39e7", "text": "**Quick picks is a shelf of columns now.** …" }]
+    }
+  ]
+}
+```
+
+The app fetches it and shows the entries above the build the user is running:
+
+- a stable entry counts on either channel, because a nightly is built on top
+  of the latest release;
+- a nightly entry counts only for a user who follows the nightly channel;
+- the commit in each note is what tells two notes apart, because a release
+  rolls up the commits a nightly already announced — a user who was on the
+  nightly channel and then moved to stable would otherwise read it twice.
+
+The two feeds are `releases/latest/download/changelog.json` for stable and
+`releases/download/nightly/changelog.json` for nightly. The app keeps the last
+copy on disk, because the notes are worth reading offline.
+
 ## Cutting a release
 
-### Write the notes first
+### The notes are already written
 
-Stable release notes come from `CHANGELOG.md`. Each version gets a section:
+There is nothing to write at release time. The notes for a version are the
+notes in the commits it contains, and they were written when the changes
+were made.
 
 ```markdown
 ## 0.9.0
@@ -81,13 +193,13 @@ Stable release notes come from `CHANGELOG.md`. Each version gets a section:
 **Something a user would notice.** What changed, and why they would care.
 ```
 
-The release reads that section and uses it as the release notes. **A release
-without a section fails** rather than shipping the commit log to users — so
-this cannot be forgotten at tag time.
+The release reads the notes out of the commits it contains and uses them as
+the release notes. **A release with a change a user can see but no note for
+it fails** rather than shipping the commit log to users — so this cannot be
+forgotten at tag time.
 
-Write them for someone using the app, not for someone reading the git log: no
-commit hashes, no file names, no "refactored". The generated list of technical
-changes is still attached, collapsed under a "Technical changes" heading.
+The generated list of technical changes is still attached, collapsed under a
+"Technical changes" heading.
 
 ### Then cut the tag
 
@@ -109,7 +221,10 @@ Either way the tag push is what publishes. The run:
 2. builds and signs the APK with the release keystore
 3. verifies the signature, package name, version code and label
 4. writes `update.json` with the download URL and SHA-256
-5. publishes the GitHub Release with the APK, a `.sha256` and `update.json`
+5. collects the notes for the range, and refuses to publish if a change a
+   user can see has no note for it
+6. publishes the GitHub Release with the APK, a `.sha256`, `update.json` and
+   `changelog.json`
 
 The updater's contract is `scripts/make-update-json.sh`, shared by both
 tracks, so the two cannot drift.
@@ -140,6 +255,11 @@ for archaeology, and republishes the rolling `nightly` release with that
 build's assets. The asset name carries the sequence, so the download URL
 changes every time and cannot be served stale from a CDN cache.
 
+A nightly carries notes too: the changes since the last nightly on the same
+line, or since the release that line is built on. A nightly is a delta, not
+a summary — a user who has been on the channel for a week has already seen
+the rest.
+
 ## Nightlies and the release keystore
 
 A nightly is signed with the **same key** as releases and carries the **same
@@ -165,14 +285,19 @@ rather than offering a broken build. Publish a new nightly and it resumes.
 
 ## Verifying a release
 
-The `Android` workflow runs on every push and pull request and has two required
-checks: `APK` (build + lint) and `Boot emulator + drive app`. The second one
-installs the debug APK on an API 34 emulator, drives it through the adb control
-surface and uploads 31 screenshots — see [adb-control.md](adb-control.md).
+The `Android` workflow runs on every push and pull request and has three
+required checks: `APK` (build + lint), `Boot emulator + drive app` and
+`Release notes`. The second one installs the debug APK on an API 34 emulator,
+drives it through the adb control surface and uploads 31 screenshots — see
+[adb-control.md](adb-control.md).
 
 It is a **separate job in the same workflow**, not a separate workflow, so it
 takes the APK straight from the artifact the build just produced: no second
 build, and no downloading across workflow runs.
+
+`Release notes` is the third job: it checks the pull request description on
+a pull request, and the commits themselves on a push to main. It runs in
+parallel with the build and takes seconds.
 
 Neither runs against a *release* build, so R8 and resource shrinking are not
 exercised before shipping. The release keystore and `minifyEnabled` are only
@@ -185,8 +310,15 @@ it is not covered.
 | | |
 | --- | --- |
 | `.github/workflows/publish.yml` | releases and nightlies |
-| `.github/workflows/android.yml` | build + lint + emulator tour (both required checks) |
+| `.github/workflows/android.yml` | build + lint + emulator tour + release notes (all required checks) |
 | `scripts/version-code.sh` | the version code formula |
 | `scripts/make-update-json.sh` | the updater contract |
+| `scripts/check-notes.sh` | the release-notes check |
+| `scripts/check-range-notes.sh` | the same check, over a range of commits |
+| `scripts/collect-notes.sh` | assembles the notes for a range of commits |
+| `scripts/make-changelog.sh` | builds `changelog.json` from the tags |
+| `scripts/notes-lib.sh` | the notes format, shared by the three above |
 | `scripts/emulator-smoke.sh` | the tour script |
+| `app/src/main/.../data/update/Changelog.kt` | the history the app reads |
+| `app/src/main/.../feature/update/WhatsNew.kt` | the "what's new" screen |
 | `app/src/debug/` | the adb control surface (debug builds only) |

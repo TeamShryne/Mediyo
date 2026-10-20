@@ -219,29 +219,37 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Changelog since previous tag. Match v* so the nightly tags, which
-          # point at ordinary commits, are not mistaken for a release.
+          # The notes for this release: the notes in the commits since the
+          # last release, and nothing else. They were written when the change
+          # was made, by whoever made it.
           PREV=$(git describe --tags --abbrev=0 --match "v*" "$TAG^" 2>/dev/null || echo "")
           if [ -n "$PREV" ]; then
-            CHANGELOG="Changes since $PREV:"
-            CHANGELOG+=$'\n'"$(git log "$PREV..$TAG" --pretty=format:'- %s (%h)' --reverse)"
+            RANGE="$PREV..$TAG"
           else
-            CHANGELOG="First release."
-            CHANGELOG+=$'\n'"$(git log -30 "$TAG" --pretty=format:'- %s (%h)' --reverse)"
+            # The first release: only the commit it points at, not everything
+            # before it.
+            RANGE="$TAG^..$TAG"
           fi
 
-          # User-facing notes, from CHANGELOG.md. A release without them fails
-          # rather than shipping the commit log to users.
-          NOTES=$(awk -v heading="^## $VERSION\$" '
-            $0 ~ heading { found=1; next }
-            found && /^## / { exit }
-            found { print }
-          ' CHANGELOG.md)
+          # Every change a user can see has to say what it does for them.
+          # A release refuses to publish if one does not -- so a note that
+          # was never written cannot reach a user.
+          scripts/check-range-notes.sh "$RANGE"
+
+          NOTES=$(scripts/collect-notes.sh "$RANGE")
           if [ -z "$(echo "$NOTES" | tr -d '[:space:]')" ]; then
-            echo "::error::no user-facing notes for $VERSION"
-            echo "::error::add a '## $VERSION' section to CHANGELOG.md"
-            exit 1
+            # A release with nothing a user would notice still says so.
+            NOTES="**Nothing you would notice.** Internal fixes and stability improvements."
           fi
+
+          # The technical change list, collapsed below the notes.
+          CHANGELOG="Changes since ${PREV:-the beginning}:"
+          CHANGELOG+=$'\n'"$(git log "$RANGE" --pretty=format:'- %s (%h)' --reverse)"
+
+          # The full history, for the app: what changed since the version a
+          # user is running. Rebuilt from the tags every time, so it cannot
+          # drift from the commits.
+          scripts/make-changelog.sh changelog.json
 
           # A notes file rather than --notes: the body contains backticks and
           # $ signs, and quoting that into a shell argument is a trap.
@@ -276,7 +284,7 @@ jobs:
           gh release create "$TAG" \
             --title "Mediyo $TAG" \
             --notes-file notes.md \
-            "$APK_NAME" "$APK_NAME.sha256" update.json
+            "$APK_NAME" "$APK_NAME.sha256" update.json changelog.json
 
       - name: Publish nightly
         if: steps.version.outputs.mode == 'nightly'
@@ -317,11 +325,43 @@ jobs:
           git tag -f -a nightly -m "Mediyo nightly ${VERSION}" "$GITHUB_SHA"
           git push origin nightly --force
 
+          # The notes for this nightly: the changes since the last nightly on
+          # this line, or since the release the line is built on. A nightly
+          # is a delta, not a summary of everything -- a user who has been on
+          # the channel for a week has already seen the rest.
+          if [ "$SEQ" -gt 1 ]; then
+            PREV="nightly-$MAJOR.$MINOR.$((SEQ - 1))"
+          else
+            PREV=$(git tag -l "v$MAJOR.$MINOR.*" --sort=v:refname | tail -1)
+          fi
+          if [ -n "$PREV" ]; then
+            RANGE="$PREV..$GITHUB_SHA"
+          else
+            RANGE="$GITHUB_SHA^..$GITHUB_SHA"
+          fi
+
+          # A nightly publishes notes too, so the same rule applies: a change
+          # a user can see has to say what it does for them.
+          scripts/check-range-notes.sh "$RANGE"
+
+          NOTES=$(scripts/collect-notes.sh "$RANGE")
+          if [ -z "$(echo "$NOTES" | tr -d '[:space:]')" ]; then
+            NOTES="**No changes since the last build.**"
+          fi
+
+          # The full history, for the app. The tag above is already in place,
+          # so this nightly is in it.
+          scripts/make-changelog.sh changelog.json
+
           {
             echo "Nightly build from \`$GITHUB_SHA\` on $(date -u +%Y-%m-%d)."
             echo
             echo "Untested by definition — this is a build of \`main\`, not a release."
             echo "Opt in via **Settings → App updates → Nightly**."
+            echo
+            echo "$NOTES"
+            echo
+            echo "---"
             echo
             echo "- Version: \`$VERSION\` (versionCode \`$CODE\`)"
             echo "- APK: \`$APK_NAME\`"
@@ -332,7 +372,7 @@ jobs:
             --title "Mediyo nightly ${VERSION}" \
             --prerelease \
             --notes-file notes.md \
-            "$APK_NAME" "$APK_NAME.sha256" update.json
+            "$APK_NAME" "$APK_NAME.sha256" update.json changelog.json
 
       - name: Upload artifacts (CI copy)
         uses: actions/upload-artifact@v4

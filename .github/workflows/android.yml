@@ -89,6 +89,66 @@ jobs:
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
+  # The user-facing release notes, checked.
+  #
+  # A change a user can see has to say what it does for them, in their words.
+  # The release notes for a version are assembled from exactly these blocks,
+  # so a note that is missing here is a note the release does not have.
+  #
+  # It runs in parallel with the build: no Gradle, no emulator, a few seconds.
+  notes:
+    name: Release notes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The push case checks commits, so it needs the history.
+          fetch-depth: 0
+
+      - name: Test the release-notes scripts
+        run: |
+          scripts/test-check-notes.sh
+          scripts/test-collect-notes.sh
+          scripts/test-make-changelog.sh
+
+      # On a pull request the description is what the squash commit will
+      # carry, so that is what is checked. On a push to main the commit is
+      # the only thing there is.
+      - name: Check the pull request description
+        if: github.event_name == 'pull_request'
+        env:
+          SUBJECT: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
+          EXEMPT: ${{ contains(github.event.pull_request.labels.*.name, 'no-user-note') }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$BODY" > /tmp/description.md
+          ARGS=(--subject "$SUBJECT" --body-file /tmp/description.md)
+          if [ "$EXEMPT" = "true" ]; then ARGS+=(--exempt); fi
+          scripts/check-notes.sh "${ARGS[@]}"
+
+      # The backstop: the same check, on the commits that actually landed.
+      # A pull request that was labelled instead of carrying the reason in
+      # its body passes the check above and fails here, which is why the
+      # label is not enough on its own.
+      - name: Check the commits that landed on main
+        if: github.event_name == 'push'
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after }}
+        run: |
+          set -euo pipefail
+          RANGE="$BEFORE..$AFTER"
+          # A branch pushed for the first time, or a force-push, leaves no
+          # "before" commit to compare against.
+          if ! git rev-parse --verify -q "$BEFORE" >/dev/null; then
+            RANGE="$AFTER"
+          fi
+          scripts/check-range-notes.sh "$RANGE"
+
   # The emulator tour, in the same workflow as the build so it can take the
   # APK straight from the artifact the build just produced — no second build,
   # and no cross-run download.
