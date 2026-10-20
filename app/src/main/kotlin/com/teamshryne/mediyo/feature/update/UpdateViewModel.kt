@@ -8,6 +8,8 @@ import com.teamshryne.mediyo.data.update.UpdateChannel
 import com.teamshryne.mediyo.data.update.UpdateCheck
 import com.teamshryne.mediyo.data.update.UpdateInfo
 import com.teamshryne.mediyo.data.update.UpdatePrefs
+import com.teamshryne.mediyo.data.update.ChangelogEntry
+import com.teamshryne.mediyo.data.update.notesSince
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -38,8 +40,19 @@ class UpdateViewModel @Inject constructor(
         data class Error(val message: String) : State
     }
 
+    /** What changed between the build the user is running and the newest one. */
+    sealed interface ChangelogState {
+        data object Idle : ChangelogState
+        data object Loading : ChangelogState
+        data class Ready(val entries: List<ChangelogEntry>) : ChangelogState
+        data class Failed(val message: String) : ChangelogState
+    }
+
     private val _state = MutableStateFlow<State>(State.Idle)
     val state: StateFlow<State> = _state.asStateFlow()
+
+    private val _changelog = MutableStateFlow<ChangelogState>(ChangelogState.Idle)
+    val changelog: StateFlow<ChangelogState> = _changelog.asStateFlow()
 
     /** Which track this install follows. */
     val channel: StateFlow<UpdateChannel> =
@@ -85,7 +98,12 @@ class UpdateViewModel @Inject constructor(
         viewModelScope.launch {
             prefs.setChannel(channel)
             _state.value = State.Idle
+            // The notes are per channel: a nightly carries the nightlies on
+            // top of the releases, and the stable feed carries only the
+            // releases. The old ones are not right any more.
+            _changelog.value = ChangelogState.Idle
             manualCheck()
+            loadChangelog()
         }
     }
 
@@ -112,5 +130,27 @@ class UpdateViewModel @Inject constructor(
 
     fun dismiss() {
         _state.value = State.Idle
+    }
+
+    /**
+     * Load what changed since the build this one is.
+     *
+     * The history is fetched rather than guessed: it is published with each
+     * release, and the last copy is kept on disk so the notes are readable
+     * without a connection.
+     */
+    fun loadChangelog() {
+        if (BuildConfig.DEBUG) return
+        if (_changelog.value is ChangelogState.Loading) return
+        viewModelScope.launch {
+            _changelog.value = ChangelogState.Loading
+            val track = channel.value
+            val history = updater.fetchChangelog(track) ?: updater.cachedChangelog(track)
+            _changelog.value = if (history == null) {
+                ChangelogState.Failed("Could not load the release notes")
+            } else {
+                ChangelogState.Ready(history.notesSince(BuildConfig.VERSION_CODE, track))
+            }
+        }
     }
 }

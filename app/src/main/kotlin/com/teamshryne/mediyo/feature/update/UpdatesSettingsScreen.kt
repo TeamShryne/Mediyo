@@ -31,6 +31,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -105,6 +106,13 @@ fun UpdatesSettingsScreen(
 ) {
     val state by vm.state.collectAsState()
     val channel by vm.channel.collectAsState()
+    val changelog by vm.changelog.collectAsState()
+
+    // The notes are worth having without being asked for, and they are small:
+    // load them when the screen opens, once.
+    LaunchedEffect(Unit) {
+        if (!BuildConfig.DEBUG) vm.loadChangelog()
+    }
 
     Scaffold(
         // Zero insets: nested inside the outer app Scaffold, whose padding
@@ -176,6 +184,12 @@ fun UpdatesSettingsScreen(
                 ChannelCard(
                     channel = channel,
                     onSelect = { vm.setChannel(it) },
+                )
+            }
+            item {
+                WhatsNewCard(
+                    state = changelog,
+                    onReload = { vm.loadChangelog() },
                 )
             }
             item {
