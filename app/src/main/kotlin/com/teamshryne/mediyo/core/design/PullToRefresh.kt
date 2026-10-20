@@ -76,8 +76,12 @@ fun PullToRefreshList(
     val connection = remember(listState, threshold, maxPull) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (source != NestedScrollSource.UserInput) return Offset.Zero
                 if (refreshingNow) return Offset.Zero
+                // Only a finger counts. A programmatic scroll (scrollToItem and
+                // friends) must not be mistaken for a pull.
+                // [NestedScrollSource.Drag] is the user-input source in this
+                // Compose version; later ones renamed it to UserInput.
+                if (source != NestedScrollSource.Drag) return Offset.Zero
                 val atTop = listState.firstVisibleItemIndex == 0 &&
                     listState.firstVisibleItemScrollOffset == 0
                 if (available.y > 0f) {
@@ -100,7 +104,8 @@ fun PullToRefreshList(
                 return Offset.Zero
             }
 
-            override suspend fun onPostFling(consumed: Offset, available: Offset): Velocity {
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                // The finger left the screen: let the content go back.
                 if (pull > 0f) pull = 0f
                 return Velocity.Zero
             }
