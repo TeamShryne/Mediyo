@@ -2,8 +2,10 @@ package com.teamshryne.mediyo.feature.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -16,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -35,17 +38,23 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.teamshryne.mediyo.core.design.MediaCard
 import com.teamshryne.mediyo.core.design.MediaCardShimmer
 import com.teamshryne.mediyo.core.design.SectionHeader
+import com.teamshryne.mediyo.core.design.TrackOverflowIcon
 import com.teamshryne.mediyo.domain.model.Track
+import kotlinx.coroutines.flow.collect
 
 /** Fake search field: typing beats scrolling, so home offers it before anything else. */
 @Composable
@@ -71,15 +80,24 @@ fun HomeSearchBar(modifier: Modifier = Modifier, onOpen: () -> Unit) {
     }
 }
 
-/** One quick-pick tile: thumb + title, dense enough for six in a glance. */
+/** One row of a quick-picks column: artwork, title, detail, overflow menu. */
 @Composable
-private fun QuickPickTile(track: Track, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun QuickPickColumnRow(
+    track: Track,
+    highlighted: Boolean,
+    isPlaying: Boolean,
+    onClick: () -> Unit,
+    onMenu: () -> Unit
+) {
     Row(
-        modifier.fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+        modifier = Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(
+                if (highlighted) MaterialTheme.colorScheme.surfaceContainerHigh
+                else androidx.compose.ui.graphics.Color.Transparent
+            )
             .clickable(onClick = onClick)
-            .padding(end = 8.dp),
+            .padding(horizontal = 8.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AsyncImage(
@@ -87,34 +105,128 @@ private fun QuickPickTile(track: Track, onClick: () -> Unit, modifier: Modifier 
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier.size(56.dp)
+                .clip(RoundedCornerShape(10.dp))
                 .background(MaterialTheme.colorScheme.surfaceContainerHighest)
         )
-        Spacer(Modifier.width(10.dp))
-        Text(
-            track.title,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 2, overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                track.title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = if (isPlaying) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurface,
+                maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                trackDetail(track),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
+        }
+        TrackOverflowIcon(onClick = onMenu)
     }
 }
 
+/** "Artist · album" — or the length when there is no album to name. */
+private fun trackDetail(track: Track): String {
+    val artist = track.artists.joinToString().ifBlank { "Unknown artist" }
+    val second = track.album?.takeIf { it.isNotBlank() }
+        ?: track.duration?.takeIf { it.isNotBlank() }
+    return if (second.isNullOrBlank()) artist else "$artist  •  $second"
+}
+
 /**
- * Quick picks: 2 columns × up to 3 rows. The whole point is no scrolling —
- * your most-likely-next-tap is always above the fold.
+ * The column carousel: four tracks stacked per column, sideways scroll that
+ * snaps from column to column, and the column after it peeking in from the
+ * right so it is obvious there is more.
+ *
+ * The focused column's top row carries the highlight card, so the emphasis
+ * sticks to whichever column you are looking at.
  */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun QuickPickGrid(tracks: List<Track>, modifier: Modifier = Modifier, onPick: (Track) -> Unit) {
-    Column(modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        tracks.chunked(2).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { t -> QuickPickTile(t, { onPick(t) }, Modifier.weight(1f)) }
-                if (row.size == 1) Spacer(Modifier.weight(1f))
+fun TrackColumnCarousel(
+    tracks: List<Track>,
+    playingId: String?,
+    onPick: (Track) -> Unit,
+    onMenu: (Track) -> Unit,
+    onNearEnd: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (tracks.isEmpty()) return
+    val columns = remember(tracks) { tracks.chunked(COLUMN_SIZE) }
+    val listState = rememberLazyListState()
+    val focused = listState.firstVisibleItemIndex
+
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        val columnWidth = maxWidth - COLUMN_PEEK
+        LaunchedEffect(listState, columns.size) {
+            snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
+                .collect { last ->
+                    if (last >= columns.size - 1) onNearEnd()
+                }
+        }
+        LazyRow(
+            state = listState,
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(start = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            flingBehavior = rememberSnapFlingBehavior(listState)
+        ) {
+            itemsIndexed(columns, key = { i, _ -> "qp_$i" }) { index, column ->
+                Column(Modifier.width(columnWidth)) {
+                    column.forEachIndexed { row, track ->
+                        QuickPickColumnRow(
+                            track = track,
+                            highlighted = index == focused && row == 0,
+                            isPlaying = playingId != null && playingId == track.videoId,
+                            onClick = { onPick(track) },
+                            onMenu = { onMenu(track) }
+                        )
+                    }
+                }
             }
         }
     }
 }
+
+/**
+ * A "Because you heard X" shelf: the tracks the graph found by branching from
+ * one seed, in the same column carousel as quick picks.
+ */
+@Composable
+fun BecauseShelf(
+    shelf: DiscoveryShelf,
+    playingId: String?,
+    onPick: (Track) -> Unit,
+    onMenu: (Track) -> Unit,
+    onNearEnd: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (shelf.tracks.isEmpty()) return
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        SectionHeader("Because you heard ${shelf.title}")
+        TrackColumnCarousel(
+            tracks = shelf.tracks,
+            playingId = playingId,
+            onPick = onPick,
+            onMenu = onMenu,
+            onNearEnd = onNearEnd
+        )
+    }
+}
+
+/** Tracks per column in the quick-picks carousel. */
+private const val COLUMN_SIZE = 4
+
+/**
+ * How much of the next column stays visible on the right. Big enough that
+ * the next column's artwork is unmistakably there, small enough that the
+ * focused column still owns the screen.
+ */
+private val COLUMN_PEEK = 56.dp
 
 /**
  * Rotation feature: the week's #1 gets a hero card (identity — "my week in
