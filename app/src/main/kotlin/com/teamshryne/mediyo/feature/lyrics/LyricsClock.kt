@@ -91,7 +91,7 @@ internal class LyricsClock {
         if (sampleElapsedMs <= 0L) {
             primed = false
             anchorPos = samplePos
-            anchorWall = nowElapsedMs
+            anchorWallMs = nowElapsedMs
             appliedRate = rate
             lastSamplePos = samplePos
             lastSampleWallMs = 0L
