@@ -26,11 +26,13 @@ import com.teamshryne.mediyo.data.cache.MIGRATION_4_5
 import com.teamshryne.mediyo.data.cache.MIGRATION_5_6
 import com.teamshryne.mediyo.data.cache.MIGRATION_6_7
 import com.teamshryne.mediyo.data.cache.MIGRATION_7_8
+import com.teamshryne.mediyo.data.cache.MIGRATION_8_9
 import com.teamshryne.mediyo.data.cache.PlayerCache
 import com.teamshryne.mediyo.data.cache.StoragePrefs
 import com.teamshryne.mediyo.data.cache.StreamDataSource
 import com.teamshryne.mediyo.data.cache.StreamUrlCache
 import com.teamshryne.mediyo.data.local.HistoryDao
+import com.teamshryne.mediyo.data.local.DiscoveryDao
 import com.teamshryne.mediyo.data.local.UserEventDao
 import com.teamshryne.mediyo.data.local.LikedTrackDao
 import com.teamshryne.mediyo.data.local.LocalPlaylistDao
@@ -55,7 +57,7 @@ object AppModule {
     @Singleton
     fun provideDb(@ApplicationContext ctx: Context): MediyoDb =
         Room.databaseBuilder(ctx, MediyoDb::class.java, "mediyo.db")
-            .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+            .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
             .fallbackToDestructiveMigration()
             .build()
 
@@ -105,6 +107,7 @@ object AppModule {
     @Provides fun provideUserEventDao(db: MediyoDb): UserEventDao = db.userEventDao()
     @Provides fun provideFollowedArtistDao(db: MediyoDb): com.teamshryne.mediyo.data.local.FollowedArtistDao = db.followedArtistDao()
     @Provides fun provideSavedCollectionDao(db: MediyoDb): com.teamshryne.mediyo.data.local.SavedCollectionDao = db.savedCollectionDao()
+    @Provides fun provideDiscoveryDao(db: MediyoDb): DiscoveryDao = db.discoveryDao()
 
     @Provides @Singleton fun provideBetterLyricsApi(): BetterLyricsApi = BetterLyricsApi()
     @Provides @Singleton fun provideLyricsPlusApi(): LyricsPlusApi = LyricsPlusApi()

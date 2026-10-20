@@ -75,9 +75,6 @@ data class WeekStats(val plays: Int, val minutes: Int)
 /** Context shelf: music follows the clock (commutes, late nights are real genres). */
 data class DaypartShelves(val night: List<Track>, val morning: List<Track>)
 
-/** Radio-grown discovery shelf: familiar seed, unfamiliar tracks. */
-data class RadioShelf(val seedTitle: String, val seedVideoId: String?, val tracks: List<Track>)
-
 /** Week-rotation entry: the count is the headline ("played 12 times"). */
 data class WeekTop(val track: Track, val plays: Int)
 

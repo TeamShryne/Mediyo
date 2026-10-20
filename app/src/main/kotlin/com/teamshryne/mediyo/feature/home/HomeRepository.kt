@@ -59,10 +59,44 @@ class HomeRepository @Inject constructor(
     }
 
     /**
-     * Quick picks: top 6 of the scored pool. Six tiles = one glance, zero
-     * scrolling (decision fatigue: more options, fewer taps).
+     * Quick picks: top of the scored pool. The carousel shows them in
+     * columns of four, so eight fills two columns and leaves room for the
+     * shuffled sample the queue graph contributes.
      */
-    fun flowQuickPicks(): Flow<List<Track>> = flowScored().map { it.take(6).map { s -> s.track } }
+    fun flowQuickPicks(): Flow<List<Track>> = flowScored().map { it.take(8).map { s -> s.track } }
+
+    /**
+     * Every play ever recorded, since the app was installed.
+     *
+     * This is what decides whether home may still update itself: the first
+     * handful of songs a listener ever plays get an instant reaction, and
+     * after that the shelves wait for the app to restart or for a pull to
+     * refresh.
+     */
+    fun flowTotalPlays(): Flow<Int> =
+        history.flowHistory().map { rows -> rows.sumOf { it.playCount } }
+
+    /**
+     * Liked songs, as playable tracks. They were a count and nothing else —
+     * a track you liked but never played never showed up anywhere.
+     */
+    fun flowLikedTracks(): Flow<List<Track>> = liked.flowLiked().map { rows ->
+        rows.map { row ->
+            Track(
+                videoId = row.videoId,
+                title = row.title,
+                artists = row.artist.split(",").map { it.trim() }.filter { it.isNotEmpty() },
+                artistIds = row.artistIds.dbIdList(),
+                album = row.album,
+                albumId = row.albumId,
+                channelName = row.channelName,
+                channelId = row.channelId,
+                artworkUrl = row.artworkUrl,
+                duration = row.duration,
+                category = row.category
+            )
+        }
+    }
 
     /**
      * Heavy rotation: most plays started in the last 7 days. Identity shelf —

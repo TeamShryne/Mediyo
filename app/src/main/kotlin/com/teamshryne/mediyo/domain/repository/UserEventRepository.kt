@@ -8,6 +8,12 @@ object UserEventTypes {
     const val SEARCH = "search"
     const val SEARCH_TAP = "search_tap"
     const val HOME_TAP = "home_tap"
+    /**
+     * A track that was heard for the full ten seconds — a real play, as
+     * opposed to a tap. The algorithm reads this; the home screen watches
+     * it to decide whether it may update itself.
+     */
+    const val PLAY_CONFIRMED = "play_confirmed"
     const val VIEW_ALBUM = "view_album"
     const val VIEW_PLAYLIST = "view_playlist"
     const val VIEW_ARTIST = "view_artist"

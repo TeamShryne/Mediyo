@@ -244,3 +244,48 @@ interface UserEventDao {
     @Query("DELETE FROM user_events WHERE id NOT IN (SELECT id FROM user_events ORDER BY createdAt DESC LIMIT :keep)")
     suspend fun prune(keep: Int)
 }
+
+/**
+ * The discovery catalogue: every track the queue graph has found, grouped by
+ * the taste seed it branched from. That grouping is what turns a pile of
+ * neighbours into "Because you heard X" shelves.
+ *
+ * A track already in the catalogue is never rediscovered — the exclusion set
+ * for the next expansion is exactly this table.
+ */
+@Dao
+interface DiscoveryDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(items: List<DiscoveryItemEntity>)
+
+    /** The whole catalogue, oldest first. */
+    @Query("SELECT * FROM discovery_items ORDER BY addedAt ASC, rank ASC")
+    suspend fun all(): List<DiscoveryItemEntity>
+
+    /** Every id already found: never rediscover these. */
+    @Query("SELECT videoId FROM discovery_items")
+    suspend fun knownIds(): List<String>
+
+    /**
+     * Found but not yet used as a branch parent — the next hop outward.
+     *
+     * Deliberately *not* restricted to unserved rows: a track we already
+     * showed is still a perfectly good place to queue from, and its
+     * neighbourhood is where the new material is.
+     */
+    @Query(
+        "SELECT * FROM discovery_items WHERE expandedAt IS NULL " +
+            "ORDER BY depth ASC, addedAt ASC LIMIT :limit"
+    )
+    suspend fun frontier(limit: Int): List<DiscoveryItemEntity>
+
+    @Query("UPDATE discovery_items SET expandedAt = :now WHERE videoId IN (:ids)")
+    suspend fun markExpanded(ids: List<String>, now: Long)
+
+    /** The catalogue only grows; old branches can go. */
+    @Query("DELETE FROM discovery_items WHERE addedAt < :before")
+    suspend fun evict(before: Long)
+
+    @Query("DELETE FROM discovery_items")
+    suspend fun clearAll()
+}

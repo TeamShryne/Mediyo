@@ -19,6 +19,8 @@ import com.teamshryne.mediyo.data.local.LocalPlaylistEntity
 import com.teamshryne.mediyo.data.local.LocalPlaylistEntryEntity
 import com.teamshryne.mediyo.data.local.SavedCollectionDao
 import com.teamshryne.mediyo.data.local.SavedCollectionEntity
+import com.teamshryne.mediyo.data.local.DiscoveryDao
+import com.teamshryne.mediyo.data.local.DiscoveryItemEntity
 @Entity(tableName = "kv_cache")
 data class KvCache(
     @PrimaryKey val key: String,
@@ -44,8 +46,8 @@ interface KvDao {
 data class CacheStatRow(val type: String, val cnt: Long, val bytes: Long?)
 
 @Database(
-    entities = [KvCache::class, LocalPlaylistEntity::class, LocalPlaylistEntryEntity::class, LikedTrackEntity::class, HistoryEntryEntity::class, HistoryPlayEventEntity::class, UserEventEntity::class, FollowedArtistEntity::class, SavedCollectionEntity::class, DownloadedTrackEntity::class],
-    version = 8,
+    entities = [KvCache::class, LocalPlaylistEntity::class, LocalPlaylistEntryEntity::class, LikedTrackEntity::class, HistoryEntryEntity::class, HistoryPlayEventEntity::class, UserEventEntity::class, FollowedArtistEntity::class, SavedCollectionEntity::class, DownloadedTrackEntity::class, DiscoveryItemEntity::class],
+    version = 9,
     exportSchema = false
 )
 abstract class MediyoDb : RoomDatabase() {
@@ -58,6 +60,7 @@ abstract class MediyoDb : RoomDatabase() {
     abstract fun savedCollectionDao(): SavedCollectionDao
     abstract fun followedArtistDao(): com.teamshryne.mediyo.data.local.FollowedArtistDao
     abstract fun downloadedTrackDao(): DownloadedTrackDao
+    abstract fun discoveryDao(): DiscoveryDao
 }
 
 data class CacheStats(val totalBytes: Long, val byType: Map<String, Pair<Long,Long>>)
@@ -130,6 +133,34 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
                 "artworkUrl TEXT, " +
                 "downloadedAt INTEGER NOT NULL)"
         )
+    }
+}
+/**
+ * v8 → v9: discovery graph. New discovery_items table keeps the queue-expanded
+ * candidates on device, so home can offer unseen tracks across launches
+ * instead of re-fetching (and re-showing) the same neighbourhoods.
+ */
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS discovery_items (" +
+                "videoId TEXT NOT NULL PRIMARY KEY, " +
+                "title TEXT NOT NULL, " +
+                "artist TEXT NOT NULL, " +
+                "artistIds TEXT, " +
+                "artworkUrl TEXT, " +
+                "album TEXT, " +
+                "duration TEXT, " +
+                "depth INTEGER NOT NULL, " +
+                "rootSeedId TEXT NOT NULL, " +
+                "rootTitle TEXT, " +
+                "parentVideoId TEXT NOT NULL, " +
+                "rank INTEGER NOT NULL, " +
+                "addedAt INTEGER NOT NULL, " +
+                "expandedAt INTEGER)"
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_discovery_items_expandedAt ON discovery_items(expandedAt)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_discovery_items_addedAt ON discovery_items(addedAt)")
     }
 }
 /**
