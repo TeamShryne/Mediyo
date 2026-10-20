@@ -19,14 +19,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import com.teamshryne.mediyo.data.lyrics.LyricsFontWeight
 import com.teamshryne.mediyo.data.lyrics.LyricsStyle
 import com.teamshryne.mediyo.data.lyrics.LyricsStylePrefs
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
 import kotlin.math.roundToInt
 
@@ -34,44 +31,29 @@ import kotlin.math.roundToInt
  * How the lyrics are drawn — size, weight and line spacing.
  *
  * Lives under Appearance (`settings/appearance/lyrics`); the *content* side
- * (which source wins) stays in `settings/lyrics`.
+ * (which source wins) stays in `settings/content/lyrics`.
  */
 @HiltViewModel
 class LyricsAppearanceVm @Inject constructor(
     private val stylePrefs: LyricsStylePrefs
 ) : ViewModel() {
-    val styleFlow = stylePrefs.styleFlow
+    /**
+     * What the UI draws. [LyricsStylePrefs.live] is in-memory, so the
+     * slider, its value label and the preview all move with the finger —
+     * only the write to disk is debounced. Binding them to the DataStore
+     * flow instead is what made the sliders feel stiff and rubbery: the
+     * value only moved once a write and a re-read had come back, so the
+     * thumb fought a stale value and jumped on release.
+     */
+    val style: StateFlow<LyricsStyle> = stylePrefs.live
 
-    // Sliders write on every drag frame — debounce so a drag burst doesn't
-    // thrash DataStore.
-    private var sizeJob: Job? = null
-    private var spacingJob: Job? = null
+    fun setFontSize(sp: Float) = stylePrefs.setFontSize(sp)
 
-    fun setFontSize(sp: Float) {
-        sizeJob?.cancel()
-        sizeJob = viewModelScope.launch {
-            delay(300)
-            stylePrefs.setFontSize(sp)
-        }
-    }
+    fun setWeight(weight: LyricsFontWeight) = stylePrefs.setWeight(weight)
 
-    fun setWeight(weight: LyricsFontWeight) {
-        viewModelScope.launch { stylePrefs.setWeight(weight) }
-    }
+    fun setLineSpacing(dp: Float) = stylePrefs.setLineSpacing(dp)
 
-    fun setLineSpacing(dp: Float) {
-        spacingJob?.cancel()
-        spacingJob = viewModelScope.launch {
-            delay(300)
-            stylePrefs.setLineSpacing(dp)
-        }
-    }
-
-    fun resetStyle() {
-        sizeJob?.cancel()
-        spacingJob?.cancel()
-        viewModelScope.launch { stylePrefs.reset() }
-    }
+    fun resetStyle() = stylePrefs.reset()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -80,7 +62,7 @@ fun LyricsAppearanceScreen(
     nav: androidx.navigation.NavController? = null,
     vm: LyricsAppearanceVm = hiltViewModel()
 ) {
-    val style by vm.styleFlow.collectAsState(initial = LyricsStyle())
+    val style by vm.style.collectAsState()
 
     Scaffold(
         // Zero insets: this Scaffold is nested inside the outer app Scaffold,

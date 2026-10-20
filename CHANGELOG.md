@@ -52,9 +52,10 @@ lyrics move with you right away.
 
 **You decide how the lyrics look.** *Settings → Appearance → Lyrics appearance*
 is a new screen with a live preview: change the text size, the font weight
-(anything from medium to black) and the distance between the lines. The player
-picks the new look up straight away. Which lyrics you get — and which source
-wins — is still under *Settings → Lyrics*.
+(anything from medium to black) and the distance between the lines. The
+sliders follow your finger without lagging behind, and the player picks the
+new look up straight away. Which lyrics you get — and which source wins — is
+still under *Settings → Lyrics*.
 
 ## 0.8.0
 

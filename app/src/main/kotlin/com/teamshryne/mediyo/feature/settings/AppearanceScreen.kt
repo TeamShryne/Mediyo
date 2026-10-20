@@ -44,7 +44,6 @@ import androidx.lifecycle.viewModelScope
 import com.teamshryne.mediyo.data.appearance.AppearancePrefs
 import com.teamshryne.mediyo.data.appearance.PlayerBgStyle
 import com.teamshryne.mediyo.data.appearance.TabStyle
-import com.teamshryne.mediyo.data.lyrics.LyricsStyle
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -133,7 +132,7 @@ fun AppearanceScreen(
 ) {
     val tab by vm.style.collectAsState()
     val bg by vm.bgStyle.collectAsState()
-    val lyrics by lyricsVm.styleFlow.collectAsState(initial = LyricsStyle())
+    val lyrics by lyricsVm.style.collectAsState()
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),

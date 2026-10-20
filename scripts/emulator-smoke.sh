@@ -95,7 +95,7 @@ for t in home search library settings; do
 done
 
 # ── Settings sub-screens ────────────────────────────────────────────────────
-for t in settings/lyrics settings/updates settings/appearance settings/appearance/tabs \
+for t in settings/content/lyrics settings/updates settings/appearance settings/appearance/tabs \
          settings/appearance/player settings/appearance/lyrics settings/equalizer settings/storage; do
   step "screen: $t"
   send go --es route "$t"

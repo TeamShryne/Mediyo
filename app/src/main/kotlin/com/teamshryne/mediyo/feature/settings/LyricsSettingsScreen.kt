@@ -38,8 +38,9 @@ import javax.inject.Inject
 /**
  * Where lyrics come from and in which order the sources are tried.
  *
- * The *look* of the lyrics (size / weight / spacing) lives in the Appearance
- * section — `settings/appearance/lyrics`.
+ * The *content* side of the lyrics — `settings/content/lyrics`. The *look* of
+ * the lyrics (size / weight / spacing) lives in the Appearance section —
+ * `settings/appearance/lyrics`.
  */
 @HiltViewModel
 class LyricsSettingsVm @Inject constructor(
