@@ -214,6 +214,8 @@ fun FullPlayer(
     // Lyrics VM — scoped to FullPlayer, scalable: add new animators without touching this logic
     val lyricsVm: LyricsViewModel = hiltViewModel()
     val lyricsState by lyricsVm.state.collectAsState()
+    // Size / weight / line spacing of the lyrics (Settings → Lyrics).
+    val lyricsStyle by lyricsVm.style.collectAsState()
 
     // Load lyrics when track changes (respect lyrics mode or prefetch? load regardless for instant switch)
     LaunchedEffect(state.videoId, state.title, state.artist) {
@@ -329,7 +331,12 @@ fun FullPlayer(
                             isPlaying = state.isPlaying,
                             onSeek = { ms -> playerVm?.seekToMs(ms) },
                             onRetry = { lyricsVm.retry(trackForMenu, state.durationMs.takeIf { it > 0 }) },
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier.fillMaxSize(),
+                            // The word highlight advances with the playback
+                            // rate, so a slowed-down song stays in sync.
+                            playbackSpeed = playback.speed,
+                            positionSampleElapsedMs = state.positionSampleElapsedMs,
+                            style = lyricsStyle
                         )
                     } else {
                         Column(

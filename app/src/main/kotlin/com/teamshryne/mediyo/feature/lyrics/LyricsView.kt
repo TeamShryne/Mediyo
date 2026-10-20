@@ -71,6 +71,7 @@ import com.teamshryne.mediyo.core.design.fadingEdge
 import com.teamshryne.mediyo.data.lyrics.LyricLine
 import com.teamshryne.mediyo.data.lyrics.LyricTrack
 import com.teamshryne.mediyo.data.lyrics.LyricsSource
+import com.teamshryne.mediyo.data.lyrics.LyricsStyle
 import com.teamshryne.mediyo.feature.lyrics.animation.LyricsAnimationConfig
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -104,7 +105,20 @@ fun SyncedLyricsView(
     onSeek: (Long) -> Unit,
     onRetry: () -> Unit,
     config: LyricsAnimationConfig = LyricsAnimationConfig(),
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /**
+     * Current playback rate (1.0 = normal). The word highlight advances with
+     * this rate, so slowing the song down does not make the lyrics lag or
+     * snap back.
+     */
+    playbackSpeed: Float = 1f,
+    /**
+     * Wall-clock time the [positionMs] sample was taken at
+     * (`SystemClock.elapsedRealtime()`); 0 when unknown.
+     */
+    positionSampleElapsedMs: Long = 0L,
+    /** Size / weight / line spacing of the lyrics. */
+    style: LyricsStyle = LyricsStyle()
 ) {
     when (state) {
         LyricsUiState.Idle, LyricsUiState.Loading -> LyricsLoading(modifier)
@@ -115,7 +129,10 @@ fun SyncedLyricsView(
             isPlaying = isPlaying,
             onSeek = onSeek,
             config = config,
-            modifier = modifier
+            modifier = modifier,
+            playbackSpeed = playbackSpeed,
+            positionSampleElapsedMs = positionSampleElapsedMs,
+            style = style
         )
         LyricsUiState.NotFound -> LyricsEmpty("No synced lyrics for this track", onRetry, modifier)
         LyricsUiState.NeedsApiKey -> LyricsEmpty("Not cached yet\nPlay once via BetterLyrics extension to prime cache", onRetry, modifier)
@@ -152,7 +169,6 @@ private fun LyricsEmpty(msg: String, onRetry: () -> Unit, modifier: Modifier = M
 
 private const val ANCHOR_RATIO = 0.35f
 private val FALLBACK_H_DP = 64.dp
-private val GAP_DP = 14.dp
 private val FADE_TOP_DP = 90.dp
 private val FADE_BOTTOM_DP = 120.dp
 
@@ -164,7 +180,10 @@ private fun SyncedLyricsContent(
     isPlaying: Boolean,
     onSeek: (Long) -> Unit,
     config: LyricsAnimationConfig,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    playbackSpeed: Float = 1f,
+    positionSampleElapsedMs: Long = 0L,
+    style: LyricsStyle = LyricsStyle()
 ) {
     val lines = track.lines
     // Provider credit renders as a trailing footer item after the last line.
@@ -174,48 +193,44 @@ private fun SyncedLyricsContent(
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
 
-    // smoothPosition — frame-level interpolation like Metrolist (withFrameNanos)
-    // Use UpdatedState so the frame loop sees fresh positionMs/isPlaying without restarting
+    // ── Smooth, rate-aware position ────────────────────────────────────────
+    // The player publishes a position every ~500 ms. [LyricsClock] anchors on
+    // every sample and interpolates with the *playback rate*, so the word
+    // highlight moves at the speed of the music — no more running ahead and
+    // snapping back when the song is slowed down.
     val posState by rememberUpdatedState(positionMs)
+    val sampleAtState by rememberUpdatedState(positionSampleElapsedMs)
     val playingState by rememberUpdatedState(isPlaying)
-    var smoothPos by remember { mutableLongStateOf(positionMs) }
-    var lastPlayerPos by remember { mutableLongStateOf(positionMs) }
-    var lastUpdateTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val speedState by rememberUpdatedState(playbackSpeed)
+    val linesState by rememberUpdatedState(lines)
 
-    LaunchedEffect(positionMs, isPlaying) {
-        // any external tick/seek/paused update instantly re-bases
-        lastPlayerPos = positionMs
-        lastUpdateTime = System.currentTimeMillis()
-        smoothPos = positionMs
-    }
+    var smoothPos by remember { mutableLongStateOf(positionMs) }
+    var currentIdx by remember { mutableIntStateOf(findCurrentLine(lines, positionMs)) }
+    val clock = remember { LyricsClock() }
+
     LaunchedEffect(track) {
-        // fresh track → reset
-        lastPlayerPos = posState
-        lastUpdateTime = System.currentTimeMillis()
+        // fresh track → reset the clock and the anchor
+        clock.reset()
         smoothPos = posState
+        currentIdx = findCurrentLine(linesState, smoothPos)
+    }
+
+    LaunchedEffect(Unit) {
         while (isActive) {
-            withFrameNanos { _ ->
-                val now = System.currentTimeMillis()
-                val curPos = posState
-                val curPlaying = playingState
-                // detect tick or seek jump (position jumps > 800ms or new value)
-                if (curPos != lastPlayerPos) {
-                    lastPlayerPos = curPos
-                    lastUpdateTime = now
-                    smoothPos = curPos
-                } else if (curPlaying) {
-                    val elapsed = now - lastUpdateTime
-                    smoothPos = lastPlayerPos + elapsed
-                } else {
-                    smoothPos = lastPlayerPos
-                }
+            withFrameNanos {
+                val now = android.os.SystemClock.elapsedRealtime()
+                val p = clock.positionAt(
+                    samplePos = posState,
+                    sampleElapsedMs = sampleAtState,
+                    isPlaying = playingState,
+                    nowElapsedMs = now,
+                    declaredRate = speedState
+                )
+                smoothPos = p
+                val idx = findCurrentLine(linesState, p)
+                if (idx != currentIdx) currentIdx = idx
             }
         }
-    }
-
-    var currentIdx by remember { mutableIntStateOf(findCurrentLine(lines, positionMs)) }
-    LaunchedEffect(smoothPos, lines) {
-        currentIdx = findCurrentLine(lines, smoothPos)
     }
 
     // heights & positions — Metrolist anchor logic
@@ -243,11 +258,16 @@ private fun SyncedLyricsContent(
         val maxHeightPx = boxConstraints.maxHeight.toFloat()
         val maxWidthPx = boxConstraints.maxWidth
         val anchorY = maxHeightPx * ANCHOR_RATIO
-        val fallbackH = with(density) { FALLBACK_H_DP.toPx() }
-        val gapPx = with(density) { GAP_DP.toPx() }
+        // Placeholder height for lines that have not been measured yet — it
+        // follows the chosen font size so the first frame is not off.
+        val fallbackH = with(density) {
+            maxOf(FALLBACK_H_DP.value, style.fontSizeSp * 1.8f + 16f).dp.toPx()
+        }
+        // Distance between two lyric lines — user setting.
+        val gapPx = with(density) { style.lineSpacingDp.dp.toPx() }
 
         // positions map relative to active index (credit footer counts as last item)
-        val positions = remember(itemHeights.toMap(), currentIdx, lines, hasCredit) {
+        val positions = remember(itemHeights.toMap(), currentIdx, lines, hasCredit, gapPx) {
             val map = mutableMapOf<Int, Float>()
             if (currentIdx == -1 || lines.isEmpty()) return@remember map
             map[currentIdx] = 0f
@@ -266,7 +286,7 @@ private fun SyncedLyricsContent(
             map
         }
 
-        val minOffset = remember(itemHeights.toMap(), lines, currentIdx, anchorY, hasCredit) {
+        val minOffset = remember(itemHeights.toMap(), lines, currentIdx, anchorY, hasCredit, gapPx) {
             if (lines.isEmpty() || currentIdx == -1) return@remember 0f
             var totalBelow = 0f
             for (i in currentIdx until itemCount - 1) {
@@ -276,7 +296,7 @@ private fun SyncedLyricsContent(
             val lastH = itemHeights[itemCount - 1]?.toFloat() ?: fallbackH
             with(density) { 80.dp.toPx() } - anchorY - totalBelow - lastH
         }
-        val maxOffset = remember(itemHeights.toMap(), lines, currentIdx, maxHeightPx, anchorY) {
+        val maxOffset = remember(itemHeights.toMap(), lines, currentIdx, maxHeightPx, anchorY, gapPx) {
             if (lines.isEmpty() || currentIdx == -1) return@remember 0f
             var totalAbove = 0f
             for (i in 0 until currentIdx) {
@@ -375,6 +395,7 @@ private fun SyncedLyricsContent(
                         displayedIdx = displayedIdx,
                         smoothPos = smoothPos,
                         availableWidthPx = availableWidth,
+                        style = style,
                         onSeek = onSeek
                     )
                 }
@@ -423,6 +444,7 @@ private fun MetrolistLine(
     displayedIdx: Int,
     smoothPos: Long,
     availableWidthPx: Int,
+    style: LyricsStyle,
     onSeek: (Long) -> Unit
 ) {
     // alpha like Metrolist — psychology-pleasing fade distance
@@ -458,12 +480,14 @@ private fun MetrolistLine(
 
     // no size pop — keep uniform size, only alpha/word-glow animates (per user request)
     val isBg = line.words.any { it.isBackground }
-    val baseFontSize = if (isBg) 19.sp else 22.sp
+    // Size and weight come from the user's lyrics style; background vocals
+    // stay a little smaller so they read as a second voice.
+    val baseFontSize = if (isBg) (style.fontSizeSp * 0.86f).sp else style.fontSizeSp.sp
     val baseStyleCenter = TextStyle(
         fontSize = baseFontSize,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight(style.weight.weightValue),
         fontStyle = if (isBg) FontStyle.Italic else FontStyle.Normal,
-        lineHeight = (baseFontSize.value * 1.28f).sp,
+        lineHeight = (baseFontSize.value * 1.22f).sp,
         letterSpacing = (-0.4).sp,
         textAlign = TextAlign.Center,
         color = Color.White,
