@@ -17,6 +17,15 @@ know there is more. Every row has the artwork, the title and an overflow menu,
 and the column you are on is the one that stands out. There is a "Play all"
 button next to the heading too.
 
+**Quick picks plays new songs, not just old favourites.** It now mixes the
+tracks you are most likely to tap next with a shuffled handful of songs the
+app found by queueing — and the way it looks for those is deliberately
+random, so the same handful never comes back and the shelf never settles into
+one artist on repeat.
+
+**The new shelves look like quick picks.** "Because you heard &lt;song&gt;" uses
+the same columns of four, with the same snapping and the same overflow menu.
+
 **Home finally tells you *why* it is showing you something.** The shelves now
 read "Because you heard <song>", "Because you loved it", "Because you liked
 it", "Because you were away" and "Because it's late" — the last one follows

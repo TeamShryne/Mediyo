@@ -138,19 +138,16 @@ private fun trackDetail(track: Track): String {
 }
 
 /**
- * Quick picks: the paged column carousel.
- *
- * Every column holds four tracks stacked as rows — artwork, title, a line of
- * detail and an overflow menu. The shelf scrolls sideways and snaps to the
- * next column, and the column after it peeks in from the right so it is
- * obvious there is more.
+ * The column carousel: four tracks stacked per column, sideways scroll that
+ * snaps from column to column, and the column after it peeking in from the
+ * right so it is obvious there is more.
  *
  * The focused column's top row carries the highlight card, so the emphasis
  * sticks to whichever column you are looking at.
  */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun QuickPicksCarousel(
+fun TrackColumnCarousel(
     tracks: List<Track>,
     playingId: String?,
     onPick: (Track) -> Unit,
@@ -197,39 +194,27 @@ fun QuickPicksCarousel(
 
 /**
  * A "Because you heard X" shelf: the tracks the graph found by branching from
- * one seed. Grows as the graph reaches further out.
+ * one seed, in the same column carousel as quick picks.
  */
 @Composable
 fun BecauseShelf(
     shelf: DiscoveryShelf,
+    playingId: String?,
     onPick: (Track) -> Unit,
+    onMenu: (Track) -> Unit,
     onNearEnd: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (shelf.tracks.isEmpty()) return
-    val listState = rememberLazyListState()
-    LaunchedEffect(listState, shelf.tracks.size) {
-        snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
-            .collect { last ->
-                if (last >= shelf.tracks.size - 3) onNearEnd()
-            }
-    }
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         SectionHeader("Because you heard ${shelf.title}")
-        LazyRow(
-            state = listState,
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            itemsIndexed(shelf.tracks, key = { i, t -> "${t.uniqueKey()}_$i" }) { _, t ->
-                MediaCard(
-                    title = t.title,
-                    subtitle = t.artists.joinToString(),
-                    artworkUrl = t.artworkUrl,
-                    round = false
-                ) { onPick(t) }
-            }
-        }
+        TrackColumnCarousel(
+            tracks = shelf.tracks,
+            playingId = playingId,
+            onPick = onPick,
+            onMenu = onMenu,
+            onNearEnd = onNearEnd
+        )
     }
 }
 

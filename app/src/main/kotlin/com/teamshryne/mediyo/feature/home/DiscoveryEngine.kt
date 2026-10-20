@@ -135,12 +135,18 @@ object DiscoveryEngine {
                     )
                 }
                 if (fresh.isEmpty()) continue
-                byRoot.getOrPut(seed.rootSeedId) { mutableListOf() }.addAll(fresh)
+                // Shuffle inside the branch. The provider's own order is its
+                // confidence ranking — the same order every time, which is
+                // exactly what a discovery shelf must not be. The cap on
+                // artists and the round-robin below keep the shelf varied;
+                // this keeps it from looking ranked.
+                byRoot.getOrPut(seed.rootSeedId) { mutableListOf() }.addAll(fresh.shuffled())
 
                 // The second hop: queue from a song that came out of a queue.
-                // Only a couple per branch — otherwise the graph collapses
-                // into one neighbourhood and everything sounds the same.
-                fresh.take(2).forEach { c ->
+                // Picked at random, so the walk does not always follow the
+                // provider's first choices — otherwise the graph keeps
+                // returning the same handful of tracks.
+                fresh.shuffled().take(2).forEach { c ->
                     nextFrontier += DiscoverySeed(
                         videoId = c.track.videoId!!,
                         title = c.track.title,

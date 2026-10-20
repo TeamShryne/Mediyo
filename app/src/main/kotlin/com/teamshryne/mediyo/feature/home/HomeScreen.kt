@@ -111,15 +111,12 @@ class HomeVm @Inject constructor(
 
     // ── Discovery graph: unfamiliar songs, grown on demand ────────────────
     // The quick-picks carousel shows the tracks most likely to be tapped next
-    // plus one headline per direction; the catalogue behind it becomes the
-    // "Because you heard X" shelves. Everything the user has already played,
-    // liked or been shown is excluded, so the shelves keep producing new
-    // material.
-    private val _headlines = MutableStateFlow<List<Track>>(emptyList())
-    val headlines: StateFlow<List<Track>> = _headlines.asStateFlow()
-
-    private val _because = MutableStateFlow<List<DiscoveryShelf>>(emptyList())
-    val because: StateFlow<List<DiscoveryShelf>> = _because.asStateFlow()
+    // plus a shuffled sample of what the queue graph found; the rest of the
+    // catalogue becomes the "Because you heard X" shelves. Everything the
+    // user has already played, liked or been shown is excluded, so the
+    // shelves keep producing new material.
+    private val _feed = MutableStateFlow(DiscoveryFeed(emptyList(), emptyList()))
+    val feed: StateFlow<DiscoveryFeed> = _feed.asStateFlow()
 
     var discoveryLoading by mutableStateOf(true)
     private val growLock = Mutex()
@@ -143,8 +140,7 @@ class HomeVm @Inject constructor(
         viewModelScope.launch {
             try {
                 discovery.expand()
-                _because.value = discovery.catalogue()
-                _headlines.value = discovery.headlines()
+                _feed.value = discovery.feed()
             } catch (_: Throwable) {
             } finally {
                 discoveryLoading = false
@@ -247,8 +243,7 @@ fun HomeScreen(
     val sheets: com.teamshryne.mediyo.core.design.SheetHostVm = hiltViewModel()
     var resolving by remember { mutableStateOf<String?>(null) }
     val quickPicks by vm.quickPicks.collectAsState()
-    val headlines by vm.headlines.collectAsState()
-    val because by vm.because.collectAsState()
+    val feed by vm.feed.collectAsState()
     val likedTracks by vm.likedTracks.collectAsState()
     val weekTop by vm.weekTop.collectAsState()
     val onRepeat by vm.onRepeat.collectAsState()
@@ -320,9 +315,9 @@ fun HomeScreen(
     }
 
     // The quick-picks carousel: the tracks most likely to be tapped next,
-    // then one headline per direction from the discovery graph.
-    val quickRow = remember(quickPicks, headlines) {
-        (quickPicks + headlines).distinctBy { it.uniqueKey() }
+    // then a shuffled sample of what the queue graph found.
+    val quickRow = remember(quickPicks, feed) {
+        (quickPicks + feed.quick).distinctBy { it.uniqueKey() }
     }
 
     // Every content section counts: otherwise a user whose history only
@@ -330,7 +325,7 @@ fun HomeScreen(
     val hasAnything = quickRow.isNotEmpty() || weekTop.isNotEmpty() || saved.isNotEmpty() ||
         recentSearches.isNotEmpty() || mixes.isNotEmpty() || episodes.isNotEmpty() ||
         onRepeat.isNotEmpty() || rediscover.isNotEmpty() || topArtists.isNotEmpty() ||
-        finishAlbums.isNotEmpty() || daypartTracks.isNotEmpty() || because.isNotEmpty() ||
+        finishAlbums.isNotEmpty() || daypartTracks.isNotEmpty() || feed.shelves.isNotEmpty() ||
         likedTracks.isNotEmpty()
 
     LazyColumn(
@@ -388,7 +383,7 @@ fun HomeScreen(
                                 }
                             }
                         )
-                        QuickPicksCarousel(
+                        TrackColumnCarousel(
                             tracks = quickRow,
                             playingId = playingId,
                             onPick = { play(it, PlayOrigin.History("Home")) },
@@ -471,11 +466,13 @@ fun HomeScreen(
             }
             // The discovery catalogue: one shelf per taste seed, each holding
             // the tracks the graph found by branching from it.
-            because.forEach { shelf ->
+            feed.shelves.forEach { shelf ->
                 item(key = "because_${shelf.seedVideoId}") {
                     BecauseShelf(
                         shelf = shelf,
+                        playingId = playingId,
                         onPick = { play(it, PlayOrigin.HomeShelf(shelf.title)) },
+                        onMenu = { openMenu(it) },
                         onNearEnd = { vm.expandDiscovery() }
                     )
                 }

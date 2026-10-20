@@ -61,7 +61,7 @@ class HomeRepository @Inject constructor(
     /**
      * Quick picks: top of the scored pool. The carousel shows them in
      * columns of four, so eight fills two columns and leaves room for the
-     * discovery headlines.
+     * shuffled sample the queue graph contributes.
      */
     fun flowQuickPicks(): Flow<List<Track>> = flowScored().map { it.take(8).map { s -> s.track } }
 

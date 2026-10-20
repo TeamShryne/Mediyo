@@ -24,6 +24,21 @@ data class DiscoveryShelf(
 )
 
 /**
+ * The discovery feed: what the quick-picks carousel shows, and how the rest
+ * of the catalogue is grouped into shelves.
+ *
+ * The two are a partition of the same catalogue — the sample is drawn at
+ * random and the shelves keep the remainder — so no track is offered twice
+ * on one screen.
+ */
+data class DiscoveryFeed(
+    /** A shuffled sample of the catalogue: the queue's answer to "surprise me". */
+    val quick: List<Track>,
+    /** The catalogue grouped by the seed each track branched from. */
+    val shelves: List<DiscoveryShelf>
+)
+
+/**
  * Grows the discovery catalogue.
  *
  * Local taste decides *where* to look (the seeds), the queue graph decides
@@ -90,37 +105,65 @@ class DiscoveryCoordinator @Inject constructor(
     }
 
     /**
-     * The catalogue, one shelf per taste seed, biggest first.
+     * The catalogue, split into what the carousel shows and what the shelves
+     * show.
      *
-     * The shelf's first track (the one the carousel shows as its headline)
-     * is left out here, so no track appears in two places.
+     * The carousel's sample is drawn at random — round-robin over the
+     * directions first, so no one genre takes it over, and shuffled after
+     * that, so it never reads as a ranking.
      */
-    suspend fun catalogue(): List<DiscoveryShelf> {
+    suspend fun feed(sampleSize: Int = QUICK_SAMPLE): DiscoveryFeed {
         val pool = store.all()
-        return pool.groupBy { it.rootSeedId }
+        if (pool.isEmpty()) return DiscoveryFeed(emptyList(), emptyList())
+
+        val byRoot = pool.groupBy { it.rootSeedId }
+        val sample = takeRoundRobin(
+            groups = byRoot.values.map { it.shuffled() },
+            n = sampleSize
+        ).shuffled()
+        val sampleIds = sample.map { it.videoId }.toSet()
+
+        val shelves = byRoot
             .map { (root, items) ->
-                val sorted = items.sortedWith(compareBy({ it.depth }, { it.rank }))
-                val headline = sorted.firstOrNull { it.depth == 1 && it.rank == 0 }
+                // Closest matches first, but shuffled inside each band: the
+                // provider's own order is its confidence ranking, and a
+                // discovery shelf must not read like a ranked list.
+                val sorted = items
+                    .filter { it.videoId !in sampleIds }
+                    .groupBy { it.depth }
+                    .toSortedMap()
+                    .values
+                    .flatMap { band -> band.shuffled() }
                 DiscoveryShelf(
                     title = items.firstOrNull()?.rootTitle?.takeIf { it.isNotBlank() }.orEmpty(),
                     seedVideoId = root,
-                    tracks = sorted.filter { it.videoId != headline?.videoId }.map { it.toTrack() }
+                    tracks = sorted.take(SHELF_TRACKS).map { it.toTrack() }
                 )
             }
             .filter { it.tracks.isNotEmpty() }
             .sortedByDescending { it.tracks.size }
             .take(MAX_SHELVES)
+
+        return DiscoveryFeed(quick = sample.map { it.toTrack() }, shelves = shelves)
     }
 
-    /**
-     * One track per direction: the shelf's headline, which the quick-picks
-     * carousel shows as its discovery column.
-     */
-    suspend fun headlines(): List<Track> =
-        store.all()
-            .filter { it.depth == 1 && it.rank == 0 }
-            .distinctBy { it.rootSeedId }
-            .map { it.toTrack() }
+    /** Take [n] items, one per group in turn, so no direction dominates. */
+    private fun <T> takeRoundRobin(groups: List<List<T>>, n: Int): List<T> {
+        val out = ArrayList<T>()
+        var round = 0
+        while (out.size < n) {
+            var progressed = false
+            for (group in groups) {
+                val item = group.getOrNull(round) ?: continue
+                out += item
+                progressed = true
+                if (out.size >= n) break
+            }
+            if (!progressed) break
+            round++
+        }
+        return out
+    }
 
     /**
      * Seeds for the next hop.
@@ -138,9 +181,13 @@ class DiscoveryCoordinator @Inject constructor(
         val seeds = LinkedHashMap<String, DiscoverySeed>()
 
         // The frontier is where the branching happens: a track we already
-        // know still has unexplored neighbours.
-        val frontier = store.frontier(MAX_FRONTIER)
+        // know still has unexplored neighbours. Which ones get branched from
+        // is picked at random — always the same few would keep the graph in
+        // one corner of the taste.
+        val frontier = store.frontier(MAX_FRONTIER * 3)
             .filter { it.videoId !in known }
+            .shuffled()
+            .take(MAX_FRONTIER)
             .map {
                 DiscoverySeed(
                     videoId = it.videoId,
@@ -275,6 +322,12 @@ class DiscoveryCoordinator @Inject constructor(
 
         /** How many "because you heard X" shelves home shows at once. */
         const val MAX_SHELVES = 4
+
+        /** Tracks the quick-picks carousel takes from the catalogue. */
+        const val QUICK_SAMPLE = 8
+
+        /** Tracks one "because you heard X" shelf shows. */
+        const val SHELF_TRACKS = 24
 
         /** Frontier tracks are interesting, but less than the taste roots. */
         const val FRONTIER_AFFINITY = 0.5
