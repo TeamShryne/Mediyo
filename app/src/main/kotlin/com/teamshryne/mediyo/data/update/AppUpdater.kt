@@ -42,6 +42,55 @@ class AppUpdater @Inject constructor(
     }
 
     /**
+     * Fetches the release history: what changed between the build the user
+     * is running and the newest one.
+     *
+     * The last copy is kept on disk, because the notes are worth reading
+     * offline -- a phone with no connection is exactly where someone reads
+     * what changed.
+     */
+    suspend fun fetchChangelog(channel: UpdateChannel = UpdateChannel.STABLE): Changelog? =
+        withContext(Dispatchers.IO) {
+            try {
+                val conn = openGet(changelogUrl(channel), readTimeoutMs = 15_000)
+                conn.connect()
+                if (conn.responseCode !in 200..299) {
+                    conn.disconnect()
+                    return@withContext null
+                }
+                val body = conn.inputStream.bufferedReader().readText()
+                conn.disconnect()
+                val parsed = json.decodeFromString<Changelog>(body)
+                runCatching { changelogFile(channel).writeText(body) }
+                parsed
+            } catch (e: Exception) {
+                null
+            }
+        }
+
+    /** The last release history that was fetched, if there is one. */
+    fun cachedChangelog(channel: UpdateChannel = UpdateChannel.STABLE): Changelog? = try {
+        val file = changelogFile(channel)
+        if (file.isFile) json.decodeFromString<Changelog>(file.readText()) else null
+    } catch (e: Exception) {
+        null
+    }
+
+    private fun changelogFile(channel: UpdateChannel): File =
+        File(ctx.filesDir, "changelog-${channel.id}.json")
+
+    /**
+     * The history URL, with a stamp on it.
+     *
+     * Without one, a CDN can serve the copy it cached the last time the
+     * notes were fetched, and a user who installs a release would be told
+     * there is nothing new. The file is a few kilobytes; asking for it
+     * fresh is cheaper than being wrong.
+     */
+    private fun changelogUrl(channel: UpdateChannel): String =
+        "${ChangelogUrls.url(channel)}?t=${System.currentTimeMillis() / 1000}"
+
+    /**
      * Deletes leftover updater APKs from previous runs. Called on app startup:
      * [com.teamshryne.mediyo.feature.update.UpdateViewModel] state is in-memory,
      * so any APK on disk at startup is either already installed or an abandoned
