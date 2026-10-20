@@ -61,6 +61,13 @@ data class PlayerState(
     val isBuffering: Boolean = false,
     val progress: Float = 0f,
     val positionMs: Long = 0L,
+    /**
+     * Wall clock (`SystemClock.elapsedRealtime()`) at the moment [positionMs]
+     * was read. The lyrics use it to interpolate between the player's
+     * position ticks *at the playback rate* instead of guessing from the
+     * time the tick happened to be observed.
+     */
+    val positionSampleElapsedMs: Long = 0L,
     val durationMs: Long = 0L,
     val shuffle: Boolean = false,
     val repeatOne: Boolean = false,
@@ -407,6 +414,9 @@ class PlayerViewModel @Inject constructor(
         tickerJob = viewModelScope.launch {
             while (isActive) {
                 delay(500)
+                // Timestamp and position are read back to back, so the pair
+                // describes the same instant of playback.
+                val sampledAt = android.os.SystemClock.elapsedRealtime()
                 val dur = if (player.duration > 0) player.duration else 0L
                 val pos = player.currentPosition.coerceIn(0L, if (dur > 0) dur else Long.MAX_VALUE)
                 // keep the buffering indicator alive while a stream URL is being resolved —
@@ -415,6 +425,7 @@ class PlayerViewModel @Inject constructor(
                 val playing = player.isPlaying
                 _state.value = _state.value.copy(
                     positionMs = pos,
+                    positionSampleElapsedMs = sampledAt,
                     durationMs = dur,
                     progress = if (dur > 0) (pos.toFloat() / dur).coerceIn(0f, 1f) else 0f,
                     isBuffering = buffering,
@@ -508,6 +519,7 @@ class PlayerViewModel @Inject constructor(
             isBuffering = true,
             progress = 0f,
             positionMs = 0L,
+            positionSampleElapsedMs = android.os.SystemClock.elapsedRealtime(),
             durationMs = 0L,
             queueSize = queueManager.currentState().entries.size,
             queueIndex = queueManager.currentState().index,
@@ -748,7 +760,9 @@ class PlayerViewModel @Inject constructor(
         val dur = player.duration
         if (dur > 0) {
             if (player.isPlaying) ensureServiceForPlayback()
-            player.seekTo((dur * fraction.coerceIn(0f, 1f)).toLong())
+            val target = (dur * fraction.coerceIn(0f, 1f)).toLong()
+            player.seekTo(target)
+            publishPosition(target)
             // No position in meta on purpose: the 30s dedupe collapses a
             // slider drag burst into one event per track.
             viewModelScope.launch {
@@ -760,10 +774,23 @@ class PlayerViewModel @Inject constructor(
     fun seekToMs(positionMs: Long) {
         if (player.isPlaying || player.playWhenReady) ensureServiceForPlayback()
         val dur = player.duration
-        if (dur > 0) player.seekTo(positionMs.coerceIn(0L, dur)) else player.seekTo(positionMs.coerceAtLeast(0L))
+        val target = if (dur > 0) positionMs.coerceIn(0L, dur) else positionMs.coerceAtLeast(0L)
+        player.seekTo(target)
+        publishPosition(target)
         viewModelScope.launch {
             events.log(UserEventTypes.SEEK, videoId = _state.value.videoId, meta = "dur=$dur")
         }
+    }
+
+    /**
+     * Publish a position we already know about, so the UI (slider, lyrics)
+     * reacts to a seek immediately instead of after the next player tick.
+     */
+    private fun publishPosition(positionMs: Long) {
+        _state.value = _state.value.copy(
+            positionMs = positionMs,
+            positionSampleElapsedMs = android.os.SystemClock.elapsedRealtime()
+        )
     }
 
     // ── Sleep timer delegation ────────────────────────────────────────
