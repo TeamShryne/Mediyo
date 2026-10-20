@@ -1,0 +1,84 @@
+# Changelog
+
+User-facing notes for each release. The release workflow reads the section for
+the version it is publishing and uses it as the release notes, so **a release
+cannot ship without them** — it fails instead. Write them for someone using
+the app, not for someone reading the git log: what changed, and why they would
+care. No commit hashes, no file names.
+
+The technical change list is still generated, but it is collapsed below a
+"Technical changes" heading.
+
+## Unreleased
+
+**Quick picks is a shelf of columns now.** It scrolls sideways and snaps from
+one column to the next, with the next one peeking in from the right so you
+know there is more. Every row has the artwork, the title and an overflow menu,
+and the column you are on is the one that stands out. There is a "Play all"
+button next to the heading too.
+
+**Quick picks plays new songs, not just old favourites.** It now mixes the
+tracks you are most likely to tap next with a shuffled handful of songs the
+app found by queueing — and the way it looks for those is deliberately
+random, so the same handful never comes back and the shelf never settles into
+one artist on repeat.
+
+**Home finally tells you *why* it is showing you something.** The shelves now
+read "Because you heard <song>", "Because you loved it", "Because you liked
+it", "Because you were away" and "Because it's late" — the last one follows
+the clock. The "Because you heard" shelves are new songs, found by looking at
+the neighbours of your music and branching out from there, and they use the
+same columns of four as quick picks.
+
+**Home stops moving while you listen.** The shelves used to rearrange
+themselves whenever a song started, which made the screen impossible to trust
+mid-listen. Home now holds still: it refreshes when the app opens, when you
+pull the screen down to refresh, and for the first few songs you play after
+installing the app — so the app visibly reacts while it is still learning
+what you like, then leaves you alone.
+
+**A tap is not a play.** A song only counts once you have listened to it for
+ten seconds. Before that it never reaches your history or the algorithm, so a
+mis-tap cannot look like taste and send the recommendations chasing it.
+
+**Pull down to refresh.** Drag the home screen downwards and it reloads — the
+shelves, the new songs and everything else.
+
+**The lyrics keep up when you slow a song down.** The word-by-word highlight
+used to run ahead of the music and then jump back to the right place, so a
+half-speed song looked like it was stuttering. It now follows the playback
+speed, and the same goes for the moment you tap a line to jump there — the
+lyrics move with you right away.
+
+**You decide how the lyrics look.** *Settings → Appearance → Lyrics appearance*
+is a new screen with a live preview: change the text size, the font weight
+(anything from medium to black) and the distance between the lines. The
+sliders follow your finger without lagging behind, and the player picks the
+new look up straight away. Which lyrics you get — and which source wins — is
+still under *Settings → Lyrics*.
+
+**The lyrics no longer pile on top of each other before a song starts.** While
+the track was still at 0:00 the lines were spaced as if every line was a single
+row of text, so the longer ones — the ones that wrap over several lines —
+were drawn on top of the lines below them. The lyrics are now measured before
+they are drawn, so each line gets the room it actually needs, and the screen
+reads the same way whether the song is playing or not.
+
+## 0.8.0
+
+**Reorder your queue by dragging.** The up and down arrows are gone. Press and
+hold a track, then drag it where you want it — and if you drag towards the top
+of the list, the list scrolls so you can pull a track up past the header.
+
+**Bottom sheets look right.** The status bar now dims along with the screen
+behind a sheet, and the back, home and recents buttons sit on the sheet's own
+background instead of floating over the rows behind them. Opening one sheet
+also closes any other, so you never get two stacked on top of each other.
+
+**Search results are tidier.** Song rows no longer repeat the word "Song" next
+to the track length.
+
+**Nightly builds, if you want them.** *Settings → App updates* now has a
+channel picker. Stay on Stable, or switch to Nightly to get daily builds of
+the development branch. Nightly builds are not tested — use them only if you
+are happy to hit a broken build.
