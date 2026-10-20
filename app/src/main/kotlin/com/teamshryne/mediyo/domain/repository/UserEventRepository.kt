@@ -74,4 +74,6 @@ interface UserEventRepository {
     suspend fun countByTypeSince(type: String, since: Long): Int
     suspend fun clearAll()
     suspend fun clearType(type: String)
+    /** Drop every event of [type] whose label is exactly [label]. */
+    suspend fun deleteByLabel(type: String, label: String)
 }
