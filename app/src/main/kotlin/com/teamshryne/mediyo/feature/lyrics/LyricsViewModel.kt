@@ -5,12 +5,16 @@ import androidx.lifecycle.viewModelScope
 import com.teamshryne.mediyo.data.lyrics.LyricTrack
 import com.teamshryne.mediyo.data.lyrics.LyricsResult
 import com.teamshryne.mediyo.data.lyrics.LyricsSource
+import com.teamshryne.mediyo.data.lyrics.LyricsStyle
+import com.teamshryne.mediyo.data.lyrics.LyricsStylePrefs
 import com.teamshryne.mediyo.domain.model.Track
 import com.teamshryne.mediyo.domain.repository.LyricsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -27,11 +31,16 @@ sealed interface LyricsUiState {
 @HiltViewModel
 class LyricsViewModel @Inject constructor(
     private val repo: LyricsRepository,
-    private val events: com.teamshryne.mediyo.domain.repository.UserEventRepository
+    private val events: com.teamshryne.mediyo.domain.repository.UserEventRepository,
+    private val stylePrefs: LyricsStylePrefs
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<LyricsUiState>(LyricsUiState.Idle)
     val state: StateFlow<LyricsUiState> = _state
+
+    /** Size / weight / line spacing chosen by the user. */
+    val style: StateFlow<LyricsStyle> = stylePrefs.styleFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, LyricsStyle())
 
     private var job: Job? = null
     private var lastKey: String? = null
