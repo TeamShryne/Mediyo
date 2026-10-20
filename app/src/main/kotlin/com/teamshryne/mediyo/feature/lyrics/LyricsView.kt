@@ -781,14 +781,14 @@ private fun LyricAsideRow(
         label = "asideSlide"
     )
     // 0 = still on the row it comes from, 1 = on its own row.
-    val translationY = -(1f - animatedSlide) * slideDistancePx
+    val slideOffsetY = -(1f - animatedSlide) * slideDistancePx
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .graphicsLayer {
                 alpha = animatedAlpha
-                translationY = translationY
+                translationY = slideOffsetY
             }
     ) {
         LyricText(
