@@ -8,7 +8,6 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.shrinkHorizontally
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -19,14 +18,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshotFlow
@@ -34,11 +30,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -90,11 +85,10 @@ class SearchVm @Inject constructor(
     /** Suggestion panel is allowed to be open (not dismissed by a scroll). */
     var suggestOpen by mutableStateOf(false)
     /**
-     * The YouTube-Music-style search overlay floats on top of the results.
-     * It owns the focused text field; the field in the list header only
-     * opens it.
+     * The suggestion panel under the search bar is open (the user is
+     * typing). The field itself never moves — only the panel comes and goes.
      */
-    var overlayOpen by mutableStateOf(false)
+    var panelOpen by mutableStateOf(false)
     private var suggestJob: kotlinx.coroutines.Job? = null
     /**
      * Guards against out-of-order responses: only the newest request may
@@ -147,22 +141,37 @@ class SearchVm @Inject constructor(
         }
     }
 
-    /** Open the search overlay above the results. */
-    fun openOverlay() {
-        if (overlayOpen) return
-        overlayOpen = true
-        // A fresh overlay always shows its completions again, even for a
+    /** Open the suggestion panel under the search bar. */
+    fun openPanel() {
+        if (panelOpen) return
+        panelOpen = true
+        // A fresh panel always shows its completions again, even for a
         // query the user scrolled away from earlier.
         dismissedFor = null
         suggestOpen = true
         if (query.isBlank()) loadRecents() else onQueryChange(query)
     }
 
-    /** Close the search overlay; the results underneath stay as they were. */
-    fun closeOverlay() {
-        if (!overlayOpen) return
-        overlayOpen = false
+    /** Close the suggestion panel; the results underneath stay as they were. */
+    fun closePanel() {
+        if (!panelOpen) return
+        panelOpen = false
         dismissSuggest()
+    }
+
+    /** Cancel the search: the screen falls back to its idle state. */
+    fun resetSearch() {
+        query = ""
+        hasSearched = false
+        results = emptyList()
+        filters = emptyList()
+        continuation = null
+        error = null
+        loading = false
+        loadingMore = false
+        panelOpen = false
+        clearSuggest()
+        loadRecents()
     }
 
     /** Put [q] in the field without running the search (the arrow action). */
@@ -214,6 +223,9 @@ class SearchVm @Inject constructor(
         val q = query.trim()
         if (q.isEmpty()) return
         clearSuggest()
+        // A submitted search ends the typing state: the panel closes and the
+        // results take over the screen.
+        panelOpen = false
         lastQueryInternal = q
         // A chip without params behaves exactly like All — normalize it so
         // the All chip stays selected instead of showing nothing selected.
@@ -277,10 +289,13 @@ class SearchVm @Inject constructor(
     }
 }
 
-/** Search field block: OutlinedTextField (~56dp) plus breathing room. Shared by the sticky header and the overlays docked to it. */
-private val FIELD_BLOCK_HEIGHT = 68.dp
+/**
+ * Height of the search bar block: the pill plus its breathing room. The bar
+ * sits at the top of the screen in every state, so the results list starts
+ * below it and the suggestion panel docks exactly under it.
+ */
+private val SEARCH_BAR_HEIGHT = 72.dp
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SearchScreen(
     nav: androidx.navigation.NavController,
@@ -290,6 +305,12 @@ fun SearchScreen(
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    // Measured height of the search bar: the panel docks exactly under it,
+    // whatever the font scale does to the pill.
+    var barHeightPx by remember { mutableIntStateOf(0) }
+    val barHeight = with(androidx.compose.ui.platform.LocalDensity.current) {
+        barHeightPx.toDp()
+    }.takeIf { it > 0.dp } ?: SEARCH_BAR_HEIGHT
     // Menus render at the root overlay (GlobalSheets) for full-window dim.
     val sheets: com.teamshryne.mediyo.core.design.SheetHostVm = hiltViewModel()
 
@@ -306,32 +327,30 @@ fun SearchScreen(
     )
 
     // Scrolling the results dismisses the suggestion panel — for the current
-    // query only, so the next keystroke re-opens it naturally. While the
-    // overlay is up the results are background only: scrolling them must not
-    // tear the completions away.
+    // query only, so the next keystroke re-opens it naturally.
     LaunchedEffect(listState) {
         snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
             .distinctUntilChanged()
-            .collect { if (!vm.overlayOpen) vm.dismissSuggest() }
+            .collect { if (!vm.panelOpen) vm.dismissSuggest() }
     }
-    // Back closes the overlay first, then the suggestion panel.
-    BackHandler(enabled = vm.overlayOpen) {
-        vm.closeOverlay()
+    // Back closes the suggestion panel before it leaves the screen.
+    BackHandler(enabled = vm.panelOpen) {
+        vm.closePanel()
         focusManager.clearFocus()
     }
-    BackHandler(enabled = !vm.overlayOpen && vm.suggestVisible) { vm.dismissSuggest() }
+    BackHandler(enabled = !vm.panelOpen && vm.suggestVisible) { vm.dismissSuggest() }
 
     // The view model outlives this screen (it is hoisted for the whole app),
-    // so make sure no overlay is left behind when the user leaves the tab.
+    // so make sure no panel is left behind when the user leaves the tab.
     DisposableEffect(Unit) {
-        onDispose { vm.closeOverlay() }
+        onDispose { vm.closePanel() }
     }
 
     fun open(r: FfiSearchResult) {
         vm.logTap(r)
         vm.dismissSuggest()
-        // A tap on a result ends the search overlay, whatever opened it.
-        vm.closeOverlay()
+        // A tap on a result ends the typing state, whatever opened it.
+        vm.closePanel()
         when {
             r.videoId != null && r.category.contains("Episode", true) ->
                 nav.navigate("episode/${r.detailId.ifBlank { r.videoId }}")
@@ -347,60 +366,22 @@ fun SearchScreen(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        // Outer Scaffold padding already clears the status bar — 4dp only.
-        // Title first, field second (sticky): the field sticks once the
-        // title scrolls away, and only the fixed-height field lives in the
-        // sticky block, so the suggestion overlay can never reflow the list.
-        contentPadding = PaddingValues(top = 4.dp, bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp),
+        // The search bar is fixed at the top of the screen, so the list
+        // starts below it. Outer Scaffold padding already clears the status
+        // bar — 4dp only.
+        contentPadding = PaddingValues(
+            top = barHeight + 4.dp,
+            bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp
+        ),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        // While the search overlay is up it owns the whole top of the screen
-        // (title included) — the results underneath start right below it.
-        if (!vm.overlayOpen) {
-            item(key = "search_header") {
-                Text(
-                    "Search",
-                    style = MaterialTheme.typography.displaySmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(horizontal = 20.dp)
-                )
-            }
-
-            stickyHeader(key = "search_bar") {
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.background)
-                        .padding(horizontal = 20.dp)
-                        .height(FIELD_BLOCK_HEIGHT),
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    OutlinedTextField(
-                        value = vm.query,
-                        onValueChange = { vm.onQueryChange(it) },
-                        placeholder = { Text("Songs, artists, albums…", color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                        leadingIcon = { Icon(Icons.Filled.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                        singleLine = true,
-                        // The header field is only the entry point: tapping it
-                        // hands the editing over to the overlay, which is the
-                        // field that actually takes the keyboard.
-                        readOnly = true,
-                        shape = RoundedCornerShape(28.dp),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = { vm.submit() }),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                            unfocusedBorderColor = Color.Transparent,
-                            focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { vm.openOverlay() }
-                            .onFocusChanged { if (it.isFocused) vm.openOverlay() }
-                    )
-                }
-            }
+        item(key = "search_header") {
+            Text(
+                "Search",
+                style = MaterialTheme.typography.displaySmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(horizontal = 20.dp)
+            )
         }
 
         // Filter chips scroll with the results: a pinned chip row would change
@@ -464,9 +445,6 @@ fun SearchScreen(
         }
 
         when {
-            // The overlay carries the history while it is up — rendering the
-            // same rows behind it would just duplicate them.
-            vm.overlayOpen && !vm.hasSearched -> Unit
             !vm.hasSearched -> if (vm.query.isBlank()) {
                 if (vm.recents.isNotEmpty()) {
                     item(key = "recent_header") {
@@ -570,62 +548,81 @@ fun SearchScreen(
         item(key = "search_footer") { LoadingFooter(vm.loadingMore && !vm.loading) }
     }
 
-    // ── Sticky-field divider + search overlay ────────────────────────────
-    // The field lives in the sticky header above (fixed height, so it can
-    // never reflow the list); the divider marks where the results slide
-    // under the stuck field.
+    // ── The search bar ──────────────────────────────────────────────────
+    // Fixed at the top of the screen in every state — idle, typing and
+    // looking at results. It never moves, so the input is always where the
+    // user left it, and the suggestion panel docks right under it.
     val scrolled by remember {
         derivedStateOf {
             listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 8
         }
     }
-    // Divider only once content is sliding underneath, so the bar doesn't
-    // draw a permanent line over the idle state.
-    AnimatedVisibility(
-        visible = scrolled && !vm.overlayOpen,
-        enter = fadeIn(tween(160)),
-        exit = fadeOut(tween(160)),
-        modifier = Modifier.align(Alignment.TopCenter)
+    Column(
+        Modifier
+            .align(Alignment.TopCenter)
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background)
+            .onSizeChanged { barHeightPx = it.height }
     ) {
-        HorizontalDivider(
-            Modifier.padding(top = FIELD_BLOCK_HEIGHT - 1.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHighest
+        SearchPill(
+            query = vm.query,
+            onQueryChange = { vm.onQueryChange(it) },
+            onSubmit = { q ->
+                vm.query = q
+                vm.submit()
+                focusManager.clearFocus()
+            },
+            onClear = { vm.onQueryChange("") },
+            onBack = {
+                // The arrow is "cancel": it leaves the search UI, it never
+                // leaves the tab.
+                if (vm.panelOpen) {
+                    vm.closePanel()
+                    focusManager.clearFocus()
+                } else if (vm.query.isNotEmpty() || vm.hasSearched) {
+                    vm.resetSearch()
+                    focusManager.clearFocus()
+                }
+            },
+            modifier = Modifier.onFocusChanged { if (it.isFocused) vm.openPanel() }
         )
+        // Hairline under the bar, but only once the results slide under it.
+        AnimatedVisibility(
+            visible = scrolled && !vm.panelOpen,
+            enter = fadeIn(tween(160)),
+            exit = fadeOut(tween(160))
+        ) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceContainerHighest)
+        }
     }
 
-    // ── Search overlay ──────────────────────────────────────────────────
-    // Floats on top of the results: the field, the recent searches and the
-    // live completions. The results stay visible below it.
+    // ── Suggestion panel ────────────────────────────────────────────────
+    // Opaque and full height: while the user types, the results stay out of
+    // sight instead of peeking through under the suggestions.
     AnimatedVisibility(
-        visible = vm.overlayOpen,
+        visible = vm.panelOpen,
         enter = fadeIn(tween(140)) + expandVertically(tween(220)),
         exit = fadeOut(tween(120)) + shrinkVertically(tween(180)),
         modifier = Modifier.align(Alignment.TopCenter)
     ) {
-        SearchOverlay(
+        SearchSuggestionPanel(
             query = vm.query,
             recents = vm.recents,
             suggestTexts = vm.suggestTexts,
             suggestEntities = vm.suggestEntities,
             showSuggestions = vm.suggestVisible,
-            onQueryChange = { vm.onQueryChange(it) },
-            onClose = {
-                vm.closeOverlay()
-                focusManager.clearFocus()
-            },
             onSubmit = { q ->
                 vm.query = q
-                vm.runSearch(null)
-                vm.closeOverlay()
+                vm.submit()
                 focusManager.clearFocus()
             },
             onFill = { vm.fillQuery(it) },
             onRemoveRecent = { vm.removeRecent(it) },
             onOpenEntity = {
                 open(it)
-                vm.closeOverlay()
                 focusManager.clearFocus()
-            }
+            },
+            modifier = Modifier.padding(top = barHeight)
         )
     }
     }

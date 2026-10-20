@@ -2,40 +2,37 @@ package com.teamshryne.mediyo.feature.search
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.NorthWest
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -48,105 +45,26 @@ import com.teamshryne.mediyo.data.mediyo.FfiSearchResult
 import com.teamshryne.mediyo.data.mediyo.FfiSuggestText
 import com.teamshryne.mediyo.domain.model.bestThumbUrl
 
-/** Placeholder shown in the overlay field while the query is empty. */
-private const val OVERLAY_PLACEHOLDER = "Songs, artists, albums…"
-
-/** Cap for the history/suggestion list so the results stay visible below. */
-private val OVERLAY_LIST_MAX_HEIGHT = 420.dp
+/** Placeholder shown in the search pill while the query is empty. */
+const val SEARCH_PLACEHOLDER = "Songs, artists, albums…"
 
 /**
- * YouTube-Music-style search overlay: the search field plus the recent
- * searches and the live completions, floating on top of the results.
- *
- * The overlay owns the focused text field — the field in the list header is
- * read-only and only serves as the entry point that opens this overlay.
+ * The search bar of the search screen: one pill for every state — idle,
+ * typing and looking at results. It never moves and never changes shape, so
+ * the input stays where the user left it.
  */
 @Composable
-fun SearchOverlay(
+fun SearchPill(
     query: String,
-    recents: List<String>,
-    suggestTexts: List<FfiSuggestText>,
-    suggestEntities: List<FfiSearchResult>,
-    showSuggestions: Boolean,
     onQueryChange: (String) -> Unit,
-    onClose: () -> Unit,
     onSubmit: (String) -> Unit,
-    onFill: (String) -> Unit,
-    onRemoveRecent: (String) -> Unit,
-    onOpenEntity: (FfiSearchResult) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val focus = remember { FocusRequester() }
-    // The overlay is the editing surface: grab the caret as soon as it opens.
-    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
-
-    // With a query in the box the history narrows down to what still
-    // matches; an empty query shows the full history.
-    val shownRecents = remember(recents, query) {
-        val q = query.trim()
-        if (q.isEmpty()) recents else recents.filter { it.contains(q, ignoreCase = true) }
-    }
-
-    Column(
-        modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        SearchOverlayField(
-            query = query,
-            focus = focus,
-            onQueryChange = onQueryChange,
-            onClose = onClose,
-            onSubmit = onSubmit
-        )
-
-        LazyColumn(
-            Modifier
-                .fillMaxWidth()
-                .heightIn(max = OVERLAY_LIST_MAX_HEIGHT)
-        ) {
-            itemsIndexed(shownRecents, key = { i, r -> "recent_${i}_$r" }) { _, r ->
-                OverlayRow(
-                    icon = Icons.Filled.History,
-                    text = r,
-                    onClick = { onSubmit(r) },
-                    onFill = { onFill(r) },
-                    onRemove = { onRemoveRecent(r) }
-                )
-            }
-            if (showSuggestions) {
-                itemsIndexed(suggestTexts, key = { i, t -> "sug_${i}_${t.text}" }) { _, t ->
-                    OverlayRow(
-                        icon = Icons.Filled.Search,
-                        text = t.text,
-                        onClick = { onSubmit(t.query.ifBlank { t.text }) },
-                        onFill = { onFill(t.query.ifBlank { t.text }) }
-                    )
-                }
-                itemsIndexed(suggestEntities, key = { i, e ->
-                    "ent_${i}_${e.videoId ?: e.browseId ?: e.title}"
-                }) { _, e ->
-                    OverlayEntityRow(item = e, onClick = { onOpenEntity(e) })
-                }
-            }
-        }
-
-        // Separator between the overlay and the results peeking through below.
-        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceContainerHighest)
-    }
-}
-
-/** The pill at the top of the overlay: back arrow, query, clear. */
-@Composable
-private fun SearchOverlayField(
-    query: String,
-    focus: FocusRequester,
-    onQueryChange: (String) -> Unit,
-    onClose: () -> Unit,
-    onSubmit: (String) -> Unit
+    onClear: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String = SEARCH_PLACEHOLDER
 ) {
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
             .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -157,10 +75,10 @@ private fun SearchOverlayField(
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onClose) {
+                IconButton(onClick = onBack) {
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Close search",
+                        contentDescription = "Back",
                         tint = MaterialTheme.colorScheme.onSurface
                     )
                 }
@@ -176,13 +94,12 @@ private fun SearchOverlayField(
                     keyboardActions = KeyboardActions(onSearch = { onSubmit(query) }),
                     modifier = Modifier
                         .weight(1f)
-                        .padding(vertical = 14.dp)
-                        .focusRequester(focus),
+                        .padding(vertical = 14.dp),
                     decorationBox = { inner ->
                         Box {
                             if (query.isEmpty()) {
                                 Text(
-                                    OVERLAY_PLACEHOLDER,
+                                    placeholder,
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
@@ -194,7 +111,7 @@ private fun SearchOverlayField(
                     }
                 )
                 if (query.isNotEmpty()) {
-                    IconButton(onClick = { onQueryChange("") }) {
+                    IconButton(onClick = onClear) {
                         Icon(
                             Icons.Filled.Close,
                             contentDescription = "Clear",
@@ -208,12 +125,75 @@ private fun SearchOverlayField(
 }
 
 /**
- * One row of the overlay list: an icon, the text, and the trailing actions.
+ * The panel under the search bar: recent searches and live completions.
+ *
+ * It is opaque and fills the screen: while the user types, the results
+ * behind it are hidden instead of peeking through.
+ */
+@Composable
+fun SearchSuggestionPanel(
+    query: String,
+    recents: List<String>,
+    suggestTexts: List<FfiSuggestText>,
+    suggestEntities: List<FfiSearchResult>,
+    showSuggestions: Boolean,
+    onSubmit: (String) -> Unit,
+    onFill: (String) -> Unit,
+    onRemoveRecent: (String) -> Unit,
+    onOpenEntity: (FfiSearchResult) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    // With a query in the box the history narrows down to what still
+    // matches; an empty query shows the full history.
+    val shownRecents = remember(recents, query) {
+        val q = query.trim()
+        if (q.isEmpty()) recents else recents.filter { it.contains(q, ignoreCase = true) }
+    }
+
+    Column(
+        modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            // Swallow taps: the results live behind this panel and must not
+            // react to a tap that landed on the empty space below the rows.
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { }
+            .verticalScroll(rememberScrollState())
+    ) {
+        shownRecents.forEach { r ->
+            SuggestionRow(
+                icon = Icons.Filled.History,
+                text = r,
+                onClick = { onSubmit(r) },
+                onFill = { onFill(r) },
+                onRemove = { onRemoveRecent(r) }
+            )
+        }
+        if (showSuggestions) {
+            suggestTexts.forEach { t ->
+                SuggestionRow(
+                    icon = Icons.Filled.Search,
+                    text = t.text,
+                    onClick = { onSubmit(t.query.ifBlank { t.text }) },
+                    onFill = { onFill(t.query.ifBlank { t.text }) }
+                )
+            }
+            suggestEntities.forEach { e ->
+                SuggestionEntityRow(item = e, onClick = { onOpenEntity(e) })
+            }
+        }
+    }
+}
+
+/**
+ * One row of the panel: an icon, the text, and the trailing actions.
  * [onFill] mirrors the YouTube Music arrow (put the text in the field),
  * [onRemove] drops the entry from the history.
  */
 @Composable
-private fun OverlayRow(
+private fun SuggestionRow(
     icon: ImageVector,
     text: String,
     onClick: () -> Unit,
@@ -265,7 +245,7 @@ private fun OverlayRow(
 
 /** An entity (song/artist/album) suggested for the current query. */
 @Composable
-private fun OverlayEntityRow(item: FfiSearchResult, onClick: () -> Unit) {
+private fun SuggestionEntityRow(item: FfiSearchResult, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
