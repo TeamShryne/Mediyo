@@ -276,7 +276,7 @@ fun SectionScreen(
                                     item = r,
                                     isPlaying = playingId != null && playingId == r.videoId,
                                     number = i + 1,
-                                    showArtwork = false,
+                                    showArtwork = true,
                                     trailing = { TrackOverflowIcon(onClick = { openMenu(r) }) }
                                 ) { handle(r) }
                             }
@@ -300,7 +300,7 @@ fun SectionScreen(
                                         item = r,
                                         isPlaying = playingId != null && playingId == r.videoId,
                                         number = vm.items.indexOf(r) + 1,
-                                        showArtwork = false,
+                                        showArtwork = true,
                                         trailing = { TrackOverflowIcon(onClick = { openMenu(r) }) }
                                     ) { handle(r) }
                                 }
@@ -455,7 +455,8 @@ private fun SectionRowPlaceholder() {
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.size(32.dp).clip(RoundedCornerShape(6.dp)).shimmer())
+        // 48dp square like the artwork thumbnail the row now shows.
+        Box(Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).shimmer())
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(Modifier.fillMaxWidth(0.7f).height(14.dp).clip(RoundedCornerShape(6.dp)).shimmer())
