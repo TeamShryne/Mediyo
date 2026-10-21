@@ -61,8 +61,18 @@ fun WhatsNewCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Button(onClick = onReload, modifier = Modifier.fillMaxWidth()) {
-                        Text("Show what changed")
+                    if (BuildConfig.DEBUG) {
+                        // A debug build never loads the notes, so a button
+                        // that loads them would be a lie.
+                        Text(
+                            "The release notes are not loaded in a debug build.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Button(onClick = onReload, modifier = Modifier.fillMaxWidth()) {
+                            Text("Show what changed")
+                        }
                     }
                 }
 
