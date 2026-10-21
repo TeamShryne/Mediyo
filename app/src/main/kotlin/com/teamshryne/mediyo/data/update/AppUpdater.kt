@@ -108,12 +108,23 @@ class AppUpdater @Inject constructor(
         }
     }
 
+    /**
+     * The metadata URL, with a stamp on it.
+     *
+     * The nightly channel republishes the same asset name every day, so a
+     * copy cached by a CDN is yesterday's: the app would be told there was
+     * nothing new on the one channel where there usually is. The file is a
+     * few hundred bytes; asking for it fresh is cheaper than being wrong.
+     */
+    private fun metaUrl(channel: UpdateChannel): String =
+        "${UpdateUrls.metaUrl(channel)}?t=${System.currentTimeMillis() / 1000}"
+
     suspend fun check(channel: UpdateChannel = UpdateChannel.STABLE): UpdateCheck = withContext(Dispatchers.IO) {
         // Updater is release-only: never hit the network from debug builds
         // (different applicationId/versioning, side-by-side installs).
         if (BuildConfig.DEBUG) return@withContext UpdateCheck.UpToDate
         try {
-            val conn = openGet(UpdateUrls.metaUrl(channel), readTimeoutMs = 15_000)
+            val conn = openGet(metaUrl(channel), readTimeoutMs = 15_000)
             conn.connect()
             if (conn.responseCode !in 200..299) {
                 return@withContext UpdateCheck.Failed("Server returned ${conn.responseCode}")
