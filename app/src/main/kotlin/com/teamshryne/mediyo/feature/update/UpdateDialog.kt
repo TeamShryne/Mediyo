@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.teamshryne.mediyo.BuildConfig
+import com.teamshryne.mediyo.data.update.UpdateChannel
 
 /**
  * Shown on startup (via AppShell) and from the App updates settings page
@@ -29,10 +30,13 @@ fun UpdateDialog(vm: UpdateViewModel) {
     val state by vm.state.collectAsState()
     val s = state as? UpdateViewModel.State.Available ?: return
     val updater = vm.updater
+    // A nightly build is not an update in the same sense a release is, and
+    // it should not be announced as one.
+    val nightly = vm.channel.value == UpdateChannel.NIGHTLY
 
     AlertDialog(
         onDismissRequest = { if (!s.downloading) vm.dismiss() },
-        title = { Text("Update available") },
+        title = { Text(if (nightly) "Nightly build available" else "Update available") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(

@@ -7,7 +7,7 @@ are read by the in-app updater, which fetches an `update.json` and compares
 | | Stable | Nightly |
 | --- | --- | --- |
 | What | a tagged release (`v1.2.3`) | a daily build of `main` |
-| Guarantee | supported | none — it can be broken at any time |
+| Guarantee | supported | tested, but less thoroughly than a release |
 | Who gets it | everyone | whoever opts in via **Settings → App updates → Nightly** |
 | Published as | a normal release | a **prerelease** |
 | Version | `1.2.3` | `1.2.3-nightly.4` |
@@ -24,6 +24,19 @@ namespace — otherwise every stable user would be offered a build of `main`.
 The updater reaches them through a separate rolling release tagged `nightly`,
 whose assets are replaced by each daily build. Only users who picked the
 Nightly channel read that feed.
+
+## The channel the app follows
+
+The app stores the track the user picked and reads it **from disk** before
+every check: the startup check, the manual check, and the check that follows
+a channel switch. The stored value, not the one in memory — the preference is
+read asynchronously, and a check that ran before the read landed would look
+at the stable feed and tell a nightly user there was nothing new.
+
+Picking Nightly asks once, in the app, before the channel changes. The
+metadata URL carries a cache-busting stamp, because the nightly channel
+republishes the same asset name every day and a cached copy would mean never
+seeing the new build.
 
 ## The version code scheme
 
@@ -273,8 +286,10 @@ users should run one.
 ## If a nightly breaks something
 
 Nothing to do — stable users are unaffected. The nightly channel is opt-in,
-and the next nightly replaces it. To stop the bleeding immediately, delete the
-rolling release:
+and the next nightly replaces it. A nightly is a build of `main`, so it can
+carry a rough edge that a release never would; that is what the opt-in is
+for, and it is why the app asks before switching the channel on. To stop the
+bleeding immediately, delete the rolling release:
 
 ```bash
 gh release delete nightly -y

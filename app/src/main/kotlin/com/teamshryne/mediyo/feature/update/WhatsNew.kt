@@ -85,7 +85,7 @@ fun WhatsNewCard(
                     val entries = state.entries
                     if (entries.isEmpty()) {
                         Text(
-                            "Nothing new since v${BuildConfig.VERSION_NAME}. You are on the latest version.",
+                            "Nothing new since v${BuildConfig.VERSION_NAME}. You are up to date.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
