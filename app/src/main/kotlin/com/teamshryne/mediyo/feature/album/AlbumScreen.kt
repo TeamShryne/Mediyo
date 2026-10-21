@@ -404,7 +404,7 @@ fun AlbumScreen(
                 items(vm.tracks.size) { i ->
                     val t = vm.tracks[i]
                     TrackRow(
-                        item = t, isPlaying = playingId != null && playingId == t.videoId, number = i + 1, showArtwork = false,
+                        item = t, isPlaying = playingId != null && playingId == t.videoId, number = i + 1, showArtwork = true,
                         trailing = { TrackOverflowIcon(onClick = { openMenu(t) }) }
                     ) {
                         t.videoId?.let { player?.playFromWithOrigin(vm.tracks, t, PlayOrigin.Album(browseId, vm.title)) }
@@ -414,7 +414,7 @@ fun AlbumScreen(
                 items(matches.size, key = { i -> "match_${matches[i].videoId}_$i" }) { i ->
                     val t = matches[i]
                     TrackRow(
-                        item = t, isPlaying = playingId != null && playingId == t.videoId, number = vm.tracks.indexOf(t) + 1, showArtwork = false,
+                        item = t, isPlaying = playingId != null && playingId == t.videoId, number = vm.tracks.indexOf(t) + 1, showArtwork = true,
                         trailing = { TrackOverflowIcon(onClick = { openMenu(t) }) }
                     ) {
                         t.videoId?.let { player?.playFromWithOrigin(vm.tracks, t, PlayOrigin.Album(browseId, vm.title)) }
