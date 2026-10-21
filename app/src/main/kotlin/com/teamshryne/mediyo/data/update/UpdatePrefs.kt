@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -24,7 +25,7 @@ enum class UpdateChannel(val id: String, val label: String) {
     /** Signed releases, cut from tags. */
     STABLE("stable", "Stable"),
 
-    /** Daily builds from main, published as prereleases. Untested by definition. */
+    /** Daily builds from main, published as prereleases. */
     NIGHTLY("nightly", "Nightly");
 
     companion object {
@@ -38,6 +39,16 @@ class UpdatePrefs @Inject constructor(@ApplicationContext private val ctx: Conte
 
     val channelFlow: Flow<UpdateChannel> =
         ctx.updatePrefs.data.map { UpdateChannel.from(it[K_CHANNEL]) }
+
+    /**
+     * The channel as it is stored, read fresh.
+     *
+     * [channelFlow] starts on Stable and only moves to the stored value once
+     * the first read from disk lands, which is after anything that starts at
+     * launch has already begun. A check that asks for the channel the way it
+     * wants it -- the way the user chose it -- has to ask for it here.
+     */
+    suspend fun currentChannel(): UpdateChannel = channelFlow.first()
 
     suspend fun setChannel(channel: UpdateChannel) {
         ctx.updatePrefs.edit { it[K_CHANNEL] = channel.id }

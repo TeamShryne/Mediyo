@@ -12,10 +12,9 @@ import com.teamshryne.mediyo.data.update.ChangelogEntry
 import com.teamshryne.mediyo.data.update.notesSince
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import java.io.File
 import javax.inject.Inject
@@ -54,23 +53,40 @@ class UpdateViewModel @Inject constructor(
     private val _changelog = MutableStateFlow<ChangelogState>(ChangelogState.Idle)
     val changelog: StateFlow<ChangelogState> = _changelog.asStateFlow()
 
-    /** Which track this install follows. */
-    val channel: StateFlow<UpdateChannel> =
-        prefs.channelFlow.stateIn(viewModelScope, SharingStarted.Eagerly, UpdateChannel.STABLE)
+    /**
+     * The track this install follows, or null while the stored choice is
+     * still being read.
+     *
+     * Null rather than a guessed default: a guess would flash the wrong
+     * channel on screen for anyone who chose the other one.
+     */
+    private val _channel = MutableStateFlow<UpdateChannel?>(null)
+    val channel: StateFlow<UpdateChannel?> = _channel.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            prefs.channelFlow.collect { _channel.value = it }
+        }
+    }
 
     private var autoChecked = false
 
-    /** Silent startup check: surfaces nothing unless an update is Available. No-op in debug. */
+    /**
+     * Silent startup check: surfaces nothing unless an update is Available.
+     * No-op in debug.
+     *
+     * The track is read from disk rather than taken from [channel]: that
+     * flow starts empty and only carries the stored choice once the read
+     * lands, which is after this check has started. A nightly user would
+     * have been checked against the stable feed and told there was nothing
+     * new -- the one thing the nightly channel is for.
+     */
     fun silentCheck() {
         if (BuildConfig.DEBUG) return
         if (autoChecked) return
         autoChecked = true
         viewModelScope.launch {
-            _state.value = State.Checking
-            _state.value = when (val r = updater.check(channel.value)) {
-                is UpdateCheck.Available -> State.Available(r.info)
-                else -> State.Idle
-            }
+            check(prefs.currentChannel(), silent = true)
         }
     }
 
@@ -80,12 +96,23 @@ class UpdateViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            _state.value = State.Checking
-            _state.value = when (val r = updater.check(channel.value)) {
-                is UpdateCheck.Available -> State.Available(r.info)
-                is UpdateCheck.UpToDate -> State.UpToDate
-                is UpdateCheck.Failed -> State.Error(r.message)
-            }
+            check(prefs.currentChannel(), silent = false)
+        }
+    }
+
+    /**
+     * Checks one track and moves the state to match.
+     *
+     * A silent check says nothing when there is nothing to say: it is run at
+     * startup, where a message about a network that was briefly down would
+     * be noise, not news.
+     */
+    private suspend fun check(track: UpdateChannel, silent: Boolean) {
+        _state.value = State.Checking
+        _state.value = when (val r = updater.check(track)) {
+            is UpdateCheck.Available -> State.Available(r.info)
+            is UpdateCheck.UpToDate -> if (silent) State.Idle else State.UpToDate
+            is UpdateCheck.Failed -> if (silent) State.Idle else State.Error(r.message)
         }
     }
 
@@ -96,14 +123,21 @@ class UpdateViewModel @Inject constructor(
      */
     fun setChannel(channel: UpdateChannel) {
         viewModelScope.launch {
+            // The stored value, not the one in memory: the flow only carries
+            // a change once it lands, and a tap that arrives in between has
+            // to be compared with what is actually stored.
+            if (prefs.currentChannel() == channel) return@launch
             prefs.setChannel(channel)
             _state.value = State.Idle
             // The notes are per channel: a nightly carries the nightlies on
             // top of the releases, and the stable feed carries only the
             // releases. The old ones are not right any more.
             _changelog.value = ChangelogState.Idle
-            manualCheck()
-            loadChangelog()
+            // The track that was just chosen, not the one that was in
+            // memory: the check has to run against the feed the user asked
+            // for, and the stored value only reaches the flow later.
+            check(channel, silent = false)
+            loadChangelog(channel)
         }
     }
 
@@ -143,14 +177,17 @@ class UpdateViewModel @Inject constructor(
         if (BuildConfig.DEBUG) return
         if (_changelog.value is ChangelogState.Loading) return
         viewModelScope.launch {
-            _changelog.value = ChangelogState.Loading
-            val track = channel.value
-            val history = updater.fetchChangelog(track) ?: updater.cachedChangelog(track)
-            _changelog.value = if (history == null) {
-                ChangelogState.Failed("Could not load the release notes")
-            } else {
-                ChangelogState.Ready(history.notesSince(BuildConfig.VERSION_CODE, track))
-            }
+            loadChangelog(prefs.currentChannel())
+        }
+    }
+
+    private suspend fun loadChangelog(track: UpdateChannel) {
+        _changelog.value = ChangelogState.Loading
+        val history = updater.fetchChangelog(track) ?: updater.cachedChangelog(track)
+        _changelog.value = if (history == null) {
+            ChangelogState.Failed("Could not load the release notes")
+        } else {
+            ChangelogState.Ready(history.notesSince(BuildConfig.VERSION_CODE, track))
         }
     }
 }

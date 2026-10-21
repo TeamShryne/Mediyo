@@ -430,7 +430,11 @@ private fun AppShell() {
                 composable(Tab.Library.route) { LibraryScreen(nav, playerVm) }
                 composable(Tab.Settings.route) { SettingsScreen(nav) }
                 composable("settings/content/lyrics") { LyricsSettingsScreen(nav) }
-                composable("settings/updates") { UpdatesSettingsScreen(nav) }
+                // The updater's view model is the one the app shell holds, so
+                // the screen and the startup check share a single state: a
+                // check made here and the one made at launch cannot disagree
+                // about what the newest build is.
+                composable("settings/updates") { UpdatesSettingsScreen(nav, updateVm) }
                 composable("playlist/{id}") { PlaylistScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
                 composable("album/{id}") { AlbumScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
                 composable("artist/{id}") { ArtistScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
