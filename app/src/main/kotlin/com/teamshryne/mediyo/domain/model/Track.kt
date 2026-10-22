@@ -1,5 +1,6 @@
 package com.teamshryne.mediyo.domain.model
 
+import com.teamshryne.mediyo.data.local.HistoryEntryEntity
 import com.teamshryne.mediyo.data.mediyo.FfiSearchResult
 import com.teamshryne.mediyo.data.mediyo.FfiQueueItem
 import com.teamshryne.mediyo.data.mediyo.FfiThumbnail
@@ -85,6 +86,24 @@ fun Track.toFfiSearchResult(): FfiSearchResult = FfiSearchResult(
 )
 
 fun newLocalId(): String = UUID.randomUUID().toString()
+
+/**
+ * A history row as a track. Shared by the places that show played songs
+ * (the history screen, the search recents) so they read the same.
+ */
+fun HistoryEntryEntity.toTrack(): Track = Track(
+    videoId = videoId,
+    title = title,
+    artists = if (artist.isBlank()) emptyList() else artist.split(",").map { it.trim() },
+    artistIds = artistIds.dbIdList(),
+    artworkUrl = artworkUrl.upscaledThumbUrl(),
+    album = album,
+    albumId = albumId,
+    channelName = channelName,
+    channelId = channelId,
+    duration = duration,
+    category = category
+)
 
 /**
  * Artist browseIds packed for Room columns (comma-joined; browseIds never
