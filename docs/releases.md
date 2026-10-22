@@ -102,6 +102,13 @@ The block is what a release publishes. Everything outside it stays developer
 facing: the description of a pull request explains the change to whoever
 reviews it, the block explains it to the person using the app.
 
+The description only becomes the commit body if the merge was given it.
+GitHub's squash button writes the commit message the repository's merge
+settings describe — here, the branch's commit subjects — so a pull request
+merged from the web page lands with its description left behind, and the next
+release refuses to publish. `scripts/merge-pr.sh` is the merge: it passes the
+description as the body and reads the commit back to check it arrived.
+
 **One block per change a user can see.** A pull request that adds a shelf of
 columns, a pull-to-refresh gesture and a new family of shelves is three
 things to a user, and the release notes read better as three notes than as
@@ -330,6 +337,7 @@ it is not covered.
 | `scripts/make-update-json.sh` | the updater contract |
 | `scripts/check-notes.sh` | the release-notes check |
 | `scripts/check-range-notes.sh` | the same check, over a range of commits |
+| `scripts/merge-pr.sh` | merges a pull request with its description as the commit body |
 | `scripts/collect-notes.sh` | assembles the notes for a range of commits |
 | `scripts/make-changelog.sh` | builds `changelog.json` from the tags |
 | `scripts/notes-lib.sh` | the notes format, shared by the three above |
