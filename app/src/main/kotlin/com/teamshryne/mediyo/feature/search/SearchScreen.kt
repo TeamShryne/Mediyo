@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.History
@@ -48,12 +49,21 @@ import com.teamshryne.mediyo.core.design.TrackOverflowIcon
 import com.teamshryne.mediyo.core.design.appendUnique
 import com.teamshryne.mediyo.core.design.shimmer
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
+import com.teamshryne.mediyo.domain.model.ORIGIN_SEARCH
 import com.teamshryne.mediyo.domain.model.PlayOrigin
+import com.teamshryne.mediyo.domain.model.Track
 import com.teamshryne.mediyo.domain.model.bestThumbUrl
 import com.teamshryne.mediyo.domain.model.toDomainTrack
+import com.teamshryne.mediyo.domain.model.toTrack
+import com.teamshryne.mediyo.domain.model.upscaledThumbUrl
+import com.teamshryne.mediyo.domain.repository.HistoryRepository
 import com.teamshryne.mediyo.domain.repository.UserEventRepository
 import com.teamshryne.mediyo.domain.repository.UserEventTypes
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import com.teamshryne.mediyo.data.mediyo.FfiSearchFilter
@@ -64,7 +74,8 @@ import javax.inject.Inject
 @HiltViewModel
 class SearchVm @Inject constructor(
     private val bridge: MediyoBridge,
-    private val events: UserEventRepository
+    private val events: UserEventRepository,
+    private val history: HistoryRepository
 ) : ViewModel() {
     var query by mutableStateOf("")
     var selectedLabel by mutableStateOf("All")
@@ -82,6 +93,20 @@ class SearchVm @Inject constructor(
     var suggestEntities by mutableStateOf<List<FfiSearchResult>>(emptyList())
     /** Recent submitted queries, from logged search events. */
     var recents by mutableStateOf<List<String>>(emptyList())
+    /**
+     * The songs we played from the search results, newest first. The
+     * history rows carry the origin, so a song tapped in the results shows
+     * up here — and stays here when it is played again from this list.
+     */
+    val recentPlays: StateFlow<List<RecentSearchPlay>> = history.flowHistory()
+        .map { rows ->
+            rows.asSequence()
+                .filter { it.lastOriginType == ORIGIN_SEARCH }
+                .take(RECENT_PLAYS_LIMIT)
+                .map { RecentSearchPlay(it.toTrack(), it.lastOriginLabel.orEmpty()) }
+                .toList()
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     /** Suggestion panel is allowed to be open (not dismissed by a scroll). */
     var suggestOpen by mutableStateOf(false)
     /**
@@ -304,6 +329,9 @@ fun SearchScreen(
 ) {
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
+    // The songs we played from the search results — the "recents" shelf.
+    val recentPlays by vm.recentPlays.collectAsState()
+    val playingId = player.state.collectAsState().value.videoId
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     // Measured heights: the pill (the panel docks under it) and the whole
     // header (the results start below it), whatever the font scale does.
@@ -378,6 +406,29 @@ fun SearchScreen(
     ) {
         when {
             !vm.hasSearched -> if (vm.query.isBlank()) {
+                if (recentPlays.isNotEmpty()) {
+                    item(key = "played_header") {
+                        Text(
+                            "Recently played",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(horizontal = 20.dp)
+                        )
+                    }
+                    items(recentPlays, key = { "played_${it.track.videoId}" }) { p ->
+                        RecentPlayRow(
+                            track = p.track,
+                            isPlaying = playingId != null && playingId == p.track.videoId
+                        ) {
+                            // Keep the search origin: the song stays in the
+                            // list it was played from.
+                            player.playTrack(
+                                p.track,
+                                PlayOrigin.Search(p.query.ifBlank { "Search" }, vm.selectedLabel)
+                            )
+                        }
+                    }
+                }
                 if (vm.recents.isNotEmpty()) {
                     item(key = "recent_header") {
                         Row(
@@ -419,7 +470,7 @@ fun SearchScreen(
                             )
                         }
                     }
-                } else {
+                } else if (recentPlays.isEmpty()) {
                     item(key = "search_idle") {
                         EmptyState("Search Mediyo", "Find songs, artists, albums and playlists")
                     }
@@ -852,5 +903,62 @@ private fun ResultRow(item: FfiSearchResult, onClick: () -> Unit, onMenu: () -> 
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         TrackOverflowIcon(onClick = onMenu)
+    }
+}
+
+/**
+ * A song we played from the search results: artwork, title and artist, with
+ * the length on the right. Tapping it plays it again.
+ */
+@Composable
+private fun RecentPlayRow(track: Track, isPlaying: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AsyncImage(
+            model = track.artworkUrl.upscaledThumbUrl(),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(52.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                track.title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                track.artists.joinToString().ifBlank { track.album.orEmpty() },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        if (isPlaying) {
+            Icon(
+                Icons.Filled.GraphicEq,
+                contentDescription = "Now playing",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp)
+            )
+        } else if (!track.duration.isNullOrBlank()) {
+            Text(
+                track.duration.orEmpty(),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }

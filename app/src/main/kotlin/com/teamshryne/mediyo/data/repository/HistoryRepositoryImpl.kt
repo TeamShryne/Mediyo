@@ -6,6 +6,7 @@ import com.teamshryne.mediyo.data.local.HistoryPlayEventEntity
 import com.teamshryne.mediyo.data.local.HourHistogramRow
 import com.teamshryne.mediyo.data.local.TopTrackRow
 import com.teamshryne.mediyo.domain.model.PlayOrigin
+import com.teamshryne.mediyo.domain.model.ORIGIN_SEARCH
 import com.teamshryne.mediyo.domain.model.Track
 import com.teamshryne.mediyo.domain.model.dbArtistIds
 import com.teamshryne.mediyo.domain.repository.HistoryRepository
@@ -136,7 +137,7 @@ class HistoryRepositoryImpl @Inject constructor(
         is PlayOrigin.Playlist -> Triple("Playlist", title, id)
         is PlayOrigin.Album -> Triple("Album", title, id)
         is PlayOrigin.ArtistTop -> Triple("ArtistTop", name, id)
-        is PlayOrigin.Search -> Triple("Search", query, query)
+        is PlayOrigin.Search -> Triple(ORIGIN_SEARCH, query, query)
         is PlayOrigin.HomeShelf -> Triple("HomeShelf", title, title)
         is PlayOrigin.Podcast -> Triple("Podcast", "Podcast", id)
         is PlayOrigin.GenericList -> Triple("GenericList", "List", id)
