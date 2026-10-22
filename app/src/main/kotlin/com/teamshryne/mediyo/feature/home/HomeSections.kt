@@ -84,18 +84,12 @@ fun HomeSearchBar(modifier: Modifier = Modifier, onOpen: () -> Unit) {
 @Composable
 private fun QuickPickColumnRow(
     track: Track,
-    highlighted: Boolean,
     isPlaying: Boolean,
     onClick: () -> Unit,
     onMenu: () -> Unit
 ) {
     Row(
         modifier = Modifier.fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(
-                if (highlighted) MaterialTheme.colorScheme.surfaceContainerHigh
-                else androidx.compose.ui.graphics.Color.Transparent
-            )
             .clickable(onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -142,8 +136,9 @@ private fun trackDetail(track: Track): String {
  * snaps from column to column, and the column after it peeking in from the
  * right so it is obvious there is more.
  *
- * The focused column's top row carries the highlight card, so the emphasis
- * sticks to whichever column you are looking at.
+ * No row is singled out. A card on one row — even the top row of the column
+ * you are on — reads as "this song is the pick", which is a claim the shelf
+ * cannot make: the tracks here are the graph's answer, not a ranking.
  */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
@@ -158,7 +153,6 @@ fun TrackColumnCarousel(
     if (tracks.isEmpty()) return
     val columns = remember(tracks) { tracks.chunked(COLUMN_SIZE) }
     val listState = rememberLazyListState()
-    val focused = listState.firstVisibleItemIndex
 
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val columnWidth = maxWidth - COLUMN_PEEK
@@ -175,12 +169,11 @@ fun TrackColumnCarousel(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             flingBehavior = rememberSnapFlingBehavior(listState)
         ) {
-            itemsIndexed(columns, key = { i, _ -> "qp_$i" }) { index, column ->
+            itemsIndexed(columns, key = { i, _ -> "qp_$i" }) { _, column ->
                 Column(Modifier.width(columnWidth)) {
-                    column.forEachIndexed { row, track ->
+                    column.forEach { track ->
                         QuickPickColumnRow(
                             track = track,
-                            highlighted = index == focused && row == 0,
                             isPlaying = playingId != null && playingId == track.videoId,
                             onClick = { onPick(track) },
                             onMenu = { onMenu(track) }
