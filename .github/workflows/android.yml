@@ -8,8 +8,16 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # A pull request cancels its own superseded runs: a new push is a newer build
+  # of the same thing, and only the newest one is worth finishing.
+  #
+  # A push to main must not. Two merges landed seconds apart once, the second
+  # cancelled the first one's `Release notes` check, and the commit it carried
+  # went in with the missing note never reported — the next release was the
+  # first thing to notice. Every push gets its own group, so every one of them
+  # reports.
+  group: ci-${{ github.ref }}-${{ github.event_name == 'push' && github.sha || 'pr' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

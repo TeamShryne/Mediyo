@@ -24,15 +24,33 @@ vendored as an AAR in `app/libs/` and is not built from here.
 The required checks on `main` are `APK` (build + lint), `Boot emulator + drive
 app` (the emulator tour, which screenshots the app) and `Release notes`.
 
+### Merging
+
+Merge with the script, not the button:
+
+```bash
+scripts/merge-pr.sh <number>
+```
+
+The release reads the notes out of the body of the squash commit, and the
+squash button does not put them there: this repository's merge settings write
+the branch's commit subjects, not the pull request description. A pull request
+merged that way passes `Release notes` — which reads the description — and then
+stops the next release, because the commit it landed as has no note in it at
+all. The script hands the description to the merge as the commit body, and then
+reads the commit back to check it arrived.
+
 ## Release notes — the block in the pull request description
 
 **Read this before opening a pull request. The block is not reviewer notes: it
 is the release note the user reads.**
 
-On a squash merge the pull request description becomes the commit body, and the
-release publishes exactly the blocks from those bodies — the notes on the
-release page and in the app's "What's new". Nothing writes them by hand any
-more, so a note that was never written is a note the release does not have.
+On a squash merge the pull request description becomes the commit body — if
+the merge was given one, which `scripts/merge-pr.sh` does and the squash button
+does not — and the release publishes exactly the blocks from those bodies: the
+notes on the release page and in the app's "What's new". Nothing writes them by
+hand any more, so a note that was never written is a note the release does not
+have.
 
 The description therefore has two parts:
 
