@@ -40,6 +40,12 @@ sealed class PlayOrigin {
     }
 }
 
+/**
+ * Column value a [PlayOrigin.Search] play writes into the history rows.
+ * The search screen reads it back to show the songs we played from there.
+ */
+const val ORIGIN_SEARCH = "Search"
+
 data class PlayQueueState(
     val origin: PlayOrigin = PlayOrigin.Unknown,
     val entries: List<Track> = emptyList(),
