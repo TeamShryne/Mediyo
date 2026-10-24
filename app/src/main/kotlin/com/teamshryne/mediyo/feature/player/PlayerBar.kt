@@ -59,6 +59,7 @@ import com.teamshryne.mediyo.core.design.MarqueeText
 import com.teamshryne.mediyo.core.design.MediaMenuVm
 import com.teamshryne.mediyo.core.design.PlayerBgConfig
 import com.teamshryne.mediyo.core.design.PlayerBackground
+import com.teamshryne.mediyo.core.design.SheetHostVm
 import com.teamshryne.mediyo.core.design.TrackMenuSheet
 import com.teamshryne.mediyo.core.design.formatTime
 import com.teamshryne.mediyo.core.design.rememberDominantColors
@@ -183,6 +184,9 @@ fun FullPlayer(
     val playbackLabel = remember(playback) { playbackMenuLabel(playback) }
     val menuScope = rememberCoroutineScope()
     val menuVm: MediaMenuVm = hiltViewModel()
+    // Root sheet host: the manual lyrics search is hosted there like every
+    // other sheet, so its scrim covers the whole window.
+    val sheetVm: SheetHostVm = hiltViewModel()
     // lyrics mode: toggles between player and synced lyrics experience
     var isLyricsMode by remember { mutableStateOf(false) }
 
@@ -331,6 +335,12 @@ fun FullPlayer(
                             isPlaying = state.isPlaying,
                             onSeek = { ms -> playerVm?.seekToMs(ms) },
                             onRetry = { lyricsVm.retry(trackForMenu, state.durationMs.takeIf { it > 0 }) },
+                            onSearch = {
+                                sheetVm.showLyricsSearch(
+                                    trackForMenu,
+                                    state.durationMs.takeIf { it > 0 }
+                                )
+                            },
                             modifier = Modifier.fillMaxSize(),
                             // The word highlight advances with the playback
                             // rate, so a slowed-down song stays in sync.
@@ -626,6 +636,9 @@ fun FullPlayer(
                 onComments = { showMenu = false; onShowComments() },
                 onRefetchLyrics = if (isLyricsMode) {
                     { lyricsVm.refetch(trackForMenu, state.durationMs.takeIf { it > 0 }) }
+                } else null,
+                onSearchLyrics = if (isLyricsMode) {
+                    { sheetVm.showLyricsSearch(trackForMenu, state.durationMs.takeIf { it > 0 }) }
                 } else null,
                 onPlaybackSettings = if (playerVm != null) {
                     { showPlaybackSheet = true }

@@ -146,6 +146,12 @@ shot "sheet-menu-from-player" 6
 adb shell input keyevent KEYCODE_BACK >/dev/null 2>&1
 sleep 2
 
+step "sheet: lyrics search (from player)"
+send sheet --es target lyrics
+shot "sheet-lyrics-search" 6
+adb shell input keyevent KEYCODE_BACK >/dev/null 2>&1
+sleep 2
+
 step "overlay: queue"
 send overlay --es target queue
 shot "overlay-queue" 8
