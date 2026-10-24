@@ -28,6 +28,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -332,6 +333,11 @@ fun SyncedLyricsView(
     isPlaying: Boolean,
     onSeek: (Long) -> Unit,
     onRetry: () -> Unit,
+    /**
+     * Opens the manual provider search. Passed down to the empty states, where
+     * a wrong automatic match is what the user needs to work around.
+     */
+    onSearch: (() -> Unit)? = null,
     config: LyricsAnimationConfig = LyricsAnimationConfig(),
     modifier: Modifier = Modifier,
     /**
@@ -362,10 +368,10 @@ fun SyncedLyricsView(
             positionSampleElapsedMs = positionSampleElapsedMs,
             style = style
         )
-        LyricsUiState.NotFound -> LyricsEmpty("No synced lyrics for this track", onRetry, modifier)
-        LyricsUiState.NeedsApiKey -> LyricsEmpty("Not cached yet\nPlay once via BetterLyrics extension to prime cache", onRetry, modifier)
-        is LyricsUiState.Error -> LyricsEmpty(state.message, onRetry, modifier)
-        LyricsUiState.RateLimited -> LyricsEmpty("Rate limited — try again shortly", onRetry, modifier)
+        LyricsUiState.NotFound -> LyricsEmpty("No synced lyrics for this track", onRetry, modifier, onSearch)
+        LyricsUiState.NeedsApiKey -> LyricsEmpty("Not cached yet\nPlay once via BetterLyrics extension to prime cache", onRetry, modifier, onSearch)
+        is LyricsUiState.Error -> LyricsEmpty(state.message, onRetry, modifier, onSearch)
+        LyricsUiState.RateLimited -> LyricsEmpty("Rate limited — try again shortly", onRetry, modifier, onSearch)
     }
 }
 
@@ -380,7 +386,12 @@ private fun LyricsLoading(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun LyricsEmpty(msg: String, onRetry: () -> Unit, modifier: Modifier = Modifier) {
+private fun LyricsEmpty(
+    msg: String,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+    onSearch: (() -> Unit)? = null
+) {
     Box(modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(msg, style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.6f), textAlign = TextAlign.Center)
@@ -388,6 +399,12 @@ private fun LyricsEmpty(msg: String, onRetry: () -> Unit, modifier: Modifier = M
             FilledTonalButton(onClick = onRetry, shape = RoundedCornerShape(20.dp), colors = ButtonDefaults.filledTonalButtonColors(containerColor = Color.White.copy(alpha = 0.12f), contentColor = Color.White)) {
                 Icon(Icons.Filled.Refresh, null, Modifier.padding(end = 6.dp))
                 Text("Retry")
+            }
+            if (onSearch != null) {
+                Spacer(Modifier.height(6.dp))
+                TextButton(onClick = onSearch) {
+                    Text("Search on another source", color = Color.White.copy(alpha = 0.8f))
+                }
             }
         }
     }

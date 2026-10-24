@@ -352,6 +352,16 @@ private fun AppShell() {
                                 showSleepSheet = true
                                 AdbControl.log("sheet sleep timer opened")
                             }
+
+                            "lyrics" -> if (track == null) {
+                                AdbControl.log("sheet lyrics needs something in the queue")
+                            } else {
+                                sheetVm.showLyricsSearch(
+                                    track,
+                                    playerState.durationMs.takeIf { it > 0 }
+                                )
+                                AdbControl.log("sheet lyrics search opened for '${track.title}'")
+                            }
                         }
                     }
 

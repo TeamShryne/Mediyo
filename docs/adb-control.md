@@ -117,7 +117,8 @@ adb exec-out screencap -p > sheet.png
 ```
 
 `--es target` is one of `menu` (track overflow menu), `comments`, `playlist`
-(add-to-playlist) or `sleep` (sleep timer).
+(add-to-playlist), `sleep` (sleep timer) or `lyrics` (the provider-specific
+lyrics search).
 
 ### dump — log what is playing
 

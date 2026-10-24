@@ -79,7 +79,7 @@ sealed interface AdbCommand {
 
     /**
      * Open one of the bottom sheets so it can be screenshotted. [target] is
-     * `menu`, `media`, `comments`, `playlist` or `sleep`.
+     * `menu`, `media`, `comments`, `playlist`, `sleep` or `lyrics`.
      */
     data class Sheet(override val at: Long, val target: String) : AdbCommand
 

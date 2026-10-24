@@ -65,9 +65,16 @@ data class TrackMenuRequest(
     val onRemove: (() -> Unit)? = null,
     val onShare: (() -> Unit)? = null,
     val onRefetchLyrics: (() -> Unit)? = null,
+    val onSearchLyrics: (() -> Unit)? = null,
     val onLyricsSettings: (() -> Unit)? = null,
     val onPlaybackSettings: (() -> Unit)? = null,
     val playbackLabel: String? = null
+)
+
+/** A manual provider search, hosted at root like every other sheet. */
+data class LyricsSearchRequest(
+    val track: Track,
+    val durationMs: Long? = null
 )
 
 /** All of [MediaMenuSheet]'s params minus `show`/`onDismiss` (host-owned). */
@@ -96,10 +103,14 @@ class SheetManager @Inject constructor() {
     private val _comments = MutableStateFlow<String?>(null)
     val comments: StateFlow<String?> = _comments.asStateFlow()
 
+    private val _lyricsSearch = MutableStateFlow<LyricsSearchRequest?>(null)
+    val lyricsSearch: StateFlow<LyricsSearchRequest?> = _lyricsSearch.asStateFlow()
+
     fun showTrackMenu(request: TrackMenuRequest) {
         _mediaMenu.value = null
         _addToPlaylist.value = null
         _comments.value = null
+        _lyricsSearch.value = null
         _trackMenu.value = request
     }
     fun dismissTrackMenu() { _trackMenu.value = null }
@@ -109,6 +120,7 @@ class SheetManager @Inject constructor() {
         _trackMenu.value = null
         _mediaMenu.value = null
         _comments.value = null
+        _lyricsSearch.value = null
         _addToPlaylist.value = track
     }
     fun dismissAddToPlaylist() { _addToPlaylist.value = null }
@@ -117,6 +129,7 @@ class SheetManager @Inject constructor() {
         _trackMenu.value = null
         _addToPlaylist.value = null
         _comments.value = null
+        _lyricsSearch.value = null
         _mediaMenu.value = request
     }
     fun dismissMediaMenu() { _mediaMenu.value = null }
@@ -125,9 +138,20 @@ class SheetManager @Inject constructor() {
         _trackMenu.value = null
         _mediaMenu.value = null
         _addToPlaylist.value = null
+        _lyricsSearch.value = null
         _comments.value = videoId
     }
     fun dismissComments() { _comments.value = null }
+
+    /** Opens the manual, provider-specific lyrics search for [track]. */
+    fun showLyricsSearch(request: LyricsSearchRequest) {
+        _trackMenu.value = null
+        _mediaMenu.value = null
+        _addToPlaylist.value = null
+        _comments.value = null
+        _lyricsSearch.value = request
+    }
+    fun dismissLyricsSearch() { _lyricsSearch.value = null }
 }
 
 @HiltViewModel
@@ -138,6 +162,8 @@ class SheetHostVm @Inject constructor(
     fun openAddToPlaylist(track: Track) = sheets.openAddToPlaylist(track)
     fun showMediaMenu(request: MediaMenuRequest) = sheets.showMediaMenu(request)
     fun showComments(videoId: String) = sheets.showComments(videoId)
+    fun showLyricsSearch(track: Track, durationMs: Long?) =
+        sheets.showLyricsSearch(LyricsSearchRequest(track, durationMs))
 }
 
 /**
@@ -260,15 +286,20 @@ fun navBarInset(): Dp {
 
 /** Render in `AppShell`'s root overlay `Box`, after the queue overlay. */
 @Composable
-fun GlobalSheets(host: SheetHostVm = hiltViewModel()) {
+fun GlobalSheets(
+    host: SheetHostVm = hiltViewModel(),
+    lyricsVm: com.teamshryne.mediyo.feature.lyrics.LyricsViewModel = hiltViewModel()
+) {
     val m = host.sheets
     val trackReq by m.trackMenu.collectAsState()
     val addTrack by m.addToPlaylist.collectAsState()
     val mediaReq by m.mediaMenu.collectAsState()
     val commentsVid by m.comments.collectAsState()
+    val lyricsReq by m.lyricsSearch.collectAsState()
 
     SheetStatusBar(
-        open = trackReq != null || addTrack != null || mediaReq != null || commentsVid != null,
+        open = trackReq != null || addTrack != null || mediaReq != null ||
+            commentsVid != null || lyricsReq != null,
         key = "global"
     )
 
@@ -290,6 +321,7 @@ fun GlobalSheets(host: SheetHostVm = hiltViewModel()) {
             onRemove = r.onRemove,
             onShare = r.onShare,
             onRefetchLyrics = r.onRefetchLyrics,
+            onSearchLyrics = r.onSearchLyrics,
             onLyricsSettings = r.onLyricsSettings,
             onPlaybackSettings = r.onPlaybackSettings,
             playbackLabel = r.playbackLabel,
@@ -313,5 +345,14 @@ fun GlobalSheets(host: SheetHostVm = hiltViewModel()) {
     }
     commentsVid?.let { vid ->
         CommentsBottomSheet(videoId = vid, onDismiss = m::dismissComments)
+    }
+    lyricsReq?.let { r ->
+        com.teamshryne.mediyo.feature.lyrics.LyricsSearchSheet(
+            track = r.track,
+            durationMs = r.durationMs,
+            vm = lyricsVm,
+            onDismiss = m::dismissLyricsSearch,
+            navBarInset = navBottom
+        )
     }
 }

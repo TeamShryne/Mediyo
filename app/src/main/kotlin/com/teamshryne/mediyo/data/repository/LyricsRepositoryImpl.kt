@@ -126,6 +126,27 @@ class LyricsRepositoryImpl @Inject constructor(
         return getLyrics(track, durationSec, forceRefresh = true)
     }
 
+    override suspend fun searchProvider(
+        source: LyricsSource,
+        title: String,
+        artist: String,
+        album: String?,
+        durationSec: Int?
+    ): LyricsResult = providerFor(source).fetch(
+        title = title,
+        artist = artist,
+        album = album,
+        durationSec = durationSec
+    )
+
+    override suspend fun saveLyrics(track: Track, durationSec: Int?, result: LyricsResult.Success) {
+        val key = cacheKey(track, durationSec)
+        runCatching {
+            cache.put(key, "lyrics", result.rawTtml)
+            result.provider?.let { cache.put(providerKey(key), "lyrics", it.id) }
+        }
+    }
+
     override suspend fun getLyricsCached(key: String): String? = cache.get(key)
 
     override fun observeLyrics(key: String): Flow<String?> = flow { emit(cache.get(key)) }
