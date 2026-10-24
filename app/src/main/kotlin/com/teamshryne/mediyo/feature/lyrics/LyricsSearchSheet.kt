@@ -65,6 +65,11 @@ fun LyricsSearchSheet(
 
     // Seed from the playing song: the failed words are usually the words.
     LaunchedEffect(track, durationMs) { vm.openSearch(track, durationMs) }
+    // The sheet must never collapse to an empty frame if anything clears the
+    // search session while it is open: seed it again from its own track.
+    LaunchedEffect(search == null) {
+        if (search == null) vm.openSearch(track, durationMs)
+    }
     // A hit already replaced [LyricsUiState]; close onto it. A stale
     // applied=true from the previous open must not close the sheet before the
     // seed above has run, so only dismiss after this session actually searched.
@@ -74,12 +79,17 @@ fun LyricsSearchSheet(
     }
     LaunchedEffect(search?.applied) {
         if (search?.applied == true && sawRunning) {
-            vm.closeSearch()
             onDismiss()
         }
     }
 
-    val s = search ?: return
+    // A null session is a frame between clearing and re-seeding; render the
+    // sheet's own track rather than letting it vanish.
+    val s = search ?: LyricsSearchState(
+        source = LyricsSource.defaultOrder.first(),
+        title = track.title,
+        artist = track.artists.firstOrNull() ?: track.album.orEmpty()
+    )
 
     ModalBottomSheet(
         onDismissRequest = { vm.closeSearch(); onDismiss() },

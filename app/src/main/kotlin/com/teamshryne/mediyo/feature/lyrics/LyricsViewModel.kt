@@ -81,9 +81,6 @@ class LyricsViewModel @Inject constructor(
     fun load(track: Track, durationMs: Long? = null) {
         val key = keyOf(track)
         if (key == lastKey && _state.value is LyricsUiState.Ready) return
-        // A new song invalidates a manual search for the previous one.
-        _search.value = null
-        searchJob?.cancel()
         lastKey = key
         job?.cancel()
         _state.value = LyricsUiState.Loading
@@ -113,8 +110,6 @@ class LyricsViewModel @Inject constructor(
     fun refetch(track: Track, durationMs: Long? = null) {
         val key = keyOf(track)
         lastKey = null
-        _search.value = null
-        searchJob?.cancel()
         _state.value = LyricsUiState.Loading
         job?.cancel()
         job = viewModelScope.launch {
@@ -198,9 +193,13 @@ class LyricsViewModel @Inject constructor(
             when (val res = repo.searchProvider(s.source, title, artist, track.album, durSec)) {
                 is LyricsResult.Success -> {
                     repo.saveLyrics(track, durSec, res)
-                    lastKey = keyOf(track)
                     lastSearchSource = s.source
-                    _state.value = LyricsUiState.Ready(res.track, res.provider)
+                    // The queue can move on while the sheet is open. Cache the
+                    // pick for the track it was made for, but never replace the
+                    // lyrics of whatever is playing now with another song's.
+                    if (keyOf(track) == lastKey) {
+                        _state.value = LyricsUiState.Ready(res.track, res.provider)
+                    }
                     _search.value = _search.value?.copy(
                         running = false,
                         message = null,
