@@ -95,8 +95,12 @@ for t in home search library settings; do
 done
 
 # ── Settings sub-screens ────────────────────────────────────────────────────
+# The debug report screen only exists in the debug APK the tour installs; it
+# runs its checks on open, so the screenshot is the proof that the diagnostic
+# works on a clean device.
 for t in settings/content/lyrics settings/updates settings/appearance settings/appearance/tabs \
-         settings/appearance/player settings/appearance/lyrics settings/equalizer settings/storage; do
+         settings/appearance/player settings/appearance/lyrics settings/equalizer settings/storage \
+         settings/debug/notification; do
   step "screen: $t"
   send go --es route "$t"
   shot "screen-${t//\//-}" 6

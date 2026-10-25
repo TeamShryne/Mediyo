@@ -88,6 +88,7 @@ import com.teamshryne.mediyo.core.design.sheetExit
 import com.teamshryne.mediyo.feature.album.AlbumScreen
 import com.teamshryne.mediyo.feature.artist.ArtistScreen
 import com.teamshryne.mediyo.feature.channel.ChannelScreen
+import com.teamshryne.mediyo.feature.debug.NotificationReportScreen
 import com.teamshryne.mediyo.feature.episode.EpisodeScreen
 import com.teamshryne.mediyo.feature.history.HistoryScreen
 import com.teamshryne.mediyo.feature.home.HomeScreen
@@ -480,6 +481,11 @@ private fun AppShell() {
                 composable("settings/appearance/tabs") { TabBarStyleScreen(nav) }
                 composable("settings/appearance/player") { PlayerBackgroundScreen(nav) }
                 composable("settings/appearance/lyrics") { LyricsAppearanceScreen(nav) }
+                // Debug-only route: a release build cannot reach a screen
+                // that does not exist in its graph.
+                if (BuildConfig.DEBUG) {
+                    composable("settings/debug/notification") { NotificationReportScreen(nav) }
+                }
                 }
                 }
             }

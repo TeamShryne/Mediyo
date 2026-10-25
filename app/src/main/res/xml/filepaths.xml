@@ -4,4 +4,6 @@
     <cache-path name="updates" path="updates/" />
     <!-- Crash reports the user can share from the crash screen. -->
     <cache-path name="crashes" path="crashes/" />
+    <!-- Debug-only diagnostic reports the user can share. -->
+    <cache-path name="reports" path="reports/" />
 </paths>
