@@ -34,7 +34,13 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
-enum class CheckStatus { PASS, WARN, FAIL, INFO }
+/**
+ * [SKIP] is not a verdict: it marks a check that cannot judge anything yet
+ * because no track has played in this process. Saying "failed" there would
+ * blame the device for a report that was simply run too early — the first
+ * thing a user does with a tool like this is open it before playing anything.
+ */
+enum class CheckStatus { PASS, WARN, FAIL, INFO, SKIP }
 
 /**
  * One line of the report. [details] are printed under the line in the file
@@ -107,6 +113,15 @@ class NotificationReportRunner @Inject constructor(
     }
 
     // ── Checks ───────────────────────────────────────────────────────────
+
+    /**
+     * Whether playback has actually happened in this process. Several checks
+     * can only be judged after that: a channel that does not exist, a session
+     * that was never registered and a missing notification all look identical
+     * before the first track and after a real failure.
+     */
+    private fun hasPlayed(): Boolean =
+        PlaybackDiagnostics.snapshot().isNotEmpty() || hub.snapshot.value.hasTrack
 
     private suspend fun deviceCheck(): CheckResult {
         val miui = withContext(Dispatchers.IO) {
@@ -184,8 +199,15 @@ class NotificationReportRunner @Inject constructor(
             ?: return CheckResult(
                 id = "channel",
                 title = "Playback channel",
-                status = CheckStatus.FAIL,
-                summary = "The playback channel does not exist yet",
+                // The channel is created the first time a playback
+                // notification is posted, so its absence before anything has
+                // played says nothing about the device.
+                status = if (hasPlayed()) CheckStatus.FAIL else CheckStatus.SKIP,
+                summary = if (hasPlayed()) {
+                    "The playback channel does not exist even though playback has started"
+                } else {
+                    "The channel is created when the first track plays — play one, then run this again"
+                },
                 details = listOf("channel id: ${PlaybackService.CHANNEL_ID}"),
             )
         val importance = channel.importance
@@ -291,11 +313,15 @@ class NotificationReportRunner @Inject constructor(
             id = "pipeline",
             title = "Media3 notification pipeline",
             status = when {
+                // Nothing recorded means the service has not run in this
+                // process. That is "we have not looked yet", not "it is broken".
+                events.isEmpty() -> CheckStatus.SKIP
                 armed == null -> CheckStatus.FAIL
                 built == null -> CheckStatus.WARN
                 else -> CheckStatus.PASS
             },
             summary = when {
+                events.isEmpty() -> "Nothing has played in this session yet — play a track, then run this again"
                 armed == null -> "The session was never added to the service — Media3 cannot build a notification"
                 built == null -> "The session is registered, but no notification was built yet"
                 else -> "The session is registered and Media3 built a notification"
@@ -336,7 +362,7 @@ class NotificationReportRunner @Inject constructor(
             id = "playback",
             title = "Playback state",
             status = when {
-                timeline.isEmpty -> CheckStatus.WARN
+                timeline.isEmpty -> CheckStatus.SKIP
                 state == Player.STATE_IDLE -> CheckStatus.WARN
                 else -> CheckStatus.PASS
             },
@@ -394,12 +420,13 @@ class NotificationReportRunner @Inject constructor(
             id = "posted",
             title = "Notification posted",
             status = when {
-                record == null -> CheckStatus.FAIL
+                record == null -> if (hasPlayed()) CheckStatus.FAIL else CheckStatus.SKIP
                 mediaToken -> CheckStatus.PASS
                 else -> CheckStatus.FAIL
             },
             summary = when {
-                record == null -> "Nothing is posted for playback right now"
+                record == null && hasPlayed() -> "Playback has started but nothing is posted for it"
+                record == null -> "Nothing has played yet, so there is no notification to look at"
                 mediaToken -> "The playback notification is posted with a media session token"
                 else -> "Only the generic foreground notification is posted — no media session token"
             },

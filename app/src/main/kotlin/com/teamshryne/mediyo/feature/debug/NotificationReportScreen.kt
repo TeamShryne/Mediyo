@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
@@ -186,6 +187,7 @@ private fun ReportHero(state: NotificationReportViewModel.UiState) {
         state.running -> MaterialTheme.colorScheme.primary
         worst == CheckStatus.FAIL -> MaterialTheme.colorScheme.error
         worst == CheckStatus.WARN -> MaterialTheme.colorScheme.tertiary
+        worst == CheckStatus.SKIP -> MaterialTheme.colorScheme.onSurfaceVariant
         worst == null -> MaterialTheme.colorScheme.onSurfaceVariant
         else -> MaterialTheme.colorScheme.primary
     }
@@ -250,6 +252,8 @@ private fun heroSummary(state: NotificationReportViewModel.UiState): String = wh
         "Something on this device stops the media card — share the report"
     state.checks.any { it.status == CheckStatus.WARN } ->
         "Everything essential is in place, with warnings worth reading"
+    state.checks.any { it.status == CheckStatus.SKIP } ->
+        "Nothing has played yet — start a track, then run this again"
     else -> "All checks passed"
 }
 
@@ -510,6 +514,9 @@ private fun shareReport(context: Context, file: File) {
 private fun List<CheckResult>.worstStatus(): CheckStatus? = when {
     any { it.status == CheckStatus.FAIL } -> CheckStatus.FAIL
     any { it.status == CheckStatus.WARN } -> CheckStatus.WARN
+    // A report run before anything played is neither good nor bad, and a
+    // green orb there would read as "your device is fine".
+    any { it.status == CheckStatus.SKIP } -> CheckStatus.SKIP
     isEmpty() -> null
     else -> CheckStatus.PASS
 }
@@ -518,6 +525,7 @@ private fun CheckStatus?.icon(): ImageVector = when (this) {
     CheckStatus.PASS -> Icons.Filled.Check
     CheckStatus.WARN -> Icons.Filled.Warning
     CheckStatus.FAIL -> Icons.Filled.ErrorOutline
+    CheckStatus.SKIP -> Icons.Filled.PlayArrow
     CheckStatus.INFO, null -> Icons.Filled.Info
 }
 
@@ -526,5 +534,6 @@ private fun CheckStatus?.tint() = when (this) {
     CheckStatus.PASS -> MaterialTheme.colorScheme.primary
     CheckStatus.WARN -> MaterialTheme.colorScheme.tertiary
     CheckStatus.FAIL -> MaterialTheme.colorScheme.error
+    CheckStatus.SKIP -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
     CheckStatus.INFO, null -> MaterialTheme.colorScheme.onSurfaceVariant
 }
