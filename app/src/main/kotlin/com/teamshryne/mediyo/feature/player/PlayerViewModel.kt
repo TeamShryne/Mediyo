@@ -140,6 +140,8 @@ class PlayerViewModel @Inject constructor(
     private var expiryRetryVid: String? = null
     @Volatile private var resolving = false
     private var tickerJob: Job? = null
+    /** Wall clock of the last refused service start, 0 once the service is up. */
+    @Volatile private var serviceStartRefusedAt = 0L
     private var lastHistoryVideoId: String? = null
     private var lastHistoryAt: Long = 0
 
@@ -406,12 +408,29 @@ class PlayerViewModel @Inject constructor(
     private fun ensurePlaybackService(): Boolean {
         return try {
             ContextCompat.startForegroundService(ctx, Intent(ctx, PlaybackService::class.java))
+            serviceStartRefusedAt = 0L
             true
         } catch (e: Throwable) {
             // ForegroundServiceStartNotAllowedException on Android 12+ from background (auto-next) — audio would be ghost playback
-            android.util.Log.w("PlayerVM", "ensurePlaybackService failed", e)
+            val firstRefusal = serviceStartRefusedAt == 0L
+            serviceStartRefusedAt = android.os.SystemClock.elapsedRealtime()
+            if (firstRefusal) android.util.Log.w("PlayerVM", "playback service start refused", e)
             false
         }
+    }
+
+    /**
+     * A refused start is not permanent: Android 12+ and OEM builds deny it while
+     * the app is in the background and allow it again once the app is visible.
+     * The ticker is the one thing that runs in both states, so it is the retry
+     * clock — without it the notification never came back for the rest of the
+     * session on a device that refused the first attempt.
+     */
+    private fun retryPlaybackServiceIfRefused(nowMs: Long) {
+        if (serviceStartRefusedAt == 0L) return
+        if (nowMs - serviceStartRefusedAt < SERVICE_START_RETRY_MS) return
+        if (player.currentMediaItem == null && !player.playWhenReady) return
+        ensurePlaybackService()
     }
 
     private fun ensureServiceForPlayback(): Boolean {
@@ -457,6 +476,7 @@ class PlayerViewModel @Inject constructor(
                     isPlaying = playing
                 )
                 pushSessionSnapshot()
+                retryPlaybackServiceIfRefused(sampledAt)
             }
         }
     }
@@ -895,6 +915,13 @@ class PlayerViewModel @Inject constructor(
          * runs every 500 ms, so anything bigger is a seek, not listening.
          */
         private const val MAX_TICK_DELTA_MS = 2_000L
+
+        /**
+         * How often a refused playback-service start is retried while a track
+         * is loaded. Short enough that the notification appears within a few
+         * seconds of the app coming back to the foreground.
+         */
+        private const val SERVICE_START_RETRY_MS = 5_000L
     }
 
     private fun FfiSearchResult.toEntry() = QueueEntry(
