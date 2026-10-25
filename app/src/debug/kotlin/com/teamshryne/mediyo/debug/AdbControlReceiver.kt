@@ -74,9 +74,9 @@ class AdbControlReceiver : BroadcastReceiver() {
             "sheet" -> {
                 val which = (intent.getStringExtra(EXTRA_TARGET)?.trim()?.lowercase() ?: arg)
                 when (which) {
-                    "menu", "media", "comments", "playlist", "sleep" ->
+                    "menu", "media", "comments", "playlist", "sleep", "lyrics" ->
                         accept(AdbCommand.Sheet(at, which), "sheet $which")
-                    else -> reject("--es target must be one of: menu, media, comments, playlist, sleep")
+                    else -> reject("--es target must be one of: menu, media, comments, playlist, sleep, lyrics")
                 }
             }
 

@@ -46,6 +46,8 @@ fun TrackMenuSheet(
     onRemove: (() -> Unit)? = null,
     onShare: (() -> Unit)? = null,
     onRefetchLyrics: (() -> Unit)? = null,
+    /** Opens the manual provider picker; shown only while lyrics mode is on. */
+    onSearchLyrics: (() -> Unit)? = null,
     onLyricsSettings: (() -> Unit)? = null,
     onPlaybackSettings: (() -> Unit)? = null,
     /** e.g. "1.25× · +3 st" — shown beside the entry only when off-normal. */
@@ -109,7 +111,8 @@ fun TrackMenuSheet(
             }
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             // Lyrics section — only when lyrics mode is active (caller passes non-null refetch)
-            if (onRefetchLyrics != null || onLyricsSettings != null) {
+            if (onRefetchLyrics != null || onLyricsSettings != null || onSearchLyrics != null) {
+                if (onSearchLyrics != null) MenuItem(icon = Icons.Filled.Search, label = "Search lyrics on another source", onClick = { onDismiss(); onSearchLyrics() })
                 if (onRefetchLyrics != null) MenuItem(icon = Icons.Filled.Refresh, label = "Refetch lyrics", onClick = { onDismiss(); onRefetchLyrics() })
                 if (onLyricsSettings != null) MenuItem(icon = Icons.Filled.Settings, label = "Lyrics settings", onClick = { onDismiss(); onLyricsSettings() })
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
@@ -206,6 +209,7 @@ fun FfiTrackMenuSheet(
     onComments: (() -> Unit)? = null,
     onRemove: (() -> Unit)? = null,
     onRefetchLyrics: (() -> Unit)? = null,
+    onSearchLyrics: (() -> Unit)? = null,
     onLyricsSettings: (() -> Unit)? = null
 ) {
     val track = remember(item.videoId, item.title) {
@@ -218,5 +222,5 @@ fun FfiTrackMenuSheet(
             category = item.category, year = item.year
         )
     }
-    TrackMenuSheet(track, show, onDismiss, isLiked, onLike, onAddToPlaylist, onPlayNext, onAddToQueue, onGoToAlbum, onShowArtist, onOpenChannel, onComments, onRemove, onRefetchLyrics, onLyricsSettings)
+    TrackMenuSheet(track, show, onDismiss, isLiked, onLike, onAddToPlaylist, onPlayNext, onAddToQueue, onGoToAlbum, onShowArtist, onOpenChannel, onComments, onRemove, onRefetchLyrics, onSearchLyrics, onLyricsSettings)
 }
