@@ -8,8 +8,10 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.annotation.OptIn
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -58,6 +60,7 @@ import javax.inject.Inject
 class PlaybackService : MediaSessionService() {
 
     companion object {
+        private const val TAG = "PlaybackService"
         const val ACTION_TOGGLE_LIKE = "com.teamshryne.mediyo.session.TOGGLE_LIKE"
         const val ACTION_CANCEL_SLEEP = "com.teamshryne.mediyo.session.CANCEL_SLEEP"
         const val NOTIFICATION_ID = 1001
@@ -74,6 +77,12 @@ class PlaybackService : MediaSessionService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var session: MediaSession? = null
     private var latestMediaNotification: Notification? = null
+    /**
+     * Set once the task is swiped away and we decided to shut down. Media3 can
+     * still deliver a notification update after that, which would repost the
+     * notification of a session that no longer exists.
+     */
+    @Volatile private var taskCleared = false
 
     private fun likeButton(liked: Boolean): CommandButton = CommandButton.Builder()
         .setDisplayName(if (liked) "Remove from liked music" else "Save to liked music")
@@ -168,29 +177,106 @@ class PlaybackService : MediaSessionService() {
             .setSmallIcon(R.drawable.ic_notification_small)
             .setContentIntent(pending)
             .setOngoing(true)
-            .setSilent(true)
+            // Quiet, not silent. A silent foreground notification is what OEM
+            // notification managers park in a collapsed "silent" section, and a
+            // collapsed section reads as "no notification" at a glance.
+            .setOnlyAlertOnce(true)
+            // Without IMMEDIATE, Android 12+ may hold a brand-new foreground
+            // notification back for ten seconds, which is the whole song intro.
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
     }
 
-    private fun ensureForeground(notification: Notification): Boolean = try {
+    /**
+     * Nothing in the app can bring a notification back when the user — or an
+     * OEM notification manager acting on its own — switched it off, so say so
+     * in the log instead of leaving "no notification" reports to guesswork.
+     */
+    private fun warnIfNotificationsBlocked() {
+        val enabled = NotificationManagerCompat.from(this).areNotificationsEnabled()
+        val channelImportance = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            getSystemService(NotificationManager::class.java)?.getNotificationChannel(CHANNEL_ID)?.importance
+        } else {
+            null
+        }
+        if (!enabled || channelImportance == NotificationManager.IMPORTANCE_NONE) {
+            Log.w(
+                TAG,
+                "playback notifications are blocked (app enabled=$enabled, channel importance=$channelImportance)"
+            )
+        }
+    }
+
+    /**
+     * True when the platform refused to put the service in the foreground.
+     * That exception is an [IllegalStateException] on API 31+, matched by name
+     * so the class is never loaded on the devices that do not have it.
+     */
+    private fun Throwable.isForegroundStartDenied(): Boolean {
+        var cause: Throwable? = this
+        while (cause != null) {
+            if (cause is IllegalStateException &&
+                cause.javaClass.name == "android.app.ForegroundServiceStartNotAllowedException"
+            ) return true
+            cause = cause.cause
+        }
+        return false
+    }
+
+    /** Promote to foreground. Returns false when the platform refuses; never throws. */
+    private fun promoteToForeground(notification: Notification): Boolean = try {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
         true
-    } catch (_: Throwable) {
-        try { stopSelf() } catch (_: Throwable) {}
+    } catch (e: Throwable) {
+        Log.w(TAG, "startForeground was refused", e)
         false
+    }
+
+    /**
+     * First promotion, from [onCreate] / [onStartCommand]. If this one fails the
+     * process cannot be a media service at all, so stop rather than sit in the
+     * ANR window that `startForegroundService()` opened.
+     */
+    private fun ensureForeground(notification: Notification): Boolean {
+        if (promoteToForeground(notification)) return true
+        try { stopSelf() } catch (_: Throwable) {}
+        return false
+    }
+
+    /**
+     * Recovery for a refused promotion. Android 12+ denies a foreground start
+     * from the background, and OEM builds (MIUI/HyperOS among them) enforce it
+     * harder and longer, so the first attempt is not the last word: retry with
+     * the newest notification, and if the platform still refuses, keep the
+     * audio instead of killing the service — the next start command or
+     * notification update will promote us once the app is allowed to.
+     */
+    private fun handleForegroundStartDenied() {
+        if (promoteToForeground(latestMediaNotification ?: createPlaceholderNotification())) {
+            Log.w(TAG, "foreground start denied; promoted on retry")
+            return
+        }
+        if (player.isPlaying) {
+            Log.w(TAG, "foreground start denied; keeping playback alive without a notification")
+            return
+        }
+        Log.w(TAG, "foreground start denied; stopping the service")
+        stopSelf()
     }
 
     override fun onCreate() {
         super.onCreate()
 
-        // Media3 — surface ForegroundServiceStartNotAllowedException instead of crashing
+        // Media3 calls this when it was refused a foreground start. It only
+        // reaches us if onUpdateNotification lets the exception through — see
+        // the note there.
         setListener(object : Listener {
             override fun onForegroundServiceStartNotAllowedException() {
-                // Already handling via try/catch in ensureForeground; nothing extra needed.
+                handleForegroundStartDenied()
             }
         })
 
@@ -198,6 +284,7 @@ class PlaybackService : MediaSessionService() {
         // 10s timeout after startForegroundService() will ANR us on slow networks.
         ensureForegroundChannelExists()
         ensureForeground(createPlaceholderNotification())
+        warnIfNotificationsBlocked()
 
         // Media notification provider — wrapped to capture the latest media
         // notification so onStartCommand can re-promote without losing artwork.
@@ -346,27 +433,48 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onUpdateNotification(session: MediaSession, startInForegroundRequired: Boolean) {
+        // A notification update that lands after the task was cleared would
+        // bring the notification of a dead session back.
+        if (taskCleared) return
         try {
             super.onUpdateNotification(session, startInForegroundRequired)
-        } catch (_: Throwable) {
-            // ForegroundServiceStartNotAllowedException on Android 12+ when
-            // starting from background — keep playback alive if we already are.
-            if (!player.isPlaying) stopSelf()
+        } catch (e: IllegalStateException) {
+            // A refused foreground start must reach Media3's own handler, which
+            // calls onForegroundServiceStartNotAllowedException(). Swallowing it
+            // here (as this used to) hid the refusal from everyone: playback
+            // carried on with no notification and nothing retried the promotion.
+            if (e.isForegroundStartDenied()) throw e
+            Log.w(TAG, "media notification update failed", e)
+        } catch (e: Throwable) {
+            // Anything else is a notification that could not be built; the
+            // music must not die because a bitmap did.
+            Log.w(TAG, "media notification update failed", e)
         }
     }
 
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
+        // A car, headset or Wear controller connecting is the user asking for
+        // this session, so it lifts the task-cleared guard.
+        if (controllerInfo.packageName != packageName) taskCleared = false
+        return session
+    }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         // Swipe-away while playing/buffering keeps music going (standard music-app
         // behaviour); otherwise shut down cleanly.
         val active = player.playWhenReady &&
             (player.playbackState == Player.STATE_READY || player.playbackState == Player.STATE_BUFFERING)
-        if (!active) stopSelf() else super.onTaskRemoved(rootIntent)
+        if (!active) {
+            taskCleared = true
+            stopSelf()
+        } else {
+            super.onTaskRemoved(rootIntent)
+        }
     }
 
     override fun onDestroy() {
         try { (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).cancel(SLEEP_NOTIFICATION_ID) } catch (_: Throwable) {}
+        latestMediaNotification = null
         scope.cancel()
         session?.release()
         session = null
