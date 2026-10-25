@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
@@ -40,10 +41,29 @@
             android:excludeFromRecents="true"
             android:taskAffinity="${applicationId}.crash"
             android:theme="@style/Theme.Mediyo"/>
+        <!-- The playback session has to be discoverable by the system, not just
+            by this app: media buttons, Bluetooth/car, Android Auto and the
+            Android 13+ media player all reach it through this action. Without
+            the filter and the export the system has no way in, and those entry
+            points silently do nothing. -->
         <service
             android:name=".playback.PlaybackService"
-            android:exported="false"
-            android:foregroundServiceType="mediaPlayback"/>
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback"
+            tools:ignore="ExportedService">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService"/>
+            </intent-filter>
+        </service>
+        <!-- Headset and car media buttons reach the session through this
+            receiver; without it a press cannot start the service. -->
+        <receiver
+            android:name="androidx.media3.session.MediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON"/>
+            </intent-filter>
+        </receiver>
         <!-- Offline downloads: dataSync foreground + platform scheduler resume. -->
         <service
             android:name=".playback.ExoDownloadService"
