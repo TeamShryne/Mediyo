@@ -349,7 +349,7 @@ class NotificationReportRunner @Inject constructor(
                 "playbackState: $stateName",
                 "playWhenReady: ${player.playWhenReady}",
                 "isPlaying: ${player.isPlaying}",
-                "timeline items: ${timeline.size}",
+                "timeline items: ${player.mediaItemCount}",
                 "current media id: ${player.currentMediaItem?.mediaId ?: "none"}",
                 "current title: ${title.ifEmpty { "none" }}",
                 "duration: ${player.duration} ms",
@@ -384,7 +384,7 @@ class NotificationReportRunner @Inject constructor(
                 val channel = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) n.channelId else "n/a"
                 add(
                     "id ${sbn.id}: channel=$channel, mediaSession=${n.extras?.containsKey(Notification.EXTRA_MEDIA_SESSION)}, " +
-                        "ongoing=${n.isOngoing}, actions=${n.actions?.size ?: 0}, group=${n.group ?: "none"}, " +
+                        "ongoing=${sbn.isOngoing}, actions=${n.actions?.size ?: 0}, group=${n.group ?: "none"}, " +
                         "title=${n.extras?.getCharSequence(Notification.EXTRA_TITLE) ?: "none"}"
                 )
             }
@@ -424,12 +424,12 @@ class NotificationReportRunner @Inject constructor(
                     summary = if (timeline.isEmpty) {
                         "A controller connected, but the session has no media items"
                     } else {
-                        "A controller connected and sees ${timeline.size} item(s), state $state"
+                        "A controller connected and sees ${timeline.windowCount} item(s), state $state"
                     },
                     details = listOf(
                         "isConnected: ${controller.isConnected}",
                         "playbackState: $state",
-                        "timeline items: ${timeline.size}",
+                        "timeline items: ${timeline.windowCount}",
                         "media id: ${controller.currentMediaItem?.mediaId ?: "none"}",
                         "service package: ${token.packageName}",
                         "note: this connection also arms Media3's notification pipeline on builds that had not armed it",
@@ -503,6 +503,7 @@ class NotificationReportRunner @Inject constructor(
                     it.contains("MediaSession") || it.contains("MediaNtfMng") ||
                     it.contains("ForegroundService")
             }
+            .toList()
             .takeLast(160)
             .joinToString("\n")
     } catch (_: Throwable) {

@@ -476,7 +476,7 @@ class PlaybackService : MediaSessionService() {
         PlaybackDiagnostics.record(
             "notification",
             "update requested (foreground=$startInForegroundRequired, state=${player.playbackState}, " +
-                "items=${player.currentTimeline.size}, playing=${player.isPlaying})"
+                "items=${player.mediaItemCount}, playing=${player.isPlaying})"
         )
         try {
             super.onUpdateNotification(session, startInForegroundRequired)
