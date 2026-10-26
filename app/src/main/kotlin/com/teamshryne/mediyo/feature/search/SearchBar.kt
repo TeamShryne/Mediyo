@@ -8,25 +8,28 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.NorthWest
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -46,6 +49,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -176,123 +180,95 @@ fun SearchPill(
 }
 
 /**
- * The suggestion panel is a short card hanging under the field, not a second
- * full screen: while the user types they can still see where the results
- * begin. Suggestions come first, then matching history, each behind a small
- * label so the list never becomes an undifferentiated pile.
+ * The panel under the search bar: recent searches and live completions.
+ *
+ * It is opaque and fills the screen: while the user types, the results
+ * behind it are hidden instead of peeking through.
  */
 @Composable
-fun SearchSuggestions(
+fun SearchSuggestionPanel(
     query: String,
     recents: List<String>,
     suggestTexts: List<FfiSuggestText>,
     suggestEntities: List<FfiSearchResult>,
     showSuggestions: Boolean,
-    onSearch: (String) -> Unit,
+    onSubmit: (String) -> Unit,
+    onFill: (String) -> Unit,
     onRemoveRecent: (String) -> Unit,
     onOpenEntity: (FfiSearchResult) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val trimmed = query.trim()
-    val shownRecents = remember(recents, trimmed) {
-        if (trimmed.isEmpty()) recents
-        else recents.filter { it.contains(trimmed, ignoreCase = true) }
-    }.take(6)
-    val texts = if (showSuggestions) suggestTexts.take(5) else emptyList()
-    val entities = if (showSuggestions) suggestEntities.take(3) else emptyList()
+    // With a query in the box the history narrows down to what still
+    // matches; an empty query shows the full history.
+    val shownRecents = remember(recents, query) {
+        val q = query.trim()
+        if (q.isEmpty()) recents else recents.filter { it.contains(q, ignoreCase = true) }
+    }
 
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shadowElevation = 10.dp
+    Column(
+        modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            // Swallow taps: the results live behind this panel and must not
+            // react to a tap that landed on the empty space below the rows.
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { }
+            .verticalScroll(rememberScrollState())
     ) {
-        LazyColumn(
-            modifier = Modifier.heightIn(max = 360.dp),
-            contentPadding = PaddingValues(vertical = 6.dp)
-        ) {
-            // Always something to act on while typing, even when the
-            // suggestion endpoint has nothing to say.
-            if (trimmed.isNotEmpty()) {
-                item(key = "search_for") {
-                    SuggestionRow(
-                        icon = Icons.Filled.Search,
-                        text = "Search for \u201C$trimmed\u201D",
-                        onClick = { onSearch(trimmed) }
-                    )
-                }
+        shownRecents.forEach { r ->
+            SuggestionRow(
+                icon = Icons.Filled.History,
+                text = r,
+                onClick = { onSubmit(r) },
+                onFill = { onFill(r) },
+                onRemove = { onRemoveRecent(r) }
+            )
+        }
+        if (showSuggestions) {
+            suggestTexts.forEach { t ->
+                SuggestionRow(
+                    icon = Icons.Filled.Search,
+                    text = t.text,
+                    onClick = { onSubmit(t.query.ifBlank { t.text }) },
+                    onFill = { onFill(t.query.ifBlank { t.text }) }
+                )
             }
-            if (texts.isNotEmpty()) {
-                item(key = "label_suggestions") { SuggestionLabel("Suggestions") }
-                items(texts.size, key = { "s_$it" }) { i ->
-                    val text = texts[i]
-                    SuggestionRow(
-                        icon = Icons.Filled.Search,
-                        text = text.text,
-                        onClick = { onSearch(text.query.ifBlank { text.text }) }
-                    )
-                }
-            }
-            if (entities.isNotEmpty()) {
-                item(key = "label_entities") {
-                    SuggestionLabel(if (texts.isEmpty()) "Best match" else "Top matches")
-                }
-                items(entities.size, key = { "e_$it" }) { i ->
-                    SuggestionEntityRow(
-                        item = entities[i],
-                        onClick = { onOpenEntity(entities[i]) }
-                    )
-                }
-            }
-            if (shownRecents.isNotEmpty()) {
-                item(key = "label_recent") { SuggestionLabel("Recent") }
-                items(shownRecents.size, key = { "r_${shownRecents[it]}" }) { i ->
-                    val recent = shownRecents[i]
-                    SuggestionRow(
-                        icon = Icons.Filled.History,
-                        text = recent,
-                        onClick = { onSearch(recent) },
-                        onRemove = { onRemoveRecent(recent) }
-                    )
-                }
+            suggestEntities.forEach { e ->
+                SuggestionEntityRow(item = e, onClick = { onOpenEntity(e) })
             }
         }
     }
 }
 
-/** A small, quiet section marker inside the suggestion card. */
-@Composable
-private fun SuggestionLabel(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 2.dp)
-    )
-}
-
-/** One completion or one recent query. Tapping it runs the search. */
+/**
+ * One row of the panel: an icon, the text, and the trailing actions.
+ * [onFill] mirrors the YouTube Music arrow (put the text in the field),
+ * [onRemove] drops the entry from the history.
+ */
 @Composable
 private fun SuggestionRow(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     text: String,
     onClick: () -> Unit,
+    onFill: () -> Unit,
     onRemove: (() -> Unit)? = null
 ) {
     Row(
         Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+            .padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
             icon,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(20.dp)
+            modifier = Modifier.size(22.dp)
         )
-        Spacer(Modifier.width(14.dp))
+        Spacer(Modifier.width(20.dp))
         Text(
             text,
             style = MaterialTheme.typography.bodyLarge,
@@ -302,26 +278,34 @@ private fun SuggestionRow(
             modifier = Modifier.weight(1f)
         )
         if (onRemove != null) {
-            IconButton(onClick = onRemove, modifier = Modifier.size(38.dp)) {
+            IconButton(onClick = onRemove, modifier = Modifier.size(40.dp)) {
                 Icon(
                     Icons.Filled.Close,
                     contentDescription = "Remove from history",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    modifier = Modifier.size(17.dp)
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
                 )
             }
+        }
+        IconButton(onClick = onFill, modifier = Modifier.size(40.dp)) {
+            Icon(
+                Icons.Filled.NorthWest,
+                contentDescription = "Fill search",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
         }
     }
 }
 
-/** An entity (song, artist, album) suggested for the current query. */
+/** An entity (song/artist/album) suggested for the current query. */
 @Composable
 private fun SuggestionEntityRow(item: FfiSearchResult, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 6.dp),
+            .padding(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AsyncImage(
@@ -329,14 +313,11 @@ private fun SuggestionEntityRow(item: FfiSearchResult, onClick: () -> Unit) {
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier
-                .size(38.dp)
-                .clip(
-                    if (item.category.contains("Artist", true)) RoundedCornerShape(19.dp)
-                    else RoundedCornerShape(8.dp)
-                )
-                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                .size(40.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
         )
-        Spacer(Modifier.width(14.dp))
+        Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
             Text(
                 item.title,
