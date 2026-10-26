@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.MusicNote
@@ -80,6 +81,21 @@ private val hubEntries = listOf(
     ),
 )
 
+/**
+ * Debug builds only — see the `BuildConfig.DEBUG` gate in [SettingsScreen].
+ * Each entry is a self-contained report; adding one here is the whole
+ * registration, as long as its route is also in the NavHost.
+ */
+private val debugEntries = listOf(
+    SettingsEntry(
+        id = "debug-notification",
+        title = "Playback notification",
+        subtitle = "Run the diagnostic report",
+        icon = Icons.Filled.BugReport,
+        route = "settings/debug/notification"
+    ),
+)
+
 @Composable
 fun SettingsScreen(
     nav: NavController? = null,
@@ -111,6 +127,13 @@ fun SettingsScreen(
         if (about.isNotEmpty()) {
             item { SectionHeader("About") }
             item { SettingsGroup(entries = about, onOpen = { nav?.navigate(it) }) }
+        }
+
+        // A shipped app has no business showing a diagnostics section; the
+        // entry (and its route) simply does not exist outside debug builds.
+        if (BuildConfig.DEBUG) {
+            item { SectionHeader("Debug") }
+            item { SettingsGroup(entries = debugEntries, onOpen = { nav?.navigate(it) }) }
         }
 
         item {

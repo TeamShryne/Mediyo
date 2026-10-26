@@ -25,6 +25,7 @@ import com.teamshryne.mediyo.domain.repository.HistoryRepository
 import com.teamshryne.mediyo.domain.repository.LikeRepository
 import com.teamshryne.mediyo.domain.repository.UserEventRepository
 import com.teamshryne.mediyo.domain.repository.UserEventTypes
+import com.teamshryne.mediyo.playback.PlaybackDiagnostics
 import com.teamshryne.mediyo.playback.PlaybackService
 import com.teamshryne.mediyo.playback.PlaybackQueueManager
 import com.teamshryne.mediyo.playback.PlaybackSessionHub
@@ -408,10 +409,12 @@ class PlayerViewModel @Inject constructor(
     private fun ensurePlaybackService(): Boolean {
         return try {
             ContextCompat.startForegroundService(ctx, Intent(ctx, PlaybackService::class.java))
+            PlaybackDiagnostics.record("service start", "requested from the player")
             serviceStartRefusedAt = 0L
             true
         } catch (e: Throwable) {
             // ForegroundServiceStartNotAllowedException on Android 12+ from background (auto-next) — audio would be ghost playback
+            PlaybackDiagnostics.record("service start", "refused: ${e.javaClass.name}")
             val firstRefusal = serviceStartRefusedAt == 0L
             serviceStartRefusedAt = android.os.SystemClock.elapsedRealtime()
             if (firstRefusal) android.util.Log.w("PlayerVM", "playback service start refused", e)
