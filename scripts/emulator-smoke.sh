@@ -99,8 +99,8 @@ done
 # runs its checks on open, so the screenshot is the proof that the diagnostic
 # works on a clean device.
 for t in settings/content/lyrics settings/updates settings/appearance settings/appearance/tabs \
-         settings/appearance/player settings/appearance/lyrics settings/equalizer settings/storage \
-         settings/debug/notification; do
+         settings/appearance/player settings/appearance/lyrics settings/appearance/motion \
+         settings/equalizer settings/storage settings/debug/notification; do
   step "screen: $t"
   send go --es route "$t"
   shot "screen-${t//\//-}" 6

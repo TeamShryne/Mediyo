@@ -41,6 +41,8 @@ class AppearancePrefs @Inject constructor(@ApplicationContext private val ctx: C
     private val K_DIM = floatPreferencesKey("player_bg_dim")
     private val K_DEPTH = floatPreferencesKey("player_bg_depth")
     private val K_TINT = booleanPreferencesKey("player_bg_tint")
+    private val K_MOTION = booleanPreferencesKey("lively_motion")
+    private val K_PREDICTIVE_BACK = booleanPreferencesKey("predictive_back")
 
     val tabStyleFlow: Flow<TabStyle> = ctx.appearancePrefs.data.map { prefs ->
         TabStyle.fromId(prefs[K_TAB]) ?: TabStyle.Docked
@@ -76,5 +78,27 @@ class AppearancePrefs @Inject constructor(@ApplicationContext private val ctx: C
     }
     suspend fun setBgTint(tint: Boolean) {
         ctx.appearancePrefs.edit { it[K_TINT] = tint }
+    }
+
+    /**
+     * Screen changes: a short slide, a little scale and a fade. On by
+     * default — the app should feel like it moves — but a user who prefers
+     * their phone calm can turn every page transition off here.
+     */
+    val motionFlow: Flow<Boolean> = ctx.appearancePrefs.data.map { it[K_MOTION] ?: true }
+
+    suspend fun setMotion(enabled: Boolean) {
+        ctx.appearancePrefs.edit { it[K_MOTION] = enabled }
+    }
+
+    /**
+     * Predictive back: the current screen follows the back gesture and
+     * settles back into place when it is cancelled. Only meaningful on
+     * Android 13+, where the system reports gesture progress.
+     */
+    val predictiveBackFlow: Flow<Boolean> = ctx.appearancePrefs.data.map { it[K_PREDICTIVE_BACK] ?: true }
+
+    suspend fun setPredictiveBack(enabled: Boolean) {
+        ctx.appearancePrefs.edit { it[K_PREDICTIVE_BACK] = enabled }
     }
 }
