@@ -68,7 +68,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -a "$TAG" -m "Mediyo $TAG"
           git push origin "$TAG"
-          echo "Pushed $TAG — the tag build will publish the release."
+          echo "Pushed $TAG — the publish job will build and release it in this run."
 
   publish:
     needs: cut-tag
