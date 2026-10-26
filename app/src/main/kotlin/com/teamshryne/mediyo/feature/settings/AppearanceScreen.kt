@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Animation
 import androidx.compose.material.icons.filled.BlurOn
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Lyrics
@@ -120,9 +121,25 @@ class AppearanceVm @Inject constructor(
     fun setTint(tint: Boolean) {
         viewModelScope.launch { prefs.setBgTint(tint) }
     }
+
+    /** Screen transitions are on unless the user turns them off. */
+    val motion: StateFlow<Boolean> = prefs.motionFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    fun setMotion(enabled: Boolean) {
+        viewModelScope.launch { prefs.setMotion(enabled) }
+    }
+
+    /** Predictive back preview during the system back gesture. */
+    val predictiveBack: StateFlow<Boolean> = prefs.predictiveBackFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    fun setPredictiveBack(enabled: Boolean) {
+        viewModelScope.launch { prefs.setPredictiveBack(enabled) }
+    }
 }
 
-/** Hub: tab bar style + player background + lyrics look, each opening its own screen. */
+/** Hub: tab bar style, player background, lyrics look and motion, each opening its own screen. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppearanceScreen(
@@ -133,6 +150,8 @@ fun AppearanceScreen(
     val tab by vm.style.collectAsState()
     val bg by vm.bgStyle.collectAsState()
     val lyrics by lyricsVm.style.collectAsState()
+    val motion by vm.motion.collectAsState()
+    val predictiveBack by vm.predictiveBack.collectAsState()
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -186,11 +205,29 @@ fun AppearanceScreen(
                             subtitle = "${lyrics.fontSizeSp.roundToInt()}sp · ${lyrics.weight.label}",
                             onClick = { nav?.navigate("settings/appearance/lyrics") }
                         )
+                        HorizontalDivider(
+                            Modifier.padding(horizontal = 16.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest
+                        )
+                        AppearanceHubRow(
+                            icon = Icons.Filled.Animation,
+                            title = "Motion",
+                            subtitle = motionSummary(motion, predictiveBack),
+                            onClick = { nav?.navigate("settings/appearance/motion") }
+                        )
                     }
                 }
             }
         }
     }
+}
+
+/** One line that says what motion will do, without making the user open it. */
+private fun motionSummary(motion: Boolean, predictiveBack: Boolean): String = when {
+    motion && predictiveBack -> "Smooth transitions · predictive back"
+    motion -> "Smooth transitions"
+    predictiveBack -> "Predictive back"
+    else -> "Off"
 }
 
 @Composable

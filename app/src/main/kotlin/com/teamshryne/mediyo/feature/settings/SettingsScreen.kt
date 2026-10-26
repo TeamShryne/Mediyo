@@ -47,7 +47,7 @@ private val hubEntries = listOf(
     SettingsEntry(
         id = "appearance",
         title = "Appearance",
-        subtitle = "Tab bar style",
+        subtitle = "Look, motion & lyrics",
         icon = Icons.Filled.Palette,
         route = "settings/appearance"
     ),

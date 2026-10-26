@@ -7,11 +7,16 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -46,6 +51,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -53,12 +59,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -77,7 +88,10 @@ import com.teamshryne.mediyo.BuildConfig
 import com.teamshryne.mediyo.core.design.LocalOverlayBottom
 import com.teamshryne.mediyo.core.design.GlobalSheets
 import com.teamshryne.mediyo.core.design.SheetHostVm
+import com.teamshryne.mediyo.core.design.EaseIn
+import com.teamshryne.mediyo.core.design.EaseOutExpo
 import com.teamshryne.mediyo.core.design.MediyoTheme
+import com.teamshryne.mediyo.core.design.Motion
 import com.teamshryne.mediyo.core.design.popEnter
 import com.teamshryne.mediyo.data.appearance.TabStyle
 import com.teamshryne.mediyo.core.design.popExit
@@ -85,6 +99,8 @@ import com.teamshryne.mediyo.core.design.pushEnter
 import com.teamshryne.mediyo.core.design.pushExit
 import com.teamshryne.mediyo.core.design.sheetEnter
 import com.teamshryne.mediyo.core.design.sheetExit
+import com.teamshryne.mediyo.core.design.tabEnter
+import com.teamshryne.mediyo.core.design.tabExit
 import com.teamshryne.mediyo.feature.album.AlbumScreen
 import com.teamshryne.mediyo.feature.artist.ArtistScreen
 import com.teamshryne.mediyo.feature.channel.ChannelScreen
@@ -111,6 +127,7 @@ import com.teamshryne.mediyo.feature.settings.PlayerBackgroundScreen
 import com.teamshryne.mediyo.feature.settings.TabBarStyleScreen
 import com.teamshryne.mediyo.feature.settings.LyricsAppearanceScreen
 import com.teamshryne.mediyo.feature.settings.LyricsSettingsScreen
+import com.teamshryne.mediyo.feature.settings.MotionScreen
 import com.teamshryne.mediyo.feature.settings.SettingsScreen
 import com.teamshryne.mediyo.feature.update.UpdateDialog
 import com.teamshryne.mediyo.feature.update.UpdateViewModel
@@ -140,6 +157,11 @@ sealed class Tab(val route: String, val label: String, val icon: androidx.compos
     data object Library : Tab("library", "Library", Icons.Filled.LibraryMusic)
     data object Settings : Tab("settings", "Settings", Icons.Filled.Settings)
 }
+
+/** Sibling tabs cross-dissolve; every other route is a push/pop. */
+private fun isTabRoute(route: String?): Boolean =
+    route == Tab.Home.route || route == Tab.Search.route ||
+        route == Tab.Library.route || route == Tab.Settings.route
 
 /** Tab bar + mini-player live in Scaffold's bottomBar as a Column, so the
  *  player is *laid out* above the tab bar — never overlapped, on any device.
@@ -220,6 +242,8 @@ private fun AppShell() {
     val searchVm: SearchVm = hiltViewModel()
     val appearanceVm: AppearanceVm = hiltViewModel()
     val tabStyle by appearanceVm.style.collectAsState()
+    val livelyMotion by appearanceVm.motion.collectAsState()
+    val predictiveBack by appearanceVm.predictiveBack.collectAsState()
     val density = LocalDensity.current
     var tabBarH by remember { mutableIntStateOf(0) }
     var pillH by remember { mutableIntStateOf(0) }
@@ -236,6 +260,40 @@ private fun AppShell() {
             launchSingleTop = true
             popUpTo(nav.graph.findStartDestination().id) { saveState = true }
             restoreState = true
+        }
+    }
+
+    // ── Predictive back ──────────────────────────────────────────────────
+    // The system gives us the gesture progress, so the screen can follow the
+    // finger instead of waiting for the release. NavHost's own back callback
+    // is switched off while this is on: two callbacks would race for the same
+    // gesture, and only one of them can animate.
+    val predictiveProgress = remember { Animatable(0f) }
+    val canNavigateBack = backStack?.destination != null && nav.previousBackStackEntry != null
+    SideEffect { nav.enableOnBackPressed(!predictiveBack) }
+    PredictiveBackHandler(enabled = predictiveBack && canNavigateBack) { progress ->
+        try {
+            progress.collect { event ->
+                predictiveProgress.snapTo(event.progress.coerceIn(0f, 1f))
+            }
+            // Completing the pop while the offset settles back into the
+            // normal pop transition keeps the hand-off free of a jump.
+            nav.popBackStack()
+            predictiveProgress.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(Motion.SlideExit, easing = EaseIn)
+            )
+        } catch (cancelled: CancellationException) {
+            // The gesture was cancelled but this coroutine is already
+            // cancelled, so the return animation has to run to completion
+            // outside its scope.
+            withContext(NonCancellable) {
+                predictiveProgress.animateTo(
+                    targetValue = 0f,
+                    animationSpec = tween(Motion.SlideEnter, easing = EaseOutExpo)
+                )
+            }
+            throw cancelled
         }
     }
 
@@ -425,16 +483,60 @@ private fun AppShell() {
                     .padding(pad)
             ) {
                 CompositionLocalProvider(LocalOverlayBottom provides overlayBottom) {
+                // The whole stack follows the back gesture. It is the same
+                // graphics layer for every destination, so the current
+                // screen recedes without any screen needing to know that
+                // predictive back exists.
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            val progress = predictiveProgress.value
+                            if (progress > 0f) {
+                                translationX = size.width * Motion.Predictive * progress
+                                val scale = 1f - Motion.PredictiveScale * progress
+                                scaleX = scale
+                                scaleY = scale
+                                alpha = 1f - 0.08f * progress
+                                transformOrigin = TransformOrigin(0f, 0.5f)
+                            }
+                        }
+                ) {
                 NavHost(
                     navController = nav,
                     startDestination = Tab.Home.route,
                     modifier = Modifier.fillMaxSize(),
-                    // Fast dynamic slide + fade (expo/keyframe curve — see Motion.kt).
-                    // Short ~32dp travel: reads as a snappy push, stays GPU-only.
-                    enterTransition = { pushEnter() },
-                    exitTransition = { pushExit() },
-                    popEnterTransition = { popEnter() },
-                    popExitTransition = { popExit() }
+                    // Push/pop get depth (slide + scale + fade); sibling tabs
+                    // get a cross-dissolve instead of pretending they are
+                    // pages in a horizontal stack. See Motion.kt.
+                    enterTransition = {
+                        when {
+                            !livelyMotion -> EnterTransition.None
+                            isTabRoute(initialState.destination.route) && isTabRoute(targetState.destination.route) -> tabEnter()
+                            else -> pushEnter()
+                        }
+                    },
+                    exitTransition = {
+                        when {
+                            !livelyMotion -> ExitTransition.None
+                            isTabRoute(initialState.destination.route) && isTabRoute(targetState.destination.route) -> tabExit()
+                            else -> pushExit()
+                        }
+                    },
+                    popEnterTransition = {
+                        when {
+                            !livelyMotion -> EnterTransition.None
+                            isTabRoute(initialState.destination.route) && isTabRoute(targetState.destination.route) -> tabEnter()
+                            else -> popEnter()
+                        }
+                    },
+                    popExitTransition = {
+                        when {
+                            !livelyMotion -> ExitTransition.None
+                            isTabRoute(initialState.destination.route) && isTabRoute(targetState.destination.route) -> tabExit()
+                            else -> popExit()
+                        }
+                    }
                 ) {
                 composable(Tab.Home.route) { HomeScreen(nav, playerVm) }
                 composable(Tab.Search.route) { SearchScreen(nav, playerVm, searchVm) }
@@ -481,10 +583,12 @@ private fun AppShell() {
                 composable("settings/appearance/tabs") { TabBarStyleScreen(nav) }
                 composable("settings/appearance/player") { PlayerBackgroundScreen(nav) }
                 composable("settings/appearance/lyrics") { LyricsAppearanceScreen(nav) }
+                composable("settings/appearance/motion") { MotionScreen(nav) }
                 // Debug-only route: a release build cannot reach a screen
                 // that does not exist in its graph.
                 if (BuildConfig.DEBUG) {
                     composable("settings/debug/notification") { NotificationReportScreen(nav) }
+                }
                 }
                 }
                 }

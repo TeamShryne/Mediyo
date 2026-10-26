@@ -1,39 +1,67 @@
 package com.teamshryne.mediyo.feature.search
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.shrinkHorizontally
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.runtime.snapshotFlow
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -41,13 +69,19 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
+import com.teamshryne.mediyo.core.design.EaseOutExpo
 import com.teamshryne.mediyo.core.design.EmptyState
 import com.teamshryne.mediyo.core.design.ErrorState
 import com.teamshryne.mediyo.core.design.InfiniteScrollHandler
 import com.teamshryne.mediyo.core.design.LoadingFooter
+import com.teamshryne.mediyo.core.design.LocalOverlayBottom
+import com.teamshryne.mediyo.core.design.SectionHeader
 import com.teamshryne.mediyo.core.design.TrackOverflowIcon
 import com.teamshryne.mediyo.core.design.appendUnique
 import com.teamshryne.mediyo.core.design.shimmer
+import com.teamshryne.mediyo.data.mediyo.FfiSearchFilter
+import com.teamshryne.mediyo.data.mediyo.FfiSearchResult
+import com.teamshryne.mediyo.data.mediyo.FfiSuggestText
 import com.teamshryne.mediyo.data.mediyo.MediyoBridge
 import com.teamshryne.mediyo.domain.model.ORIGIN_SEARCH
 import com.teamshryne.mediyo.domain.model.PlayOrigin
@@ -59,16 +93,13 @@ import com.teamshryne.mediyo.domain.model.upscaledThumbUrl
 import com.teamshryne.mediyo.domain.repository.HistoryRepository
 import com.teamshryne.mediyo.domain.repository.UserEventRepository
 import com.teamshryne.mediyo.domain.repository.UserEventTypes
+import com.teamshryne.mediyo.feature.player.PlayerViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.distinctUntilChanged
-import com.teamshryne.mediyo.data.mediyo.FfiSearchFilter
-import com.teamshryne.mediyo.data.mediyo.FfiSearchResult
-import com.teamshryne.mediyo.data.mediyo.FfiSuggestText
 import javax.inject.Inject
 
 @HiltViewModel
@@ -199,11 +230,6 @@ class SearchVm @Inject constructor(
         loadRecents()
     }
 
-    /** Put [q] in the field without running the search (the arrow action). */
-    fun fillQuery(q: String) {
-        onQueryChange(q)
-    }
-
     /** Called on every keystroke: updates the query and refreshes suggestions. */
     fun onQueryChange(q: String) {
         query = q
@@ -270,7 +296,7 @@ class SearchVm @Inject constructor(
                 // They also echo a param-less "Clear filters" reset chip (blank
                 // or not); real filter chips always carry params, and a
                 // param-less chip acts exactly like All, so drop them — our
-                // own Clear pill handles resetting.
+                // own All chip handles resetting.
                 val clean = res.filters.filter { it.label.isNotBlank() && !it.params.isNullOrBlank() }
                 if (clean.isNotEmpty()) filters = clean
                 continuation = res.continuation.takeIf { res.results.isNotEmpty() }
@@ -314,34 +340,55 @@ class SearchVm @Inject constructor(
     }
 }
 
-/**
- * Height of the search bar block: the pill plus its breathing room. The bar
- * sits at the top of the screen in every state, so the results list starts
- * below it and the suggestion panel docks exactly under it.
- */
-private val SEARCH_BAR_HEIGHT = 72.dp
+/** Which of the five shapes the content area is showing. */
+private enum class SearchBody { Idle, Loading, Error, Empty, Results }
 
+/**
+ * Search is one fixed header over one content area. The header never moves,
+ * so the field and the filters are always where the user left them; the
+ * content underneath is a single list at a time (idle, loading, results),
+ * which keeps the screen from becoming a stack of competing panels.
+ */
 @Composable
 fun SearchScreen(
     nav: androidx.navigation.NavController,
-    player: com.teamshryne.mediyo.feature.player.PlayerViewModel,
+    player: PlayerViewModel,
     vm: SearchVm = hiltViewModel()
 ) {
-    val scope = rememberCoroutineScope()
-    val listState = rememberLazyListState()
-    // The songs we played from the search results — the "recents" shelf.
+    // Only the results list survives a search. Idle and loading get their
+    // own state inside the Crossfade, because two live LazyColumns must never
+    // share one LazyListState.
+    val resultsState = rememberLazyListState()
+    val focusManager = LocalFocusManager.current
     val recentPlays by vm.recentPlays.collectAsState()
     val playingId = player.state.collectAsState().value.videoId
-    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
-    // Measured heights: the pill (the panel docks under it) and the whole
-    // header (the results start below it), whatever the font scale does.
-    var pillHeightPx by remember { mutableIntStateOf(0) }
-    var headerHeightPx by remember { mutableIntStateOf(0) }
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    val pillHeight = with(density) { pillHeightPx.toDp() }.takeIf { it > 0.dp } ?: SEARCH_BAR_HEIGHT
-    val headerHeight = with(density) { headerHeightPx.toDp() }.takeIf { it > 0.dp } ?: SEARCH_BAR_HEIGHT
-    // Menus render at the root overlay (GlobalSheets) for full-window dim.
     val sheets: com.teamshryne.mediyo.core.design.SheetHostVm = hiltViewModel()
+
+    val body = when {
+        !vm.hasSearched -> SearchBody.Idle
+        vm.loading -> SearchBody.Loading
+        vm.error != null -> SearchBody.Error
+        vm.results.isEmpty() -> SearchBody.Empty
+        else -> SearchBody.Results
+    }
+
+    // A new search starts at the top; the scroll position of the previous
+    // results would otherwise leak into the next one.
+    LaunchedEffect(body) {
+        if (body == SearchBody.Results) resultsState.scrollToItem(0)
+    }
+
+    // Back closes the suggestion panel before it leaves the screen.
+    BackHandler(enabled = vm.panelOpen) {
+        vm.closePanel()
+        focusManager.clearFocus()
+    }
+
+    // The view model outlives this screen (it is hoisted for the whole app),
+    // so make sure no panel is left behind when the user leaves the tab.
+    DisposableEffect(Unit) {
+        onDispose { vm.closePanel() }
+    }
 
     fun openMenu(m: FfiSearchResult) = sheets.showMediaMenu(
         com.teamshryne.mediyo.core.design.MediaMenuRequest(
@@ -355,31 +402,10 @@ fun SearchScreen(
         )
     )
 
-    // Scrolling the results dismisses the suggestion panel — for the current
-    // query only, so the next keystroke re-opens it naturally.
-    LaunchedEffect(listState) {
-        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
-            .distinctUntilChanged()
-            .collect { if (!vm.panelOpen) vm.dismissSuggest() }
-    }
-    // Back closes the suggestion panel before it leaves the screen.
-    BackHandler(enabled = vm.panelOpen) {
-        vm.closePanel()
-        focusManager.clearFocus()
-    }
-    BackHandler(enabled = !vm.panelOpen && vm.suggestVisible) { vm.dismissSuggest() }
-
-    // The view model outlives this screen (it is hoisted for the whole app),
-    // so make sure no panel is left behind when the user leaves the tab.
-    DisposableEffect(Unit) {
-        onDispose { vm.closePanel() }
-    }
-
     fun open(r: FfiSearchResult) {
         vm.logTap(r)
-        vm.dismissSuggest()
-        // A tap on a result ends the typing state, whatever opened it.
         vm.closePanel()
+        focusManager.clearFocus()
         when {
             r.videoId != null && r.category.contains("Episode", true) ->
                 nav.navigate("episode/${r.detailId.ifBlank { r.videoId }}")
@@ -391,164 +417,14 @@ fun SearchScreen(
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.fillMaxSize(),
-        // The search bar is fixed at the top of the screen, so the list
-        // starts below it. Outer Scaffold padding already clears the status
-        // bar — 4dp only.
-        contentPadding = PaddingValues(
-            top = headerHeight + 4.dp,
-            bottom = com.teamshryne.mediyo.core.design.LocalOverlayBottom.current + 24.dp
-        ),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
-    ) {
-        when {
-            !vm.hasSearched -> if (vm.query.isBlank()) {
-                if (recentPlays.isNotEmpty()) {
-                    item(key = "played_header") {
-                        Text(
-                            "Recently played",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(horizontal = 20.dp)
-                        )
-                    }
-                    items(recentPlays, key = { "played_${it.track.videoId}" }) { p ->
-                        RecentPlayRow(
-                            track = p.track,
-                            isPlaying = playingId != null && playingId == p.track.videoId
-                        ) {
-                            // Keep the search origin: the song stays in the
-                            // list it was played from.
-                            player.playTrack(
-                                p.track,
-                                PlayOrigin.Search(p.query.ifBlank { "Search" }, vm.selectedLabel)
-                            )
-                        }
-                    }
-                }
-                if (vm.recents.isNotEmpty()) {
-                    item(key = "recent_header") {
-                        Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                "Recent searches",
-                                style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.weight(1f)
-                            )
-                            TextButton(onClick = { vm.clearRecents() }) { Text("Clear") }
-                        }
-                    }
-                    items(vm.recents, key = { "recent_$it" }) { q ->
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    vm.query = q
-                                    vm.runSearch(null)
-                                }
-                                .padding(horizontal = 20.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                Icons.Filled.History, null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(Modifier.width(16.dp))
-                            Text(
-                                q,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-                } else if (recentPlays.isEmpty()) {
-                    item(key = "search_idle") {
-                        EmptyState("Search Mediyo", "Find songs, artists, albums and playlists")
-                    }
-                }
-            }
-            vm.loading -> items(7, key = { "skel_$it" }) {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(Modifier.size(52.dp).clip(RoundedCornerShape(8.dp)).shimmer())
-                    Spacer(Modifier.width(12.dp))
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Box(Modifier.fillMaxWidth(0.6f).height(14.dp).clip(RoundedCornerShape(6.dp)).shimmer())
-                        Box(Modifier.fillMaxWidth(0.35f).height(11.dp).clip(RoundedCornerShape(5.dp)).shimmer())
-                    }
-                }
-            }
-            vm.error != null -> item(key = "error") { ErrorState(vm.error ?: "Search failed") { vm.runSearch(null) } }
-            vm.results.isEmpty() -> item(key = "empty") {
-                EmptyState("No results for \"${vm.lastQuery}\"", "Try different keywords or another filter")
-            }
-            else -> {
-                // Top-result shelf rows first, featured — the rest as plain rows.
-                val top = vm.results.filter { it.isTopResult }
-                val rest = vm.results.filterNot { it.isTopResult }
-                if (top.isNotEmpty()) {
-                    item(key = "top_header") {
-                        Text(
-                            "Top result",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(horizontal = 20.dp)
-                        )
-                    }
-                    // One card holds every YT top result: the first is featured
-                    // big, the rest follow as a compact list inside the same card.
-                    item(key = "top_card") {
-                        TopResultsCard(
-                            items = top,
-                            lastQuery = vm.lastQuery.ifEmpty { vm.query },
-                            selectedLabel = vm.selectedLabel,
-                            player = player,
-                            onOpen = { open(it) },
-                            onMenu = { openMenu(it) }
-                        )
-                    }
-                }
-                items(rest.size, key = { i ->
-                    rest[i].let { it.videoId ?: it.browseId ?: it.playlistId }?.let { "r_${it}_$i" } ?: "r_$i"
-                }) { i ->
-                    val r = rest[i]
-                    ResultRow(item = r, onClick = { open(r) }, onMenu = { openMenu(r) })
-                }
-            }
-        }
-
-        item(key = "search_footer") { LoadingFooter(vm.loadingMore && !vm.loading) }
-    }
-
-    // ── The header ──────────────────────────────────────────────────────
-    // Fixed at the top of the screen in every state — the search bar and,
-    // once a search ran, the filter chips below it. Neither moves, so the
-    // input is always where the user left it and the filters are always
-    // reachable while the results scroll.
     val scrolled by remember {
         derivedStateOf {
-            listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 8
+            resultsState.firstVisibleItemIndex > 0 || resultsState.firstVisibleItemScrollOffset > 8
         }
     }
-    Column(
-        Modifier
-            .align(Alignment.TopCenter)
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.background)
-            .onSizeChanged { headerHeightPx = it.height }
-    ) {
-        SearchPill(
+
+    Column(Modifier.fillMaxSize()) {
+        SearchHeader(
             query = vm.query,
             onQueryChange = { vm.onQueryChange(it) },
             onSubmit = { q ->
@@ -556,248 +432,508 @@ fun SearchScreen(
                 vm.submit()
                 focusManager.clearFocus()
             },
-            onClear = { vm.onQueryChange("") },
-            onBack = {
-                // The arrow is "cancel": it leaves the search UI, it never
-                // leaves the tab.
-                if (vm.panelOpen) {
-                    vm.closePanel()
-                    focusManager.clearFocus()
-                } else if (vm.query.isNotEmpty() || vm.hasSearched) {
-                    vm.resetSearch()
-                    focusManager.clearFocus()
-                }
+            onClear = {
+                vm.resetSearch()
+                focusManager.clearFocus()
             },
-            modifier = Modifier
-                .onFocusChanged { if (it.isFocused) vm.openPanel() }
-                .onSizeChanged { pillHeightPx = it.height }
+            onDismiss = {
+                vm.closePanel()
+                focusManager.clearFocus()
+            },
+            onFocusChanged = { focused ->
+                if (focused) vm.openPanel() else vm.closePanel()
+            },
+            filters = vm.filters,
+            selectedFilter = vm.selectedFilter,
+            showFilters = vm.hasSearched && vm.filters.isNotEmpty(),
+            onFilterSelect = { filter ->
+                vm.runSearch(filter)
+                focusManager.clearFocus()
+            },
+            scrolled = scrolled
         )
 
-        // Filter chips live in the header, under the input: the results can
-        // scroll as far as they like, the filters stay put.
-        if (vm.hasSearched && vm.filters.isNotEmpty()) {
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(top = 2.dp, bottom = 10.dp)
-            ) {
-                item(key = "clear_filter") {
-                    val active = vm.selectedFilter != null
-                    AnimatedVisibility(
-                        visible = active,
-                        enter = fadeIn() + expandHorizontally(expandFrom = Alignment.Start),
-                        exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.Start)
-                    ) {
-                        // Themed clear-filter pill (plain Surface: full
-                        // control of the fill without chip-color APIs).
-                        Surface(
-                            onClick = { scope.launch { vm.runSearch(null) } },
-                            shape = RoundedCornerShape(20.dp),
-                            color = MaterialTheme.colorScheme.primary
-                        ) {
-                            Row(
-                                Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    Icons.Filled.Close, null,
-                                    tint = MaterialTheme.colorScheme.onPrimary,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Text(
-                                    "Clear",
-                                    color = MaterialTheme.colorScheme.onPrimary,
-                                    style = MaterialTheme.typography.labelLarge
-                                )
-                            }
-                        }
-                    }
-                }
-                items(vm.filters, key = { it.label + "|" + (it.params ?: "") }) { f ->
-                    val isSel = vm.selectedFilter?.let { it.label == f.label && it.params == f.params } == true
-                    FilterChip(
-                        selected = isSel,
-                        onClick = {
-                            if (isSel) scope.launch { vm.runSearch(null) }
-                            else scope.launch { vm.runSearch(f) }
+        Box(Modifier.fillMaxWidth().weight(1f)) {
+            Crossfade(
+                targetState = body,
+                animationSpec = tween(180, easing = EaseOutExpo),
+                label = "search-body"
+            ) { state ->
+                when (state) {
+                    SearchBody.Idle -> SearchIdleContent(
+                        recents = vm.recents,
+                        recentPlays = recentPlays,
+                        playingId = playingId,
+                        onSearch = { q ->
+                            vm.query = q
+                            vm.submit()
+                            focusManager.clearFocus()
                         },
-                        label = { Text(f.label.replaceFirstChar { it.uppercase() }) },
-                        shape = RoundedCornerShape(20.dp)
+                        onRemoveRecent = vm::removeRecent,
+                        onClearRecents = vm::clearRecents,
+                        onPlay = { play ->
+                            player.playTrack(
+                                play.track,
+                                PlayOrigin.Search(play.query.ifBlank { "Search" }, vm.selectedLabel)
+                            )
+                        }
+                    )
+
+                    SearchBody.Loading -> SearchLoadingContent()
+
+                    SearchBody.Error -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        ErrorState(vm.error ?: "Search failed") { vm.runSearch(null) }
+                    }
+
+                    SearchBody.Empty -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        EmptyState(
+                            "No results for \u201C${vm.lastQuery}\u201D",
+                            "Try different keywords or another filter"
+                        )
+                    }
+
+                    SearchBody.Results -> SearchResultsContent(
+                        results = vm.results,
+                        latestQuery = vm.lastQuery.ifEmpty { vm.query },
+                        selectedLabel = vm.selectedLabel,
+                        loadingMore = vm.loadingMore,
+                        player = player,
+                        listState = resultsState,
+                        onOpen = { open(it) },
+                        onMenu = { openMenu(it) }
                     )
                 }
             }
-        }
 
-        // Hairline under the header, but only once the results slide under it.
-        AnimatedVisibility(
-            visible = scrolled && !vm.panelOpen,
-            enter = fadeIn(tween(160)),
-            exit = fadeOut(tween(160))
-        ) {
-            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceContainerHighest)
-        }
-    }
+            val showSuggestions = vm.panelOpen &&
+                (vm.query.isNotBlank() || vm.recents.isNotEmpty() || vm.suggestVisible)
 
-    // ── Suggestion panel ────────────────────────────────────────────────
-    // Opaque and full height: while the user types, the results stay out of
-    // sight instead of peeking through under the suggestions.
-    AnimatedVisibility(
-        visible = vm.panelOpen,
-        enter = fadeIn(tween(140)) + expandVertically(tween(220)),
-        exit = fadeOut(tween(120)) + shrinkVertically(tween(180)),
-        modifier = Modifier.align(Alignment.TopCenter)
-    ) {
-        SearchSuggestionPanel(
-            query = vm.query,
-            recents = vm.recents,
-            suggestTexts = vm.suggestTexts,
-            suggestEntities = vm.suggestEntities,
-            showSuggestions = vm.suggestVisible,
-            onSubmit = { q ->
-                vm.query = q
-                vm.submit()
-                focusManager.clearFocus()
-            },
-            onFill = { vm.fillQuery(it) },
-            onRemoveRecent = { vm.removeRecent(it) },
-            onOpenEntity = {
-                open(it)
-                focusManager.clearFocus()
-            },
-            modifier = Modifier.padding(top = pillHeight)
-        )
-    }
+            // The suggestion panel is a short card, not a second screen: a
+            // light scrim dims the results just enough to read the card and
+            // a tap outside puts everything back. These sit in the content
+            // Box, so call the plain overload rather than the Column one.
+            androidx.compose.animation.AnimatedVisibility(
+                visible = showSuggestions,
+                enter = fadeIn(tween(140)),
+                exit = fadeOut(tween(110)),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.18f))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            vm.closePanel()
+                            focusManager.clearFocus()
+                        }
+                )
+            }
+
+            androidx.compose.animation.AnimatedVisibility(
+                visible = showSuggestions,
+                enter = fadeIn(tween(140)) + expandVertically(tween(170), expandFrom = Alignment.Top),
+                exit = fadeOut(tween(110)) + shrinkVertically(tween(140), shrinkTowards = Alignment.Top),
+                modifier = Modifier.align(Alignment.TopCenter)
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 6.dp)
+            ) {
+                SearchSuggestions(
+                    query = vm.query,
+                    recents = vm.recents,
+                    suggestTexts = vm.suggestTexts,
+                    suggestEntities = vm.suggestEntities,
+                    showSuggestions = vm.suggestVisible,
+                    onSearch = { q ->
+                        vm.query = q
+                        vm.submit()
+                        focusManager.clearFocus()
+                    },
+                    onRemoveRecent = vm::removeRecent,
+                    onOpenEntity = {
+                        open(it)
+                    }
+                )
+            }
+        }
     }
 
     InfiniteScrollHandler(
-        listState = listState,
+        listState = resultsState,
         itemCount = vm.results.size + 2,
         enabled = vm.continuation != null && !vm.loading && !vm.loadingMore && vm.error == null
     ) { vm.loadMore() }
 }
 
-/**
- * All YT top results in a single card: the first result is featured big,
- * every further top result follows as a compact row inside the same card.
- * Order mirrors the server response ([items] must already be in YT order).
- */
 @Composable
-private fun TopResultsCard(
-    items: List<FfiSearchResult>,
-    lastQuery: String,
-    selectedLabel: String,
-    player: com.teamshryne.mediyo.feature.player.PlayerViewModel,
-    onOpen: (FfiSearchResult) -> Unit,
-    onMenu: (FfiSearchResult) -> Unit
+private fun SearchHeader(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onSubmit: (String) -> Unit,
+    onClear: () -> Unit,
+    onDismiss: () -> Unit,
+    onFocusChanged: (Boolean) -> Unit,
+    filters: List<FfiSearchFilter>,
+    selectedFilter: FfiSearchFilter?,
+    showFilters: Boolean,
+    onFilterSelect: (FfiSearchFilter?) -> Unit,
+    scrolled: Boolean
 ) {
-    if (items.isEmpty()) return
-    val first = items[0]
-    val rest = items.drop(1)
-    val firstIsArtist = first.category.contains("Artist", true)
     Column(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .padding(vertical = 4.dp)
+            .background(MaterialTheme.colorScheme.background)
     ) {
-        TopResultHero(
-            item = first,
-            circularArt = firstIsArtist,
-            actionIcon = if (firstIsArtist) Icons.Filled.OpenInNew else Icons.Filled.PlayArrow,
-            onClick = { onOpen(first) },
-            onMenu = { onMenu(first) },
-            onPlay = {
-                if (firstIsArtist || first.videoId == null) onOpen(first)
-                else {
-                    player.playTrack(
-                        first.toDomainTrack(),
-                        PlayOrigin.Search(lastQuery, selectedLabel)
+        SearchPill(
+            query = query,
+            onQueryChange = onQueryChange,
+            onSubmit = onSubmit,
+            onClear = onClear,
+            onDismiss = onDismiss,
+            onFocusChanged = onFocusChanged
+        )
+
+        AnimatedVisibility(
+            visible = showFilters,
+            enter = fadeIn(tween(140)) + expandVertically(tween(170), expandFrom = Alignment.Top),
+            exit = fadeOut(tween(110)) + shrinkVertically(tween(140), shrinkTowards = Alignment.Top)
+        ) {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(bottom = 8.dp)
+            ) {
+                item(key = "filter_all") {
+                    SearchFilterChip(
+                        label = "All",
+                        selected = selectedFilter == null,
+                        onClick = { if (selectedFilter != null) onFilterSelect(null) }
+                    )
+                }
+                items(filters, key = { it.label + "|" + (it.params ?: "") }) { filter ->
+                    val isSelected = selectedFilter?.let {
+                        it.label == filter.label && it.params == filter.params
+                    } == true
+                    SearchFilterChip(
+                        label = filter.label.replaceFirstChar { it.uppercase() },
+                        selected = isSelected,
+                        onClick = { onFilterSelect(if (isSelected) null else filter) }
                     )
                 }
             }
-        )
-        rest.forEach { r ->
-            HorizontalDivider(
-                Modifier.padding(horizontal = 12.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHighest
-            )
-            TopResultMiniRow(item = r, onClick = { onOpen(r) }, onMenu = { onMenu(r) })
         }
-    }
-}
 
-@Composable
-private fun TopResultHero(
-    item: FfiSearchResult,
-    onClick: () -> Unit,
-    onMenu: () -> Unit,
-    onPlay: () -> Unit,
-    circularArt: Boolean = false,
-    actionIcon: ImageVector = Icons.Filled.PlayArrow
-) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        AsyncImage(
-            model = item.thumbnails.bestThumbUrl(),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .size(96.dp)
-                .let { if (circularArt) it.clip(CircleShape) else it.clip(RoundedCornerShape(12.dp)) }
-                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-        )
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                "Top result • ${item.category}",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-                maxLines = 1, overflow = TextOverflow.Ellipsis
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                item.title,
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2, overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                buildString {
-                    append(item.artists.joinToString().ifBlank { item.category })
-                    if (!item.duration.isNullOrBlank()) append(" • ${item.duration}")
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1, overflow = TextOverflow.Ellipsis
-            )
-        }
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+        // A hairline only when content has moved under the header. It gives
+        // the fixed bar an edge without drawing a permanent box around it.
+        AnimatedVisibility(
+            visible = scrolled,
+            enter = fadeIn(tween(150)),
+            exit = fadeOut(tween(150))
         ) {
-            FilledIconButton(onClick = onPlay, modifier = Modifier.size(48.dp)) {
-                Icon(actionIcon, contentDescription = "Open", modifier = Modifier.size(24.dp))
-            }
-            TrackOverflowIcon(onClick = onMenu)
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceContainerHighest)
         }
     }
 }
 
 @Composable
-private fun TopResultMiniRow(item: FfiSearchResult, onClick: () -> Unit, onMenu: () -> Unit = {}) {
+private fun SearchFilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label) },
+        shape = RoundedCornerShape(20.dp),
+        // A filled, borderless chip: the fill already separates it from the
+        // background, and a second outline just adds noise.
+        border = null,
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            selectedContainerColor = MaterialTheme.colorScheme.primary,
+            selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+        )
+    )
+}
+
+@Composable
+private fun SearchIdleContent(
+    recents: List<String>,
+    recentPlays: List<RecentSearchPlay>,
+    playingId: String?,
+    onSearch: (String) -> Unit,
+    onRemoveRecent: (String) -> Unit,
+    onClearRecents: () -> Unit,
+    onPlay: (RecentSearchPlay) -> Unit
+) {
+    if (recents.isEmpty() && recentPlays.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(32.dp)
+            ) {
+                Icon(
+                    Icons.Filled.Search,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.size(36.dp)
+                )
+                Text(
+                    "Search Mediyo",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    "Find songs, artists, albums and playlists",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        return
+    }
+
+    LazyColumn(
+        state = rememberLazyListState(),
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            top = 6.dp,
+            bottom = LocalOverlayBottom.current + 24.dp
+        ),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        if (recents.isNotEmpty()) {
+            item(key = "header_recents") {
+                SectionHeader(
+                    "Recent searches",
+                    trailing = {
+                        TextButton(onClick = onClearRecents) { Text("Clear") }
+                    }
+                )
+            }
+            items(recents.take(6), key = { "recent_$it" }) { q ->
+                RecentSearchRow(
+                    query = q,
+                    onClick = { onSearch(q) },
+                    onRemove = { onRemoveRecent(q) }
+                )
+            }
+        }
+
+        if (recents.isNotEmpty() && recentPlays.isNotEmpty()) {
+            item(key = "gap") { Spacer(Modifier.height(10.dp)) }
+        }
+
+        if (recentPlays.isNotEmpty()) {
+            item(key = "header_plays") { SectionHeader("Recently played") }
+            items(recentPlays.take(6), key = { "played_${it.track.videoId}_${it.query}" }) { play ->
+                RecentPlayRow(
+                    track = play.track,
+                    isPlaying = playingId != null && playingId == play.track.videoId,
+                    onClick = { onPlay(play) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchLoadingContent() {
+    LazyColumn(
+        state = rememberLazyListState(),
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            top = 6.dp,
+            bottom = LocalOverlayBottom.current + 24.dp
+        ),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        items(7, key = { "skeleton_$it" }) { SearchSkeletonRow() }
+    }
+}
+
+@Composable
+private fun SearchSkeletonRow() {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.size(54.dp).clip(RoundedCornerShape(10.dp)).shimmer())
+        Spacer(Modifier.width(14.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(Modifier.fillMaxWidth(0.6f).height(14.dp).clip(RoundedCornerShape(6.dp)).shimmer())
+            Box(Modifier.fillMaxWidth(0.35f).height(11.dp).clip(RoundedCornerShape(5.dp)).shimmer())
+        }
+    }
+}
+
+@Composable
+private fun SearchResultsContent(
+    results: List<FfiSearchResult>,
+    latestQuery: String,
+    selectedLabel: String,
+    loadingMore: Boolean,
+    player: PlayerViewModel,
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    onOpen: (FfiSearchResult) -> Unit,
+    onMenu: (FfiSearchResult) -> Unit
+) {
+    val topIndex = results.indexOfFirst { it.isTopResult }
+    val top = results.getOrNull(topIndex)
+    val rest = if (topIndex >= 0) {
+        results.filterIndexed { index, _ -> index != topIndex }
+    } else {
+        results
+    }
+
+    LazyColumn(
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            top = 6.dp,
+            bottom = LocalOverlayBottom.current + 24.dp
+        ),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        if (top != null) {
+            item(key = "top_result") {
+                TopResultCard(
+                    item = top,
+                    latestQuery = latestQuery,
+                    selectedLabel = selectedLabel,
+                    player = player,
+                    onOpen = { onOpen(top) }
+                )
+            }
+            if (rest.isNotEmpty()) {
+                item(key = "top_result_gap") { Spacer(Modifier.height(8.dp)) }
+            }
+        }
+
+        itemsIndexed(
+            items = rest,
+            key = { index, item ->
+                val id = item.videoId ?: item.browseId ?: item.playlistId ?: item.title
+                "r_${id}_$index"
+            }
+        ) { _, item ->
+            ResultRow(
+                item = item,
+                onClick = { onOpen(item) },
+                onMenu = { onMenu(item) }
+            )
+        }
+
+        item(key = "search_footer") { LoadingFooter(loadingMore) }
+    }
+}
+
+/**
+ * The top result gets a little more room than the rows below it, but the same
+ * 20dp margins and the same one-tap action. Extra controls live in the rows'
+ * overflow, not here, so the card stays quiet.
+ */
+@Composable
+private fun TopResultCard(
+    item: FfiSearchResult,
+    latestQuery: String,
+    selectedLabel: String,
+    player: PlayerViewModel,
+    onOpen: () -> Unit
+) {
+    val isArtist = item.category.contains("Artist", true)
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpen)
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AsyncImage(
+                model = item.thumbnails.bestThumbUrl(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(76.dp)
+                    .clip(if (isArtist) CircleShape else RoundedCornerShape(14.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            )
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    "Top result",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    item.title,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    searchMeta(item),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            FilledIconButton(
+                onClick = {
+                    if (isArtist || item.videoId == null) onOpen()
+                    else player.playTrack(
+                        item.toDomainTrack(),
+                        PlayOrigin.Search(latestQuery, selectedLabel)
+                    )
+                },
+                modifier = Modifier.size(46.dp)
+            ) {
+                Icon(
+                    if (isArtist || item.videoId == null) Icons.Filled.OpenInNew else Icons.Filled.PlayArrow,
+                    contentDescription = if (isArtist) "Open" else "Play",
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Secondary line under a search result title: "Artist • Song", collapsing to
+ * just "Song" when the artist is unknown.
+ *
+ * The artist used to fall back to the category and then had the category
+ * appended again, which rendered every anonymous song as "Song • Song".
+ */
+private fun searchMeta(item: FfiSearchResult): String {
+    val primary = item.artists.joinToString().ifBlank { item.info?.trim().orEmpty() }
+    val category = item.category.trim()
+    return when {
+        primary.isEmpty() -> category
+        category.isEmpty() || primary.equals(category, ignoreCase = true) -> primary
+        else -> "$primary  •  $category"
+    }
+}
+
+@Composable
+private fun ResultRow(item: FfiSearchResult, onClick: () -> Unit, onMenu: () -> Unit = {}) {
     Row(
         Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 20.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AsyncImage(
@@ -805,15 +941,15 @@ private fun TopResultMiniRow(item: FfiSearchResult, onClick: () -> Unit, onMenu:
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier
-                .size(44.dp)
-                .let {
-                    if (item.category.contains("Artist", true)) it.clip(CircleShape)
-                    else it.clip(RoundedCornerShape(8.dp))
-                }
-                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                .size(54.dp)
+                .clip(
+                    if (item.category.contains("Artist", true)) CircleShape
+                    else RoundedCornerShape(10.dp)
+                )
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
         )
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Text(
                 item.title,
                 style = MaterialTheme.typography.bodyLarge,
@@ -841,68 +977,39 @@ private fun TopResultMiniRow(item: FfiSearchResult, onClick: () -> Unit, onMenu:
     }
 }
 
-/**
- * Secondary line under a search result title: "Artist • Song", collapsing to
- * just "Song" when the artist is unknown.
- *
- * The artist used to fall back to the category and then had the category
- * appended again, which rendered every anonymous song as "Song • Song".
- */
-private fun searchMeta(item: FfiSearchResult): String {
-    val primary = item.artists.joinToString().ifBlank { item.info?.trim().orEmpty() }
-    val category = item.category.trim()
-    return when {
-        primary.isEmpty() -> category
-        category.isEmpty() || primary.equals(category, ignoreCase = true) -> primary
-        else -> "$primary  •  $category"
-    }
-}
-
+/** A submitted search that can be run again, or dropped from the history. */
 @Composable
-private fun ResultRow(item: FfiSearchResult, onClick: () -> Unit, onMenu: () -> Unit = {}) {
+private fun RecentSearchRow(query: String, onClick: () -> Unit, onRemove: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 8.dp),
+            .padding(start = 20.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        AsyncImage(
-            model = item.thumbnails.bestThumbUrl(),
+        Icon(
+            Icons.Filled.History,
             contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .size(52.dp)
-                .let {
-                    if (item.category.contains("Artist", true)) it.clip(CircleShape)
-                    else it.clip(RoundedCornerShape(8.dp))
-                }
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp)
         )
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                item.title,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                searchMeta(item),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+        Spacer(Modifier.width(14.dp))
+        Text(
+            query,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        IconButton(onClick = onRemove, modifier = Modifier.size(38.dp)) {
+            Icon(
+                Icons.Filled.Close,
+                contentDescription = "Remove ${query} from history",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                modifier = Modifier.size(17.dp)
             )
         }
-        Text(
-            item.duration.orEmpty(),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        TrackOverflowIcon(onClick = onMenu)
     }
 }
 
@@ -916,7 +1023,7 @@ private fun RecentPlayRow(track: Track, isPlaying: Boolean, onClick: () -> Unit)
         Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 8.dp),
+            .padding(horizontal = 20.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AsyncImage(
@@ -924,12 +1031,12 @@ private fun RecentPlayRow(track: Track, isPlaying: Boolean, onClick: () -> Unit)
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier
-                .size(52.dp)
-                .clip(RoundedCornerShape(8.dp))
+                .size(54.dp)
+                .clip(RoundedCornerShape(10.dp))
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
         )
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Text(
                 track.title,
                 style = MaterialTheme.typography.bodyLarge,
