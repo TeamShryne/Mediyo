@@ -46,6 +46,9 @@ android {
         // identifiable in Settings. Never fails the build when git is
         // unavailable (e.g. source export without .git).
         buildConfigField("String", "GIT_SHA", "\"${gitSha()}\"")
+        // Reported by the debug diagnostics screen; read from the catalog so
+        // it can never disagree with the version actually compiled in.
+        buildConfigField("String", "MEDIA3_VERSION", "\"${libs.versions.media3.get()}\"")
         // Which update track this build belongs to: "stable" or "nightly".
         // The nightly track is signed with the same key and shares the
         // applicationId, so it replaces the release build in place rather

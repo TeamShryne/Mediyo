@@ -171,9 +171,19 @@ class PlaybackService : MediaSessionService() {
             this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
+        // The service has to be foreground before the first frame of I/O, so a
+        // notification exists before Media3 has one to offer. It is normally
+        // replaced within a second by the media notification — but when it is
+        // not (a device where Media3 never builds one), a bare "Mediyo" card
+        // tells the user nothing. Show the track instead when there is one.
+        val metadata = player.currentMediaItem?.mediaMetadata
+        val title = metadata?.title?.toString()?.takeIf { it.isNotBlank() }
+            ?: getString(R.string.music_player)
+        val text = metadata?.artist?.toString()?.takeIf { it.isNotBlank() }
+            ?: getString(R.string.preparing_playback)
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(getString(R.string.music_player))
-            .setContentText("")
+            .setContentTitle(title)
+            .setContentText(text)
             .setSmallIcon(R.drawable.ic_notification_small)
             .setContentIntent(pending)
             .setOngoing(true)
@@ -200,6 +210,10 @@ class PlaybackService : MediaSessionService() {
             null
         }
         if (!enabled || channelImportance == NotificationManager.IMPORTANCE_NONE) {
+            PlaybackDiagnostics.record(
+                "notification",
+                "blocked (app enabled=$enabled, channel importance=$channelImportance)"
+            )
             Log.w(
                 TAG,
                 "playback notifications are blocked (app enabled=$enabled, channel importance=$channelImportance)"
@@ -230,11 +244,16 @@ class PlaybackService : MediaSessionService() {
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
+        PlaybackDiagnostics.record("service", "foreground promoted (media notification=${notification.hasMediaSession()})")
         true
     } catch (e: Throwable) {
+        PlaybackDiagnostics.record("service", "foreground refused: ${e.javaClass.name}")
         Log.w(TAG, "startForeground was refused", e)
         false
     }
+
+    private fun Notification.hasMediaSession(): Boolean =
+        extras?.containsKey(Notification.EXTRA_MEDIA_SESSION) == true
 
     /**
      * First promotion, from [onCreate] / [onStartCommand]. If this one fails the
@@ -256,6 +275,7 @@ class PlaybackService : MediaSessionService() {
      * notification update will promote us once the app is allowed to.
      */
     private fun handleForegroundStartDenied() {
+        PlaybackDiagnostics.record("service", "foreground start denied by the platform")
         if (promoteToForeground(latestMediaNotification ?: createPlaceholderNotification())) {
             Log.w(TAG, "foreground start denied; promoted on retry")
             return
@@ -270,6 +290,7 @@ class PlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
+        PlaybackDiagnostics.record("service", "created")
 
         // Media3 calls this when it was refused a foreground start. It only
         // reaches us if onUpdateNotification lets the exception through — see
@@ -303,6 +324,7 @@ class PlaybackService : MediaSessionService() {
                     latestMediaNotification = incoming.notification
                     onNotificationChangedCallback.onNotificationChanged(incoming)
                 }
+                PlaybackDiagnostics.record("provider", "notification built")
                 return defaultProvider.createNotification(
                     mediaSession, mediaButtonPreferences, actionFactory, trackingCallback
                 ).also { latestMediaNotification = it.notification }
@@ -364,7 +386,21 @@ class PlaybackService : MediaSessionService() {
                     }
             })
         if (sessionActivity != null) builder.setSessionActivity(sessionActivity)
-        session = builder.build()
+        val builtSession = builder.build()
+        session = builtSession
+
+        // Register the session with the service ourselves.
+        //
+        // Media3 normally adds a session the first time a controller connects,
+        // and this app drives the player directly, so nothing else ever binds.
+        // When no controller connects, Media3 never learns about the session:
+        // it never arms its notification pipeline and never builds the media
+        // notification, no matter what the player does. That is the whole bug
+        // on devices where only the placeholder ever appeared. Registering
+        // here is idempotent — where a controller already did it, nothing
+        // changes.
+        addSession(builtSession)
+        PlaybackDiagnostics.record("session", "added to service (notification pipeline armed)")
 
         scope.launch {
             hub.snapshot.map { it.liked }.distinctUntilChanged().collect { syncCustomLayout() }
@@ -379,6 +415,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        PlaybackDiagnostics.record("service", "start command: ${intent?.action ?: "(none)"}")
         // Home widget taps address the service directly (Metrolist-style):
         // act via the headless controller, which repaints the widget itself.
         when (intent?.action) {
@@ -436,18 +473,26 @@ class PlaybackService : MediaSessionService() {
         // A notification update that lands after the task was cleared would
         // bring the notification of a dead session back.
         if (taskCleared) return
+        PlaybackDiagnostics.record(
+            "notification",
+            "update requested (foreground=$startInForegroundRequired, state=${player.playbackState}, " +
+                "items=${player.mediaItemCount}, playing=${player.isPlaying})"
+        )
         try {
             super.onUpdateNotification(session, startInForegroundRequired)
+            PlaybackDiagnostics.record("notification", "updated")
         } catch (e: IllegalStateException) {
             // A refused foreground start must reach Media3's own handler, which
             // calls onForegroundServiceStartNotAllowedException(). Swallowing it
             // here (as this used to) hid the refusal from everyone: playback
             // carried on with no notification and nothing retried the promotion.
             if (e.isForegroundStartDenied()) throw e
+            PlaybackDiagnostics.record("notification", "update failed: ${e.javaClass.name}: ${e.message}")
             Log.w(TAG, "media notification update failed", e)
         } catch (e: Throwable) {
             // Anything else is a notification that could not be built; the
             // music must not die because a bitmap did.
+            PlaybackDiagnostics.record("notification", "update failed: ${e.javaClass.name}: ${e.message}")
             Log.w(TAG, "media notification update failed", e)
         }
     }
@@ -473,6 +518,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        PlaybackDiagnostics.record("service", "destroyed")
         try { (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).cancel(SLEEP_NOTIFICATION_ID) } catch (_: Throwable) {}
         latestMediaNotification = null
         scope.cancel()
