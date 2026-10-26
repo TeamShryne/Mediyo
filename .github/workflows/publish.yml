@@ -40,8 +40,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Manual "Run workflow" with a version just cuts the tag; the tag push
-  # triggers `publish`, which is the same path a pushed tag takes.
+  # A versioned manual run creates the tag, then publishes it in this same
+  # workflow run. A GITHUB_TOKEN tag push does not start a second workflow run.
   cut-tag:
     if: github.event_name == 'workflow_dispatch' && inputs.version != ''
     runs-on: ubuntu-latest
@@ -71,14 +71,18 @@ jobs:
           echo "Pushed $TAG — the tag build will publish the release."
 
   publish:
-    # A tag push publishes a release; a schedule (or a dispatch with no
-    # version) publishes a nightly. The tag check is explicit rather than
-    # "event == push", so that adding a branch trigger later cannot make
-    # every push to main publish a nightly.
+    needs: cut-tag
+    # always() is needed because cut-tag is intentionally skipped for normal
+    # tag pushes and nightly dispatches. A versioned dispatch publishes only
+    # after cut-tag succeeded; tag pushes and nightly dispatches keep working.
     if: >-
-      startsWith(github.ref, 'refs/tags/v') ||
-      github.event_name == 'schedule' ||
-      (github.event_name == 'workflow_dispatch' && inputs.version == '')
+      always() &&
+      (
+        startsWith(github.ref, 'refs/tags/v') ||
+        github.event_name == 'schedule' ||
+        (github.event_name == 'workflow_dispatch' && inputs.version == '') ||
+        (github.event_name == 'workflow_dispatch' && inputs.version != '' && needs.cut-tag.result == 'success')
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -98,8 +102,11 @@ jobs:
           # It used to live here, where nothing ran it until a release was
           # actually published -- and a value that was computed but never
           # exported to $GITHUB_OUTPUT shipped as a broken nightly.
-          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
             RESOLVED=$(scripts/resolve-version.sh release "$GITHUB_REF_NAME")
+          elif [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+            RESOLVED=$(scripts/resolve-version.sh release "v${VERSION#v}")
           else
             # The latest *stable* release. Nightlies are prereleases, so they
             # are excluded here, and the nightly's band follows this release's
