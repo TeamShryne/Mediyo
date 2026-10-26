@@ -10,7 +10,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -56,10 +55,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
@@ -97,6 +96,7 @@ import com.teamshryne.mediyo.feature.player.PlayerViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -228,6 +228,11 @@ class SearchVm @Inject constructor(
         panelOpen = false
         clearSuggest()
         loadRecents()
+    }
+
+    /** Put [q] in the field without running the search (the arrow action). */
+    fun fillQuery(q: String) {
+        onQueryChange(q)
     }
 
     /** Called on every keystroke: updates the query and refreshes suggestions. */
@@ -378,11 +383,20 @@ fun SearchScreen(
         if (body == SearchBody.Results) resultsState.scrollToItem(0)
     }
 
+    // Scrolling the results dismisses the suggestion panel — for the current
+    // query only, so the next keystroke re-opens it naturally.
+    LaunchedEffect(resultsState) {
+        snapshotFlow { resultsState.firstVisibleItemIndex to resultsState.firstVisibleItemScrollOffset }
+            .distinctUntilChanged()
+            .collect { if (!vm.panelOpen) vm.dismissSuggest() }
+    }
+
     // Back closes the suggestion panel before it leaves the screen.
     BackHandler(enabled = vm.panelOpen) {
         vm.closePanel()
         focusManager.clearFocus()
     }
+    BackHandler(enabled = !vm.panelOpen && vm.suggestVisible) { vm.dismissSuggest() }
 
     // The view model outlives this screen (it is hoisted for the whole app),
     // so make sure no panel is left behind when the user leaves the tab.
@@ -441,7 +455,10 @@ fun SearchScreen(
                 focusManager.clearFocus()
             },
             onFocusChanged = { focused ->
-                if (focused) vm.openPanel() else vm.closePanel()
+                // Only opening is tied to focus. Closing on blur would hide
+                // the panel under the finger that is tapping one of its rows,
+                // before the click gets to run.
+                if (focused) vm.openPanel()
             },
             filters = vm.filters,
             selectedFilter = vm.selectedFilter,
@@ -505,55 +522,31 @@ fun SearchScreen(
                 }
             }
 
-            val showSuggestions = vm.panelOpen &&
-                (vm.query.isNotBlank() || vm.recents.isNotEmpty() || vm.suggestVisible)
-
-            // The suggestion panel is a short card, not a second screen: a
-            // light scrim dims the results just enough to read the card and
-            // a tap outside puts everything back. These sit in the content
-            // Box, so call the plain overload rather than the Column one.
+            // The suggestion panel is opaque and fills the content area:
+            // while the user types, the results stay out of sight instead of
+            // peeking through under the suggestions.
             androidx.compose.animation.AnimatedVisibility(
-                visible = showSuggestions,
-                enter = fadeIn(tween(140)),
-                exit = fadeOut(tween(110)),
+                visible = vm.panelOpen,
+                enter = fadeIn(tween(140)) + expandVertically(tween(220)),
+                exit = fadeOut(tween(120)) + shrinkVertically(tween(180)),
                 modifier = Modifier.fillMaxSize()
             ) {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.18f))
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) {
-                            vm.closePanel()
-                            focusManager.clearFocus()
-                        }
-                )
-            }
-
-            androidx.compose.animation.AnimatedVisibility(
-                visible = showSuggestions,
-                enter = fadeIn(tween(140)) + expandVertically(tween(170), expandFrom = Alignment.Top),
-                exit = fadeOut(tween(110)) + shrinkVertically(tween(140), shrinkTowards = Alignment.Top),
-                modifier = Modifier.align(Alignment.TopCenter)
-                    .padding(horizontal = 16.dp)
-                    .padding(top = 6.dp)
-            ) {
-                SearchSuggestions(
+                SearchSuggestionPanel(
                     query = vm.query,
                     recents = vm.recents,
                     suggestTexts = vm.suggestTexts,
                     suggestEntities = vm.suggestEntities,
                     showSuggestions = vm.suggestVisible,
-                    onSearch = { q ->
+                    onSubmit = { q ->
                         vm.query = q
                         vm.submit()
                         focusManager.clearFocus()
                     },
+                    onFill = { vm.fillQuery(it) },
                     onRemoveRecent = vm::removeRecent,
                     onOpenEntity = {
                         open(it)
+                        focusManager.clearFocus()
                     }
                 )
             }
