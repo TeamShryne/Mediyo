@@ -33,6 +33,25 @@ enum class PlayerBgStyle(val id: String, val title: String, val subtitle: String
     }
 }
 
+/**
+ * How the full player arrives from the mini player. Every style is driven by
+ * the same 0..1 progress value, so dragging the mini player up previews the
+ * arrival in real time and the choice only changes the shape of the motion.
+ *
+ * Slide is the default because it is the motion the app shipped with; the
+ * other styles are opt-in from Settings → Appearance.
+ */
+enum class PlayerOpenStyle(val id: String, val title: String, val subtitle: String) {
+    Slide("slide", "Slide", "Rises from the bottom edge"),
+    Fade("fade", "Fade", "Appears in place, no travel"),
+    Scale("scale", "Scale", "Grows out from the centre"),
+    Artwork("artwork", "Artwork flight", "The cover leaves the mini player and lands up top");
+
+    companion object {
+        fun fromId(id: String?): PlayerOpenStyle? = entries.find { it.id == id }
+    }
+}
+
 @Singleton
 class AppearancePrefs @Inject constructor(@ApplicationContext private val ctx: Context) {
     private val K_TAB = stringPreferencesKey("tab_style")
@@ -43,6 +62,7 @@ class AppearancePrefs @Inject constructor(@ApplicationContext private val ctx: C
     private val K_TINT = booleanPreferencesKey("player_bg_tint")
     private val K_MOTION = booleanPreferencesKey("lively_motion")
     private val K_PREDICTIVE_BACK = booleanPreferencesKey("predictive_back")
+    private val K_OPEN = stringPreferencesKey("player_open_style")
 
     val tabStyleFlow: Flow<TabStyle> = ctx.appearancePrefs.data.map { prefs ->
         TabStyle.fromId(prefs[K_TAB]) ?: TabStyle.Docked
@@ -100,5 +120,18 @@ class AppearancePrefs @Inject constructor(@ApplicationContext private val ctx: C
 
     suspend fun setPredictiveBack(enabled: Boolean) {
         ctx.appearancePrefs.edit { it[K_PREDICTIVE_BACK] = enabled }
+    }
+
+    /**
+     * Mini player → full player motion. Kept in Appearance, next to the player
+     * backdrop, because both are about how the player looks rather than about
+     * playback.
+     */
+    val playerOpenStyleFlow: Flow<PlayerOpenStyle> = ctx.appearancePrefs.data.map { prefs ->
+        PlayerOpenStyle.fromId(prefs[K_OPEN]) ?: PlayerOpenStyle.Slide
+    }
+
+    suspend fun setPlayerOpenStyle(style: PlayerOpenStyle) {
+        ctx.appearancePrefs.edit { it[K_OPEN] = style.id }
     }
 }

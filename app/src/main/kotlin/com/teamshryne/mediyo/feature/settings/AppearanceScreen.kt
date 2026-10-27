@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Animation
 import androidx.compose.material.icons.filled.BlurOn
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Lyrics
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -44,6 +45,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.teamshryne.mediyo.data.appearance.AppearancePrefs
 import com.teamshryne.mediyo.data.appearance.PlayerBgStyle
+import com.teamshryne.mediyo.data.appearance.PlayerOpenStyle
 import com.teamshryne.mediyo.data.appearance.TabStyle
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -137,9 +139,17 @@ class AppearanceVm @Inject constructor(
     fun setPredictiveBack(enabled: Boolean) {
         viewModelScope.launch { prefs.setPredictiveBack(enabled) }
     }
+
+    /** How the full player arrives from the mini player. */
+    val playerOpenStyle: StateFlow<PlayerOpenStyle> = prefs.playerOpenStyleFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, PlayerOpenStyle.Slide)
+
+    fun selectPlayerOpenStyle(style: PlayerOpenStyle) {
+        viewModelScope.launch { prefs.setPlayerOpenStyle(style) }
+    }
 }
 
-/** Hub: tab bar style, player background, lyrics look and motion, each opening its own screen. */
+/** Hub: tab bar style, player backdrop and animation, lyrics look and motion. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppearanceScreen(
@@ -152,6 +162,7 @@ fun AppearanceScreen(
     val lyrics by lyricsVm.style.collectAsState()
     val motion by vm.motion.collectAsState()
     val predictiveBack by vm.predictiveBack.collectAsState()
+    val playerMotion by vm.playerOpenStyle.collectAsState()
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -194,6 +205,16 @@ fun AppearanceScreen(
                             title = "Player background",
                             subtitle = bg.title,
                             onClick = { nav?.navigate("settings/appearance/player") }
+                        )
+                        HorizontalDivider(
+                            Modifier.padding(horizontal = 16.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest
+                        )
+                        AppearanceHubRow(
+                            icon = Icons.Filled.Movie,
+                            title = "Player animation",
+                            subtitle = playerMotion.title,
+                            onClick = { nav?.navigate("settings/appearance/player-motion") }
                         )
                         HorizontalDivider(
                             Modifier.padding(horizontal = 16.dp),

@@ -100,6 +100,7 @@ done
 # works on a clean device.
 for t in settings/content/lyrics settings/updates settings/appearance settings/appearance/tabs \
          settings/appearance/player settings/appearance/lyrics settings/appearance/motion \
+         settings/appearance/player-motion \
          settings/equalizer settings/storage settings/debug/notification; do
   step "screen: $t"
   send go --es route "$t"

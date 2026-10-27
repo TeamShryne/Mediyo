@@ -16,12 +16,14 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -54,22 +56,26 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -93,6 +99,7 @@ import com.teamshryne.mediyo.core.design.EaseOutExpo
 import com.teamshryne.mediyo.core.design.MediyoTheme
 import com.teamshryne.mediyo.core.design.Motion
 import com.teamshryne.mediyo.core.design.popEnter
+import com.teamshryne.mediyo.data.appearance.PlayerOpenStyle
 import com.teamshryne.mediyo.data.appearance.TabStyle
 import com.teamshryne.mediyo.core.design.popExit
 import com.teamshryne.mediyo.core.design.pushEnter
@@ -113,6 +120,7 @@ import com.teamshryne.mediyo.feature.library.LikedScreen
 import com.teamshryne.mediyo.feature.library.LocalPlaylistDetailScreen
 import com.teamshryne.mediyo.feature.section.SectionScreen
 import com.teamshryne.mediyo.feature.player.FullPlayer
+import com.teamshryne.mediyo.feature.player.FlyingArtwork
 import com.teamshryne.mediyo.feature.player.MiniPlayer
 import com.teamshryne.mediyo.feature.player.PlayerViewModel
 import com.teamshryne.mediyo.feature.playlist.PlaylistScreen
@@ -128,6 +136,7 @@ import com.teamshryne.mediyo.feature.settings.TabBarStyleScreen
 import com.teamshryne.mediyo.feature.settings.LyricsAppearanceScreen
 import com.teamshryne.mediyo.feature.settings.LyricsSettingsScreen
 import com.teamshryne.mediyo.feature.settings.MotionScreen
+import com.teamshryne.mediyo.feature.settings.PlayerMotionScreen
 import com.teamshryne.mediyo.feature.settings.SettingsScreen
 import com.teamshryne.mediyo.feature.update.UpdateDialog
 import com.teamshryne.mediyo.feature.update.UpdateViewModel
@@ -216,11 +225,20 @@ private fun AppShell() {
     val updateState by updateVm.state.collectAsState()
     LaunchedEffect(Unit) { if (!BuildConfig.DEBUG) updateVm.silentCheck() }
     val sleepState by playerVm.sleepState.collectAsState()
-    var showFullPlayer by remember { mutableStateOf(false) }
     var showQueueOverlay by remember { mutableStateOf(false) }
     var showSleepSheet by remember { mutableStateOf(false) }
-    // Player collapse has priority over nav pop — both handlers, inner one wins
-    BackHandler(enabled = showFullPlayer && !showQueueOverlay) { showFullPlayer = false }
+    // One 0..1 value for the mini player ↔ full player pair. The drag, the
+    // predictive back gesture and the chosen open style all write it, so the
+    // preview under the finger and the animation that follows cannot drift
+    // apart. Reads live inside graphics layers (never in composition), so a
+    // drag redraws instead of recomposing the app.
+    val playerProgress = remember { mutableFloatStateOf(0f) }
+    var playerMounted by remember { mutableStateOf(false) }
+    var playerJob by remember { mutableStateOf<Job?>(null) }
+    // Root-coordinate rectangles for the cover flight.
+    var miniArtRect by remember { mutableStateOf<Rect?>(null) }
+    var heroArtRect by remember { mutableStateOf<Rect?>(null) }
+    var rootHeightPx by remember { mutableIntStateOf(0) }
 
     val contextLabel = if (playerState.originLabel.isNotBlank() && playerState.title.isNotEmpty()) {
         playerState.originLabel
@@ -244,9 +262,49 @@ private fun AppShell() {
     val tabStyle by appearanceVm.style.collectAsState()
     val livelyMotion by appearanceVm.motion.collectAsState()
     val predictiveBack by appearanceVm.predictiveBack.collectAsState()
+    val playerOpenStyle by appearanceVm.playerOpenStyle.collectAsState()
     val density = LocalDensity.current
     var tabBarH by remember { mutableIntStateOf(0) }
     var pillH by remember { mutableIntStateOf(0) }
+
+    // Shared by the tap, the drag release and the predictive-back cancel.
+    // Cancelling the previous job first matters: a close that is mid-flight
+    // must not finish and unmount the player that a new open just mounted.
+    val playerScope = rememberCoroutineScope()
+    fun settlePlayer(open: Boolean) {
+        if (open && playerState.title.isEmpty()) return
+        playerJob?.cancel()
+        if (open) {
+            playerMounted = true
+        }
+        playerJob = playerScope.launch {
+            animate(
+                playerProgress.floatValue,
+                if (open) 1f else 0f,
+                animationSpec = tween(
+                    if (open) Motion.SheetEnter else Motion.SheetExit,
+                    easing = if (open) EaseOutExpo else EaseIn
+                )
+            ) { value, _ -> playerProgress.floatValue = value }
+            if (!open) {
+                playerMounted = false
+            }
+        }
+    }
+    // A full-screen drag is too long: opening over ~55% of the height keeps
+    // the gesture inside one comfortable thumb sweep.
+    val dragRangePx = with(density) {
+        (rootHeightPx * 0.55f).coerceAtLeast(320.dp.toPx())
+    }
+    // Queue cleared while the player is open: do not leave it mounted with
+    // nothing behind it, and do not let a later back press try to close it.
+    LaunchedEffect(playerState.title.isEmpty()) {
+        if (playerState.title.isEmpty()) {
+            playerJob?.cancel()
+            playerProgress.floatValue = 0f
+            playerMounted = false
+        }
+    }
     // Space the floating pill needs: measured live, 82dp estimate on the
     // very first frame so content never jumps once measured.
     val pillReserve = (if (pillH > 0) with(density) { pillH.toDp() } else 82.dp) + 8.dp
@@ -296,6 +354,21 @@ private fun AppShell() {
             throw cancelled
         }
     }
+
+    // Leaving for another screen: no collapse animation, the destination
+    // slides in over the player immediately.
+    fun dismissPlayerNow() {
+        playerJob?.cancel()
+        playerProgress.floatValue = 0f
+        playerMounted = false
+    }
+
+    // Back while the player is open collapses it, never pops the nav stack.
+    // PredictiveBackHandler rather than BackHandler so the gesture pulls the
+    // player down with the finger; it is composed after the nav-level handler,
+    // and the dispatcher gives the most recent one the gesture, so this keeps
+    // its priority over the screen transition above.
+    val playerBackEnabled = playerMounted && !showQueueOverlay
 
     // adb control — debug builds only. Nothing in a release APK can emit on
     // AdbControl (its receiver is declared in src/debug only), and the
@@ -426,7 +499,7 @@ private fun AppShell() {
 
                     is AdbCommand.Overlay -> when (cmd.target) {
                         "player" -> {
-                            showFullPlayer = true
+                            settlePlayer(true)
                             AdbControl.log("overlay player opened")
                         }
                         "queue" -> {
@@ -473,7 +546,7 @@ private fun AppShell() {
     val pillPart = if (playerState.title.isNotEmpty()) pillReserve else 0.dp
     val overlayBottom = sysBottom + barReserve + pillPart
 
-    Box(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize().onSizeChanged { rootHeightPx = it.height }) {
         Scaffold(
             containerColor = bg
         ) { pad ->
@@ -582,6 +655,7 @@ private fun AppShell() {
                 composable("downloads") { DownloadsScreen(nav, playerVm) }
                 composable("settings/appearance/tabs") { TabBarStyleScreen(nav) }
                 composable("settings/appearance/player") { PlayerBackgroundScreen(nav) }
+                composable("settings/appearance/player-motion") { PlayerMotionScreen(nav) }
                 composable("settings/appearance/lyrics") { LyricsAppearanceScreen(nav) }
                 composable("settings/appearance/motion") { MotionScreen(nav) }
                 // Debug-only route: a release build cannot reach a screen
@@ -661,30 +735,66 @@ private fun AppShell() {
                     Box(
                         Modifier.fillMaxWidth().padding(horizontal = 4.dp)
                             .onSizeChanged { pillH = it.height }
+                            // Drag the pill up and the player opens under the
+                            // finger — every frame is the same progress the
+                            // release animation starts from.
+                            .pointerInput(dragRangePx) {
+                                detectVerticalDragGestures(
+                                    onDragStart = { playerJob?.cancel() },
+                                    onVerticalDrag = { change, dy ->
+                                        change.consume()
+                                        val next = (playerProgress.floatValue - dy / dragRangePx)
+                                            .coerceIn(0f, 1f)
+                                        if (next > 0f) playerMounted = true
+                                        playerProgress.floatValue = next
+                                    },
+                                    onDragEnd = { settlePlayer(playerProgress.floatValue > 0.32f) },
+                                    onDragCancel = { settlePlayer(playerProgress.floatValue > 0.32f) }
+                                )
+                            }
+                            // The pill leaves the stage as the player takes it
+                            // over; on the way back it fades in under the
+                            // returning cover.
+                            .graphicsLayer { alpha = 1f - playerProgress.floatValue }
                     ) {
                         MiniPlayer(
                             state = playerState,
                             onToggle = playerVm::toggle,
                             onNext = playerVm::next,
-                            onExpand = { if (playerState.title.isNotEmpty()) showFullPlayer = true },
-                            sleepBadge = sleepBadge
+                            onExpand = { settlePlayer(true) },
+                            sleepBadge = sleepBadge,
+                            onArtworkBounds = { miniArtRect = it }
                         )
                     }
                 }
             }
         }
 
-        // Immersive full-screen player overlay — consumes clicks & back
-        // Faster than before (320ms full-height felt laggy): shorter travel
-        // reads as "snappy bottom sheet" and stays GPU-composited.
-        AnimatedVisibility(
-            visible = showFullPlayer && playerState.title.isNotEmpty(),
-            enter = sheetEnter(),
-            exit = sheetExit(),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            // Inner BackHandler ensures player collapses before nav pop
-            BackHandler(enabled = true) { showFullPlayer = false }
+        // Immersive full-screen player overlay — consumes clicks & back.
+        // Mounted while opening, open or closing: the progress value owns the
+        // motion, so the drag, the tap and the back gesture share one path.
+        if (playerMounted && playerState.title.isNotEmpty()) {
+            PredictiveBackHandler(enabled = playerBackEnabled) { backEvents ->
+                try {
+                    backEvents.collect { event ->
+                        // The finger pulls the player down in real time — but
+                        // only if the user kept predictive back on in Motion.
+                        // With it off the player waits for the release and
+                        // closes on its own animation instead.
+                        if (!predictiveBack) return@collect
+                        playerJob?.cancel()
+                        playerProgress.floatValue = (1f - event.progress).coerceIn(0f, 1f)
+                    }
+                    // Committed: finish the last little bit of the collapse
+                    // from wherever the finger left it. A non-predictive back
+                    // (Android 12 and older) reports no progress, so this is
+                    // also the normal close animation there.
+                    settlePlayer(false)
+                } catch (_: CancellationException) {
+                    // Gesture cancelled: spring back open from where it was.
+                    settlePlayer(true)
+                }
+            }
             FullPlayer(
                 state = playerState,
                 contextLabel = contextLabel,
@@ -694,15 +804,29 @@ private fun AppShell() {
                 onSeek = playerVm::seekTo,
                 onToggleShuffle = playerVm::toggleShuffle,
                 onToggleRepeat = playerVm::toggleRepeat,
-                onCollapse = { showFullPlayer = false },
+                onCollapse = { settlePlayer(false) },
                 onShowQueue = { showQueueOverlay = true },
                 onShowComments = { playerState.videoId?.let { sheetVm.showComments(it) } },
                 onShowSleepTimer = { showSleepSheet = true },
-                onGoToArtist = { showFullPlayer = false; nav.navigateArtist(it) },
-                onOpenChannel = { showFullPlayer = false; nav.navigateChannel(it) },
-                onOpenPodcast = { showFullPlayer = false; nav.navigatePodcast(it) },
-                playerVm = playerVm
+                onGoToArtist = { dismissPlayerNow(); nav.navigateArtist(it) },
+                onOpenChannel = { dismissPlayerNow(); nav.navigateChannel(it) },
+                onOpenPodcast = { dismissPlayerNow(); nav.navigatePodcast(it) },
+                playerVm = playerVm,
+                progress = { playerProgress.floatValue },
+                openStyle = playerOpenStyle,
+                onHeroArtBounds = { heroArtRect = it }
             )
+            // The cover flies above the player so it can start on the pill's
+            // artwork and land on the player's. It removes itself at p = 0
+            // and p = 1, where the real artwork is the one on screen.
+            if (playerOpenStyle == PlayerOpenStyle.Artwork) {
+                FlyingArtwork(
+                    artwork = playerState.artwork,
+                    miniRect = miniArtRect,
+                    heroRect = heroArtRect,
+                    progress = { playerProgress.floatValue }
+                )
+            }
         }
 
         // Queue overlay — sits ON TOP of the full player, same way the player
