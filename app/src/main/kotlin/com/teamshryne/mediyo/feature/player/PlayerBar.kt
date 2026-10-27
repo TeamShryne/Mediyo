@@ -42,8 +42,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -63,6 +67,7 @@ import com.teamshryne.mediyo.core.design.SheetHostVm
 import com.teamshryne.mediyo.core.design.TrackMenuSheet
 import com.teamshryne.mediyo.core.design.formatTime
 import com.teamshryne.mediyo.core.design.rememberDominantColors
+import com.teamshryne.mediyo.data.appearance.PlayerOpenStyle
 import com.teamshryne.mediyo.domain.model.ART_HERO_PX
 import com.teamshryne.mediyo.domain.model.ART_ROW_PX
 import com.teamshryne.mediyo.domain.model.thumbSized
@@ -75,7 +80,15 @@ import kotlinx.coroutines.launch
 // Mini player — floating pill above the nav bar (Spotify style)
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
-fun MiniPlayer(state: PlayerState, onToggle: () -> Unit, onNext: () -> Unit, onExpand: () -> Unit, sleepBadge: String? = null, modifier: Modifier = Modifier) {
+fun MiniPlayer(
+    state: PlayerState,
+    onToggle: () -> Unit,
+    onNext: () -> Unit,
+    onExpand: () -> Unit,
+    sleepBadge: String? = null,
+    modifier: Modifier = Modifier,
+    onArtworkBounds: (Rect) -> Unit = {}
+) {
     if (state.title.isEmpty()) return
     Card(
         onClick = onExpand,
@@ -96,7 +109,11 @@ fun MiniPlayer(state: PlayerState, onToggle: () -> Unit, onNext: () -> Unit, onE
                     model = state.artwork.thumbSized(ART_ROW_PX),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp))
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        // The full player's artwork flight starts here.
+                        .onGloballyPositioned { onArtworkBounds(it.boundsInRoot()) }
                 )
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
@@ -159,7 +176,11 @@ fun FullPlayer(
     onGoToArtist: (String) -> Unit = {},
     onOpenChannel: (String) -> Unit = {},
     onOpenPodcast: (String) -> Unit = {},
-    playerVm: PlayerViewModel? = null
+    playerVm: PlayerViewModel? = null,
+    /** 0 = still folded into the mini player, 1 = fully open. */
+    progress: () -> Float = { 1f },
+    openStyle: PlayerOpenStyle = PlayerOpenStyle.Slide,
+    onHeroArtBounds: (Rect) -> Unit = {}
 ) {
     val dominant: DominantColors = rememberDominantColors(state.artwork)
     // Player backdrop (Settings → Appearance → Player background).
@@ -233,34 +254,73 @@ fun FullPlayer(
     Box(
         Modifier
             .fillMaxSize()
+            // The opening motion is a pure graphics layer: translation, scale
+            // and alpha only, so it stays on the GPU and can follow a drag at
+            // frame rate. `progress` is read here (not in the composable body)
+            // so a drag does not recompose the whole player.
+            .graphicsLayer {
+                val p = progress().coerceIn(0f, 1f)
+                when (openStyle) {
+                    PlayerOpenStyle.Slide -> translationY = (1f - p) * size.height
+                    PlayerOpenStyle.Fade -> alpha = p
+                    PlayerOpenStyle.Scale -> {
+                        alpha = p
+                        val s = 0.92f + 0.08f * p
+                        scaleX = s
+                        scaleY = s
+                    }
+                    // The artwork flight (FlyingArtwork) carries this one; the
+                    // player itself stays put and its pieces fade in around
+                    // the cover.
+                    PlayerOpenStyle.Artwork -> Unit
+                }
+            }
             .clickable(
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() },
                 onClick = {} // consume clicks
             )
     ) {
-        PlayerBackground(
-            config = bgConfig,
-            dominant = dominant,
-            artwork = {
-                val art = state.artwork
-                AsyncImage(
-                    model = ImageRequest.Builder(bgCtx).data(art).crossfade(350).build(),
-                    placeholder = rememberAsyncImagePainter(bgReadyUrl),
-                    error = rememberAsyncImagePainter(bgReadyUrl),
-                    onSuccess = { bgReadyUrl = art },
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-            },
-            modifier = Modifier.fillMaxSize()
-        )
+        Box(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    if (openStyle == PlayerOpenStyle.Artwork) alpha = progress().coerceIn(0f, 1f)
+                }
+        ) {
+            PlayerBackground(
+                config = bgConfig,
+                dominant = dominant,
+                artwork = {
+                    val art = state.artwork
+                    AsyncImage(
+                        model = ImageRequest.Builder(bgCtx).data(art).crossfade(350).build(),
+                        placeholder = rememberAsyncImagePainter(bgReadyUrl),
+                        error = rememberAsyncImagePainter(bgReadyUrl),
+                        onSuccess = { bgReadyUrl = art },
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
         Column(
             Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
+                .graphicsLayer {
+                    // Artwork style: the rest of the player fades in around
+                    // the cover instead of appearing at full strength behind
+                    // it. No translation here: the hero rectangle is measured
+                    // for the cover flight, and moving it would move the
+                    // flight's landing spot.
+                    if (openStyle == PlayerOpenStyle.Artwork) {
+                        alpha = progress().coerceIn(0f, 1f)
+                    }
+                }
                 .padding(top = 4.dp, start = 24.dp, end = 24.dp, bottom = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -381,6 +441,9 @@ fun FullPlayer(
                                 Modifier
                                     .fillMaxWidth()
                                     .aspectRatio(artRatio)
+                                    // Where FlyingArtwork lands. Read from layout,
+                                    // so it is correct for any artwork aspect.
+                                    .onGloballyPositioned { onHeroArtBounds(it.boundsInRoot()) }
                                     .then(
                                         if (artReady) {
                                             Modifier
@@ -393,7 +456,21 @@ fun FullPlayer(
                                     painter = artPainter,
                                     contentDescription = state.title,
                                     contentScale = ContentScale.Fit,
-                                    modifier = Modifier.fillMaxSize().alpha(artAlpha)
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        // Artwork flight: the cover in the slot
+                                        // stays hidden while its copy travels,
+                                        // then takes over in the last third of
+                                        // the way. Without this the same
+                                        // picture would be on screen twice —
+                                        // once flying, once already landed.
+                                        .graphicsLayer {
+                                            if (openStyle == PlayerOpenStyle.Artwork) {
+                                                val p = progress().coerceIn(0f, 1f)
+                                                alpha = (p * 3f - 2f).coerceIn(0f, 1f)
+                                            }
+                                        }
+                                        .alpha(artAlpha)
                                 )
                                 if (!artReady) {
                                     GlowingLoadingTitle(
