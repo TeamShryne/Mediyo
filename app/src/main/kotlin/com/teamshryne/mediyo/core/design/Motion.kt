@@ -37,8 +37,8 @@ val EaseIn = CubicBezierEasing(0.42f, 0f, 1f, 1f)
 // ── Durations (ms) ────────────────────────────────────────────────────────────
 
 object Motion {
-    const val SlideEnter = 200
-    const val SlideExit = 150
+    const val SlideEnter = 260
+    const val SlideExit = 200
     const val FadeEnter = 140
     const val FadeExit = 110
     const val TabEnter = 160
@@ -47,66 +47,130 @@ object Motion {
     const val SheetExit = 190
 
     /**
-     * How far the screen follows the back gesture, as a fraction of width.
-     * Small on purpose: the gesture is a preview, not a second transition.
+     * How far the screen a back gesture is leaving travels before it is
+     * committed, as a fraction of width. It has to be big enough to read as
+     * "this screen is going away" under the finger — the previous value (6%)
+     * was so small the gesture looked broken.
      */
-    const val Predictive = 0.06f
-
-    /** How much the screen recedes while the back gesture is in progress. */
-    const val PredictiveScale = 0.03f
+    const val PopPeek = 0.32f
 }
 
 // ── Nav transitions (push / pop, dynamic slide + scale + fade) ───────────────
 
 /**
- * Push enter: the new screen slides in from +10% width while growing from
- * 96% and fading in. The scale is what makes the push feel like depth rather
- * than a strip of pages sliding sideways. 10% stays proportional on every
+ * Push enter: the new screen slides in from +12% width while growing from
+ * 97% and fading in. The scale is what makes the push feel like depth rather
+ * than a strip of pages sliding sideways. 12% stays proportional on every
  * screen size without composing anything offscreen.
  */
-fun pushEnter(): EnterTransition =
-    fadeIn(tween(Motion.FadeEnter, easing = EaseOutExpo)) +
-        slideInHorizontally(tween(Motion.SlideEnter, easing = EaseOutExpo)) {
-            (it * 0.10f).toInt()
-        } +
-        scaleIn(
-            animationSpec = tween(Motion.SlideEnter, easing = EaseOutExpo),
-            initialScale = 0.96f
-        )
+fun pushEnter(style: ScreenMotionStyle = ScreenMotionStyle.Slide): EnterTransition =
+    when (style) {
+        ScreenMotionStyle.Slide ->
+            fadeIn(tween(Motion.FadeEnter, easing = EaseOutExpo)) +
+                slideInHorizontally(tween(Motion.SlideEnter, easing = EaseOutExpo)) {
+                    (it * 0.12f).toInt()
+                } +
+                scaleIn(
+                    animationSpec = tween(Motion.SlideEnter, easing = EaseOutExpo),
+                    initialScale = 0.97f
+                )
+        ScreenMotionStyle.Fade ->
+            fadeIn(tween(Motion.SlideEnter, easing = EaseOutExpo))
+        ScreenMotionStyle.Zoom ->
+            fadeIn(tween(Motion.FadeEnter, easing = EaseOutExpo)) +
+                scaleIn(
+                    animationSpec = tween(Motion.SlideEnter, easing = EaseOutExpo),
+                    initialScale = 0.90f
+                )
+        ScreenMotionStyle.Rise ->
+            fadeIn(tween(Motion.FadeEnter, easing = EaseOutExpo)) +
+                slideInVertically(tween(Motion.SlideEnter, easing = EaseOutExpo)) {
+                    (it * 0.12f).toInt()
+                }
+    }
 
 /** Push exit: the old screen drifts back a little and fades — quick ease-in. */
-fun pushExit(): ExitTransition =
-    fadeOut(tween(Motion.FadeExit, easing = EaseIn)) +
-        slideOutHorizontally(tween(Motion.SlideExit, easing = EaseIn)) {
-            -(it * 0.05f).toInt()
-        } +
-        scaleOut(
-            animationSpec = tween(Motion.SlideExit, easing = EaseIn),
-            targetScale = 0.98f
-        )
+fun pushExit(style: ScreenMotionStyle = ScreenMotionStyle.Slide): ExitTransition =
+    when (style) {
+        ScreenMotionStyle.Slide ->
+            fadeOut(tween(Motion.FadeExit, easing = EaseIn)) +
+                slideOutHorizontally(tween(Motion.SlideExit, easing = EaseIn)) {
+                    -(it * 0.05f).toInt()
+                } +
+                scaleOut(
+                    animationSpec = tween(Motion.SlideExit, easing = EaseIn),
+                    targetScale = 0.98f
+                )
+        ScreenMotionStyle.Fade ->
+            fadeOut(tween(Motion.FadeExit, easing = EaseIn))
+        ScreenMotionStyle.Zoom ->
+            fadeOut(tween(Motion.SlideExit, easing = EaseIn)) +
+                scaleOut(
+                    animationSpec = tween(Motion.SlideExit, easing = EaseIn),
+                    targetScale = 1.04f
+                )
+        ScreenMotionStyle.Rise ->
+            fadeOut(tween(Motion.FadeExit, easing = EaseIn))
+    }
 
-/** Pop enter/exit mirror the push direction. */
-fun popEnter(): EnterTransition =
-    fadeIn(tween(Motion.FadeEnter, easing = EaseOutExpo)) +
-        slideInHorizontally(tween(Motion.SlideEnter, easing = EaseOutExpo)) {
-            -(it * 0.10f).toInt()
-        } +
-        scaleIn(
-            animationSpec = tween(Motion.SlideEnter, easing = EaseOutExpo),
-            initialScale = 0.96f,
-            transformOrigin = TransformOrigin(1f, 0.5f)
-        )
+/**
+ * Pop enter: the screen being returned to. This is the one the back gesture
+ * reveals, so it starts slightly offset and settles home as the finger moves.
+ */
+fun popEnter(style: ScreenMotionStyle = ScreenMotionStyle.Slide): EnterTransition =
+    when (style) {
+        ScreenMotionStyle.Slide ->
+            fadeIn(tween(Motion.FadeExit, easing = EaseOutExpo)) +
+                slideInHorizontally(tween(Motion.SlideEnter, easing = EaseOutExpo)) {
+                    -(it * 0.12f).toInt()
+                } +
+                scaleIn(
+                    animationSpec = tween(Motion.SlideEnter, easing = EaseOutExpo),
+                    initialScale = 0.97f,
+                    transformOrigin = TransformOrigin(1f, 0.5f)
+                )
+        ScreenMotionStyle.Fade ->
+            fadeIn(tween(Motion.SlideEnter, easing = EaseOutExpo))
+        ScreenMotionStyle.Zoom ->
+            fadeIn(tween(Motion.FadeEnter, easing = EaseOutExpo)) +
+                scaleIn(
+                    animationSpec = tween(Motion.SlideEnter, easing = EaseOutExpo),
+                    initialScale = 0.92f
+                )
+        ScreenMotionStyle.Rise ->
+            fadeIn(tween(Motion.SlideEnter, easing = EaseOutExpo))
+    }
 
-fun popExit(): ExitTransition =
-    fadeOut(tween(Motion.FadeExit, easing = EaseIn)) +
-        slideOutHorizontally(tween(Motion.SlideExit, easing = EaseIn)) {
-            (it * 0.05f).toInt()
-        } +
-        scaleOut(
-            animationSpec = tween(Motion.SlideExit, easing = EaseIn),
-            targetScale = 0.98f,
-            transformOrigin = TransformOrigin(1f, 0.5f)
-        )
+/**
+ * Pop exit: the screen leaving. It keeps its opacity and slides a third of the
+ * way out, so during the back gesture you watch it move away and reveal the
+ * screen underneath instead of watching it fade into nothing.
+ */
+fun popExit(style: ScreenMotionStyle = ScreenMotionStyle.Slide): ExitTransition =
+    when (style) {
+        ScreenMotionStyle.Slide ->
+            slideOutHorizontally(tween(Motion.SlideExit, easing = EaseIn)) {
+                (it * Motion.PopPeek).toInt()
+            } +
+                scaleOut(
+                    animationSpec = tween(Motion.SlideExit, easing = EaseIn),
+                    targetScale = 0.97f,
+                    transformOrigin = TransformOrigin(0f, 0.5f)
+                )
+        ScreenMotionStyle.Fade ->
+            fadeOut(tween(Motion.SlideExit, easing = EaseIn))
+        ScreenMotionStyle.Zoom ->
+            fadeOut(tween(Motion.SlideExit, easing = EaseIn)) +
+                scaleOut(
+                    animationSpec = tween(Motion.SlideExit, easing = EaseIn),
+                    targetScale = 1.06f
+                )
+        ScreenMotionStyle.Rise ->
+            fadeOut(tween(Motion.FadeExit, easing = EaseIn)) +
+                slideOutVertically(tween(Motion.SlideExit, easing = EaseIn)) {
+                    (it * 0.10f).toInt()
+                }
+    }
 
 // ── Tabs (sideways movement would be a lie — they are siblings) ─────────────
 

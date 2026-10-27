@@ -52,6 +52,22 @@ enum class PlayerOpenStyle(val id: String, val title: String, val subtitle: Stri
     }
 }
 
+/**
+ * How one screen replaces another. Every style is driven by the same
+ * navigation transitions, so predictive back gives you exactly this motion
+ * under the finger — the style only changes its shape.
+ */
+enum class ScreenMotionStyle(val id: String, val title: String, val subtitle: String) {
+    Slide("slide", "Slide", "The new screen slides in from the edge"),
+    Fade("fade", "Fade", "One screen dissolves into the next"),
+    Zoom("zoom", "Zoom", "The new screen grows in over the old one"),
+    Rise("rise", "Rise", "The new screen rises from the bottom");
+
+    companion object {
+        fun fromId(id: String?): ScreenMotionStyle? = entries.find { it.id == id }
+    }
+}
+
 @Singleton
 class AppearancePrefs @Inject constructor(@ApplicationContext private val ctx: Context) {
     private val K_TAB = stringPreferencesKey("tab_style")
@@ -61,7 +77,7 @@ class AppearancePrefs @Inject constructor(@ApplicationContext private val ctx: C
     private val K_DEPTH = floatPreferencesKey("player_bg_depth")
     private val K_TINT = booleanPreferencesKey("player_bg_tint")
     private val K_MOTION = booleanPreferencesKey("lively_motion")
-    private val K_PREDICTIVE_BACK = booleanPreferencesKey("predictive_back")
+    private val K_SCREEN_STYLE = stringPreferencesKey("screen_motion_style")
     private val K_OPEN = stringPreferencesKey("player_open_style")
 
     val tabStyleFlow: Flow<TabStyle> = ctx.appearancePrefs.data.map { prefs ->
@@ -112,14 +128,16 @@ class AppearancePrefs @Inject constructor(@ApplicationContext private val ctx: C
     }
 
     /**
-     * Predictive back: the current screen follows the back gesture and
-     * settles back into place when it is cancelled. Only meaningful on
-     * Android 13+, where the system reports gesture progress.
+     * Screen-to-screen motion, chosen in Settings → Motion. The transitions in
+     * Motion.kt read this, and predictive back uses those same transitions, so
+     * the gesture and the animation can never disagree.
      */
-    val predictiveBackFlow: Flow<Boolean> = ctx.appearancePrefs.data.map { it[K_PREDICTIVE_BACK] ?: true }
+    val screenStyleFlow: Flow<ScreenMotionStyle> = ctx.appearancePrefs.data.map { prefs ->
+        ScreenMotionStyle.fromId(prefs[K_SCREEN_STYLE]) ?: ScreenMotionStyle.Slide
+    }
 
-    suspend fun setPredictiveBack(enabled: Boolean) {
-        ctx.appearancePrefs.edit { it[K_PREDICTIVE_BACK] = enabled }
+    suspend fun setScreenStyle(style: ScreenMotionStyle) {
+        ctx.appearancePrefs.edit { it[K_SCREEN_STYLE] = style.id }
     }
 
     /**

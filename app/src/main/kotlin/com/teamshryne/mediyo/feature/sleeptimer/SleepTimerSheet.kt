@@ -61,7 +61,9 @@ fun SleepTimerSheet(
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        windowInsets = WindowInsets.ime
+        // Material3 1.3 moved this from a value to a content slot; keeping
+        // the keyboard inset here is what stops the sheet from riding the IME.
+        contentWindowInsets = { WindowInsets.ime }
     ) {
         Column(
             Modifier
