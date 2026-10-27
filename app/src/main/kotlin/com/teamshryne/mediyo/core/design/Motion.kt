@@ -13,6 +13,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.ui.graphics.TransformOrigin
+import com.teamshryne.mediyo.data.appearance.ScreenMotionStyle
 
 /**
  * Shared motion tokens — one source of truth for every animation in the app.
