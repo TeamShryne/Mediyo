@@ -2,20 +2,24 @@ package com.teamshryne.mediyo.feature.settings
 
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -42,6 +46,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
@@ -273,9 +278,11 @@ private fun StylePreview(style: ScreenMotionStyle, lively: Boolean) {
             .padding(vertical = 8.dp),
         contentAlignment = Alignment.Center
     ) {
-        // Back card: the destination, already in place.
+        // Back card: the screen being left. The arriving card is inset, so a
+        // frame of this one stays visible and the preview reads as two screens
+        // rather than one card appearing out of nowhere.
         Card(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp),
+            modifier = Modifier.fillMaxSize(),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
@@ -287,7 +294,7 @@ private fun StylePreview(style: ScreenMotionStyle, lively: Boolean) {
         Card(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 18.dp)
+                .padding(horizontal = 14.dp, vertical = 10.dp)
                 .graphicsLayer {
                     val settle = 1f - (1f - p) * (1f - p)
                     when (style) {
@@ -316,21 +323,47 @@ private fun StylePreview(style: ScreenMotionStyle, lively: Boolean) {
             )
         ) {
             Column(
-                Modifier.fillMaxSize().padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                Modifier.fillMaxSize().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                // A cover and two lines: enough shape for the eye to track the
+                // movement, no text to read while it moves.
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        Modifier
+                            .size(34.dp)
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                    )
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        PreviewBar(widthFraction = 0.86f)
+                        PreviewBar(widthFraction = 0.54f)
+                    }
+                }
+                Spacer(Modifier.weight(1f))
                 Text(
                     style.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    "The next screen",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
     }
+}
+
+@Composable
+private fun PreviewBar(widthFraction: Float) {
+    Box(
+        Modifier
+            .fillMaxWidth(widthFraction)
+            .height(6.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f))
+    )
 }
