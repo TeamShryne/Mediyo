@@ -135,7 +135,7 @@ class AppearanceVm @Inject constructor(
 
     /** Shape of the screen-to-screen motion (and of the back-gesture preview). */
     val screenStyle: StateFlow<ScreenMotionStyle> = prefs.screenStyleFlow
-        .stateIn(viewModelScope, SharingStarted.Eagerly, ScreenMotionStyle.Slide)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ScreenMotionStyle.Push)
 
     fun setScreenStyle(style: ScreenMotionStyle) {
         viewModelScope.launch { prefs.setScreenStyle(style) }

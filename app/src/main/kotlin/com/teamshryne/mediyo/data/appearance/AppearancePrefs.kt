@@ -58,7 +58,7 @@ enum class PlayerOpenStyle(val id: String, val title: String, val subtitle: Stri
  * under the finger — the style only changes its shape.
  */
 enum class ScreenMotionStyle(val id: String, val title: String, val subtitle: String) {
-    Slide("slide", "Slide", "The new screen slides in from the edge"),
+    Push("push", "Push", "The new screen slides in over the old one"),
     Fade("fade", "Fade", "One screen dissolves into the next"),
     Zoom("zoom", "Zoom", "The new screen grows in over the old one"),
     Rise("rise", "Rise", "The new screen rises from the bottom");
@@ -133,7 +133,7 @@ class AppearancePrefs @Inject constructor(@ApplicationContext private val ctx: C
      * the gesture and the animation can never disagree.
      */
     val screenStyleFlow: Flow<ScreenMotionStyle> = ctx.appearancePrefs.data.map { prefs ->
-        ScreenMotionStyle.fromId(prefs[K_SCREEN_STYLE]) ?: ScreenMotionStyle.Slide
+        ScreenMotionStyle.fromId(prefs[K_SCREEN_STYLE]) ?: ScreenMotionStyle.Push
     }
 
     suspend fun setScreenStyle(style: ScreenMotionStyle) {

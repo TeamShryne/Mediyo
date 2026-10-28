@@ -262,7 +262,7 @@ private fun StylePreview(style: ScreenMotionStyle, lively: Boolean) {
             animate(
                 0f,
                 1f,
-                animationSpec = tween(Motion.SlideEnter, easing = EaseOutExpo)
+                animationSpec = tween(Motion.ScreenEnter, easing = EaseOutExpo)
             ) { value, _ -> progress = value }
             delay(520)
             progress = 0f
@@ -298,9 +298,10 @@ private fun StylePreview(style: ScreenMotionStyle, lively: Boolean) {
                 .graphicsLayer {
                     val settle = 1f - (1f - p) * (1f - p)
                     when (style) {
-                        ScreenMotionStyle.Slide -> {
-                            translationX = (1f - settle) * size.width * 0.18f
-                            alpha = 0.35f + 0.65f * settle
+                        ScreenMotionStyle.Push -> {
+                            // Travel only: the arriving screen is opaque the
+                            // whole way, exactly like the real push.
+                            translationX = (1f - settle) * size.width * 0.25f
                         }
                         ScreenMotionStyle.Fade -> {
                             alpha = 0.15f + 0.85f * settle
