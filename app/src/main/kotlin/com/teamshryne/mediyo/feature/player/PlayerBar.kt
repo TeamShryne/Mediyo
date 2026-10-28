@@ -14,6 +14,9 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -39,12 +42,17 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -63,6 +71,7 @@ import com.teamshryne.mediyo.core.design.SheetHostVm
 import com.teamshryne.mediyo.core.design.TrackMenuSheet
 import com.teamshryne.mediyo.core.design.formatTime
 import com.teamshryne.mediyo.core.design.rememberDominantColors
+import com.teamshryne.mediyo.data.appearance.PlayerOpenStyle
 import com.teamshryne.mediyo.domain.model.ART_HERO_PX
 import com.teamshryne.mediyo.domain.model.ART_ROW_PX
 import com.teamshryne.mediyo.domain.model.thumbSized
@@ -75,7 +84,15 @@ import kotlinx.coroutines.launch
 // Mini player — floating pill above the nav bar (Spotify style)
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
-fun MiniPlayer(state: PlayerState, onToggle: () -> Unit, onNext: () -> Unit, onExpand: () -> Unit, sleepBadge: String? = null, modifier: Modifier = Modifier) {
+fun MiniPlayer(
+    state: PlayerState,
+    onToggle: () -> Unit,
+    onNext: () -> Unit,
+    onExpand: () -> Unit,
+    sleepBadge: String? = null,
+    modifier: Modifier = Modifier,
+    onArtworkBounds: (Rect) -> Unit = {}
+) {
     if (state.title.isEmpty()) return
     Card(
         onClick = onExpand,
@@ -96,7 +113,11 @@ fun MiniPlayer(state: PlayerState, onToggle: () -> Unit, onNext: () -> Unit, onE
                     model = state.artwork.thumbSized(ART_ROW_PX),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp))
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        // The full player's artwork flight starts here.
+                        .onGloballyPositioned { onArtworkBounds(it.boundsInRoot()) }
                 )
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
@@ -159,7 +180,14 @@ fun FullPlayer(
     onGoToArtist: (String) -> Unit = {},
     onOpenChannel: (String) -> Unit = {},
     onOpenPodcast: (String) -> Unit = {},
-    playerVm: PlayerViewModel? = null
+    playerVm: PlayerViewModel? = null,
+    /** 0 = still folded into the mini player, 1 = fully open. */
+    progress: () -> Float = { 1f },
+    openStyle: PlayerOpenStyle = PlayerOpenStyle.Slide,
+    /** Mini player artwork rect, measured by MiniPlayer; the flight starts here. */
+    miniArt: Rect? = null,
+    onDragTo: (Float) -> Unit = {},
+    onDragSettle: (Boolean) -> Unit = {}
 ) {
     val dominant: DominantColors = rememberDominantColors(state.artwork)
     // Player backdrop (Settings → Appearance → Player background).
@@ -230,37 +258,139 @@ fun FullPlayer(
         }
     }
 
+    // The hero cover lives at player scope, not inside the layout branch: the
+    // flight layer draws the very same painter, so opening the player never
+    // starts a second decode and the cover cannot blink in mid-flight.
+    val heroArtUrl = state.artwork.thumbSized(ART_HERO_PX)
+    val heroArtPainter = rememberAsyncImagePainter(
+        model = ImageRequest.Builder(LocalContext.current)
+            .data(heroArtUrl)
+            // Shared key with the prefetch the mini player runs, so the bitmap
+            // is already decoded before the player is opened.
+            .memoryCacheKey(heroArtUrl?.let { "hero-art:$it" })
+            .build(),
+        contentScale = ContentScale.Fit
+    )
+    val artReady = heroArtPainter.state is AsyncImagePainter.State.Success
+    // Any aspect ratio is fine: fit the box to the loaded image (16:9
+    // episode art, square album art, ...) so artwork is fully visible
+    // instead of center-cropped.
+    val artRatio = (heroArtPainter.state as? AsyncImagePainter.State.Success)
+        ?.painter?.intrinsicSize?.let { size ->
+            if (size.width > 0 && size.height > 0 &&
+                size.width != Float.POSITIVE_INFINITY &&
+                size.height != Float.POSITIVE_INFINITY
+            ) size.width / size.height else 1f
+        }?.coerceIn(0.5f, 2f) ?: 1f
+    val artAlpha by animateFloatAsState(
+        targetValue = if (artReady) 1f else 0f,
+        animationSpec = tween(350),
+        label = "artAlpha"
+    )
+    // Where the flight lands, read from layout so it is right for any aspect.
+    var heroArtRect by remember { mutableStateOf<Rect?>(null) }
+
+    // Pull the player down to fold it back into the pill. Only the fully open
+    // player takes the gesture: while it is opening it belongs to the
+    // animation, not to the finger. Ranged at 45% of the screen so a thumb
+    // sweep closes it without having to travel its full height.
+    val density = LocalDensity.current
+    val screenHeightDp = LocalConfiguration.current.screenHeightDp
+    val dismissRangePx = remember(density, screenHeightDp) {
+        with(density) { (screenHeightDp * 0.45f).dp.toPx() }.coerceAtLeast(1f)
+    }
+    var dismissEngaged by remember { mutableStateOf(false) }
+    val dismissDrag = rememberDraggableState { delta ->
+        if (progress() >= 0.999f) {
+            dismissEngaged = true
+            onDragTo((progress() - delta / dismissRangePx).coerceIn(0f, 1f))
+        }
+    }
+
     Box(
         Modifier
             .fillMaxSize()
+            // The opening motion is a pure graphics layer: translation, scale
+            // and alpha only, so it stays on the GPU and can follow a drag at
+            // frame rate. `progress` is read here (not in the composable body)
+            // so a drag does not recompose the whole player.
+            .graphicsLayer {
+                val p = progress().coerceIn(0f, 1f)
+                when (openStyle) {
+                    PlayerOpenStyle.Slide -> translationY = (1f - p) * size.height
+                    PlayerOpenStyle.Fade -> alpha = p
+                    PlayerOpenStyle.Scale -> {
+                        alpha = p
+                        val s = 0.92f + 0.08f * p
+                        scaleX = s
+                        scaleY = s
+                    }
+                    // The artwork flight (FlyingArtwork) carries this one; the
+                    // player itself stays put and its pieces fade in around
+                    // the cover.
+                    PlayerOpenStyle.Artwork -> Unit
+                }
+            }
             .clickable(
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() },
                 onClick = {} // consume clicks
             )
+            .draggable(
+                state = dismissDrag,
+                orientation = Orientation.Vertical,
+                onDragStopped = { velocity ->
+                    if (dismissEngaged) {
+                        dismissEngaged = false
+                        val p = progress()
+                        // A flick closes even if the finger barely moved;
+                        // otherwise it settles to the nearer end.
+                        val close = velocity > 900f || p < 0.72f
+                        onDragSettle(!close)
+                    }
+                }
+            )
     ) {
-        PlayerBackground(
-            config = bgConfig,
-            dominant = dominant,
-            artwork = {
-                val art = state.artwork
-                AsyncImage(
-                    model = ImageRequest.Builder(bgCtx).data(art).crossfade(350).build(),
-                    placeholder = rememberAsyncImagePainter(bgReadyUrl),
-                    error = rememberAsyncImagePainter(bgReadyUrl),
-                    onSuccess = { bgReadyUrl = art },
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-            },
-            modifier = Modifier.fillMaxSize()
-        )
+        Box(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    if (openStyle == PlayerOpenStyle.Artwork) alpha = progress().coerceIn(0f, 1f)
+                }
+        ) {
+            PlayerBackground(
+                config = bgConfig,
+                dominant = dominant,
+                artwork = {
+                    val art = state.artwork
+                    AsyncImage(
+                        model = ImageRequest.Builder(bgCtx).data(art).crossfade(350).build(),
+                        placeholder = rememberAsyncImagePainter(bgReadyUrl),
+                        error = rememberAsyncImagePainter(bgReadyUrl),
+                        onSuccess = { bgReadyUrl = art },
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
         Column(
             Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
+                .graphicsLayer {
+                    // Artwork style: the rest of the player fades in around
+                    // the cover instead of appearing at full strength behind
+                    // it. No translation here: the hero rectangle is measured
+                    // for the cover flight, and moving it would move the
+                    // flight's landing spot.
+                    if (openStyle == PlayerOpenStyle.Artwork) {
+                        alpha = progress().coerceIn(0f, 1f)
+                    }
+                }
                 .padding(top = 4.dp, start = 24.dp, end = 24.dp, bottom = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -357,30 +487,13 @@ fun FullPlayer(
                             Spacer(Modifier.weight(0.5f))
 
                             val artShape = RoundedCornerShape(18.dp)
-                            val artPainter = rememberAsyncImagePainter(
-                                model = state.artwork.thumbSized(ART_HERO_PX),
-                                contentScale = ContentScale.Fit
-                            )
-                            val artReady = artPainter.state is AsyncImagePainter.State.Success
-                            // Any aspect ratio is fine: fit the box to the loaded
-                            // image (16:9 episode art, square album art, ...) so
-                            // artwork is fully visible instead of center-cropped.
-                            val artRatio = (artPainter.state as? AsyncImagePainter.State.Success)
-                                ?.painter?.intrinsicSize?.let { size ->
-                                    if (size.width > 0 && size.height > 0 &&
-                                        size.width != Float.POSITIVE_INFINITY &&
-                                        size.height != Float.POSITIVE_INFINITY
-                                    ) size.width / size.height else 1f
-                                }?.coerceIn(0.5f, 2f) ?: 1f
-                            val artAlpha by animateFloatAsState(
-                                targetValue = if (artReady) 1f else 0f,
-                                animationSpec = tween(350),
-                                label = "artAlpha"
-                            )
                             Box(
                                 Modifier
                                     .fillMaxWidth()
                                     .aspectRatio(artRatio)
+                                    // Where the flight lands. Read from layout,
+                                    // so it is correct for any artwork aspect.
+                                    .onGloballyPositioned { heroArtRect = it.boundsInRoot() }
                                     .then(
                                         if (artReady) {
                                             Modifier
@@ -390,10 +503,30 @@ fun FullPlayer(
                                     )
                             ) {
                                 Image(
-                                    painter = artPainter,
+                                    painter = heroArtPainter,
                                     contentDescription = state.title,
                                     contentScale = ContentScale.Fit,
-                                    modifier = Modifier.fillMaxSize().alpha(artAlpha)
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        // Artwork flight: the cover in the slot
+                                        // stays hidden while its copy travels,
+                                        // then takes over in the last third of
+                                        // the way. Without this the same
+                                        // picture would be on screen twice —
+                                        // once flying, once already landed.
+                                        .graphicsLayer {
+                                            // Artwork style: the slot stays empty
+                                            // while the cover travels and takes
+                                            // over in the last third. Other
+                                            // styles fade the cover in as it
+                                            // loads.
+                                            if (openStyle == PlayerOpenStyle.Artwork) {
+                                                val p = progress().coerceIn(0f, 1f)
+                                                alpha = (p * 3f - 2f).coerceIn(0f, 1f)
+                                            } else {
+                                                alpha = artAlpha
+                                            }
+                                        }
                                 )
                                 if (!artReady) {
                                     GlowingLoadingTitle(
@@ -656,6 +789,18 @@ fun FullPlayer(
                 onSetPreservePitch = playerVm::setPreservePitch,
                 onReset = playerVm::resetPlaybackRate,
                 onDismiss = { showPlaybackSheet = false }
+            )
+        }
+
+        // The cover leaving the pill. It is drawn above the whole player and
+        // uses the player's own painter — the bitmap is already decoded, so
+        // there is nothing to load and nothing to blink.
+        if (openStyle == PlayerOpenStyle.Artwork && miniArt != null) {
+            FlyingArtwork(
+                painter = heroArtPainter,
+                miniRect = miniArt,
+                heroRect = heroArtRect,
+                progress = progress
             )
         }
     }

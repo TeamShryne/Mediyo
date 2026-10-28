@@ -15,13 +15,14 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,30 +52,32 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
+import coil.imageLoader
+import coil.request.ImageRequest
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -93,6 +96,7 @@ import com.teamshryne.mediyo.core.design.EaseOutExpo
 import com.teamshryne.mediyo.core.design.MediyoTheme
 import com.teamshryne.mediyo.core.design.Motion
 import com.teamshryne.mediyo.core.design.popEnter
+import com.teamshryne.mediyo.data.appearance.PlayerOpenStyle
 import com.teamshryne.mediyo.data.appearance.TabStyle
 import com.teamshryne.mediyo.core.design.popExit
 import com.teamshryne.mediyo.core.design.pushEnter
@@ -128,6 +132,7 @@ import com.teamshryne.mediyo.feature.settings.TabBarStyleScreen
 import com.teamshryne.mediyo.feature.settings.LyricsAppearanceScreen
 import com.teamshryne.mediyo.feature.settings.LyricsSettingsScreen
 import com.teamshryne.mediyo.feature.settings.MotionScreen
+import com.teamshryne.mediyo.feature.settings.PlayerMotionScreen
 import com.teamshryne.mediyo.feature.settings.SettingsScreen
 import com.teamshryne.mediyo.feature.update.UpdateDialog
 import com.teamshryne.mediyo.feature.update.UpdateViewModel
@@ -146,8 +151,10 @@ import com.teamshryne.mediyo.core.design.isPodcast
 import com.teamshryne.mediyo.debug.AdbBridgeEntryPoint
 import com.teamshryne.mediyo.debug.AdbCommand
 import com.teamshryne.mediyo.debug.AdbControl
+import com.teamshryne.mediyo.domain.model.ART_HERO_PX
 import com.teamshryne.mediyo.domain.model.PlayOrigin
 import com.teamshryne.mediyo.domain.model.Track
+import com.teamshryne.mediyo.domain.model.thumbSized
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -216,11 +223,19 @@ private fun AppShell() {
     val updateState by updateVm.state.collectAsState()
     LaunchedEffect(Unit) { if (!BuildConfig.DEBUG) updateVm.silentCheck() }
     val sleepState by playerVm.sleepState.collectAsState()
-    var showFullPlayer by remember { mutableStateOf(false) }
     var showQueueOverlay by remember { mutableStateOf(false) }
     var showSleepSheet by remember { mutableStateOf(false) }
-    // Player collapse has priority over nav pop — both handlers, inner one wins
-    BackHandler(enabled = showFullPlayer && !showQueueOverlay) { showFullPlayer = false }
+    // One 0..1 value for the mini player ↔ full player pair. The drag, the
+    // predictive back gesture and the chosen open style all write it, so the
+    // preview under the finger and the animation that follows cannot drift
+    // apart. Reads live inside graphics layers (never in composition), so a
+    // drag redraws instead of recomposing the app.
+    val playerProgress = remember { mutableFloatStateOf(0f) }
+    var playerMounted by remember { mutableStateOf(false) }
+    var playerJob by remember { mutableStateOf<Job?>(null) }
+    // Root-coordinate rectangle of the pill's cover: where the flight starts.
+    var miniArtRect by remember { mutableStateOf<Rect?>(null) }
+    var rootHeightPx by remember { mutableIntStateOf(0) }
 
     val contextLabel = if (playerState.originLabel.isNotBlank() && playerState.title.isNotEmpty()) {
         playerState.originLabel
@@ -243,10 +258,64 @@ private fun AppShell() {
     val appearanceVm: AppearanceVm = hiltViewModel()
     val tabStyle by appearanceVm.style.collectAsState()
     val livelyMotion by appearanceVm.motion.collectAsState()
-    val predictiveBack by appearanceVm.predictiveBack.collectAsState()
+    val screenStyle by appearanceVm.screenStyle.collectAsState()
+    val playerOpenStyle by appearanceVm.playerOpenStyle.collectAsState()
     val density = LocalDensity.current
     var tabBarH by remember { mutableIntStateOf(0) }
     var pillH by remember { mutableIntStateOf(0) }
+
+    // Shared by the tap, the drag release and the predictive-back cancel.
+    // Cancelling the previous job first matters: a close that is mid-flight
+    // must not finish and unmount the player that a new open just mounted.
+    val playerScope = rememberCoroutineScope()
+    fun settlePlayer(open: Boolean) {
+        if (open && playerState.title.isEmpty()) return
+        playerJob?.cancel()
+        if (open) {
+            playerMounted = true
+        }
+        playerJob = playerScope.launch {
+            animate(
+                playerProgress.floatValue,
+                if (open) 1f else 0f,
+                animationSpec = tween(
+                    if (open) Motion.SheetEnter else Motion.SheetExit,
+                    easing = if (open) EaseOutExpo else EaseIn
+                )
+            ) { value, _ -> playerProgress.floatValue = value }
+            if (!open) {
+                playerMounted = false
+            }
+        }
+    }
+    // A full-screen drag is too long: opening over ~55% of the height keeps
+    // the gesture inside one comfortable thumb sweep.
+    val dragRangePx = with(density) {
+        (rootHeightPx * 0.55f).coerceAtLeast(320.dp.toPx())
+    }
+    // Queue cleared while the player is open: do not leave it mounted with
+    // nothing behind it, and do not let a later back press try to close it.
+    LaunchedEffect(playerState.title.isEmpty()) {
+        if (playerState.title.isEmpty()) {
+            playerJob?.cancel()
+            playerProgress.floatValue = 0f
+            playerMounted = false
+        }
+    }
+    // Warm the big cover the moment a track becomes the now-playing one. The
+    // player asks for the same URL under the same memory-cache key, so by the
+    // time it opens the bitmap is decoded: the cover cannot blink in, and the
+    // artwork flight has real pixels on its first frame.
+    val imageLoader = context.imageLoader
+    LaunchedEffect(playerState.artwork) {
+        val url = playerState.artwork.thumbSized(ART_HERO_PX) ?: return@LaunchedEffect
+        imageLoader.enqueue(
+            ImageRequest.Builder(context)
+                .data(url)
+                .memoryCacheKey("hero-art:$url")
+                .build()
+        )
+    }
     // Space the floating pill needs: measured live, 82dp estimate on the
     // very first frame so content never jumps once measured.
     val pillReserve = (if (pillH > 0) with(density) { pillH.toDp() } else 82.dp) + 8.dp
@@ -263,39 +332,20 @@ private fun AppShell() {
         }
     }
 
-    // ── Predictive back ──────────────────────────────────────────────────
-    // The system gives us the gesture progress, so the screen can follow the
-    // finger instead of waiting for the release. NavHost's own back callback
-    // is switched off while this is on: two callbacks would race for the same
-    // gesture, and only one of them can animate.
-    val predictiveProgress = remember { Animatable(0f) }
-    val canNavigateBack = backStack?.destination != null && nav.previousBackStackEntry != null
-    SideEffect { nav.enableOnBackPressed(!predictiveBack) }
-    PredictiveBackHandler(enabled = predictiveBack && canNavigateBack) { progress ->
-        try {
-            progress.collect { event ->
-                predictiveProgress.snapTo(event.progress.coerceIn(0f, 1f))
-            }
-            // Completing the pop while the offset settles back into the
-            // normal pop transition keeps the hand-off free of a jump.
-            nav.popBackStack()
-            predictiveProgress.animateTo(
-                targetValue = 0f,
-                animationSpec = tween(Motion.SlideExit, easing = EaseIn)
-            )
-        } catch (cancelled: CancellationException) {
-            // The gesture was cancelled but this coroutine is already
-            // cancelled, so the return animation has to run to completion
-            // outside its scope.
-            withContext(NonCancellable) {
-                predictiveProgress.animateTo(
-                    targetValue = 0f,
-                    animationSpec = tween(Motion.SlideEnter, easing = EaseOutExpo)
-                )
-            }
-            throw cancelled
-        }
+    // Leaving for another screen: no collapse animation, the destination
+    // slides in over the player immediately.
+    fun dismissPlayerNow() {
+        playerJob?.cancel()
+        playerProgress.floatValue = 0f
+        playerMounted = false
     }
+
+    // Back while the player is open collapses it, never pops the nav stack.
+    // PredictiveBackHandler rather than BackHandler so the gesture pulls the
+    // player down with the finger; it is composed after the nav-level handler,
+    // and the dispatcher gives the most recent one the gesture, so this keeps
+    // its priority over the screen transition above.
+    val playerBackEnabled = playerMounted && !showQueueOverlay
 
     // adb control — debug builds only. Nothing in a release APK can emit on
     // AdbControl (its receiver is declared in src/debug only), and the
@@ -426,7 +476,7 @@ private fun AppShell() {
 
                     is AdbCommand.Overlay -> when (cmd.target) {
                         "player" -> {
-                            showFullPlayer = true
+                            settlePlayer(true)
                             AdbControl.log("overlay player opened")
                         }
                         "queue" -> {
@@ -473,7 +523,7 @@ private fun AppShell() {
     val pillPart = if (playerState.title.isNotEmpty()) pillReserve else 0.dp
     val overlayBottom = sysBottom + barReserve + pillPart
 
-    Box(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize().onSizeChanged { rootHeightPx = it.height }) {
         Scaffold(
             containerColor = bg
         ) { pad ->
@@ -483,25 +533,10 @@ private fun AppShell() {
                     .padding(pad)
             ) {
                 CompositionLocalProvider(LocalOverlayBottom provides overlayBottom) {
-                // The whole stack follows the back gesture. It is the same
-                // graphics layer for every destination, so the current
-                // screen recedes without any screen needing to know that
-                // predictive back exists.
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            val progress = predictiveProgress.value
-                            if (progress > 0f) {
-                                translationX = size.width * Motion.Predictive * progress
-                                val scale = 1f - Motion.PredictiveScale * progress
-                                scaleX = scale
-                                scaleY = scale
-                                alpha = 1f - 0.08f * progress
-                                transformOrigin = TransformOrigin(0f, 0.5f)
-                            }
-                        }
-                ) {
+                // Predictive back is the NavHost's own now: it drives the pop
+                // transitions below with the gesture progress, so the screen
+                // you are leaving moves away and the one you are returning to
+                // comes up under it, in whatever style Motion is set to.
                 NavHost(
                     navController = nav,
                     startDestination = Tab.Home.route,
@@ -513,84 +548,84 @@ private fun AppShell() {
                         when {
                             !livelyMotion -> EnterTransition.None
                             isTabRoute(initialState.destination.route) && isTabRoute(targetState.destination.route) -> tabEnter()
-                            else -> pushEnter()
+                            else -> pushEnter(screenStyle)
                         }
                     },
                     exitTransition = {
                         when {
                             !livelyMotion -> ExitTransition.None
                             isTabRoute(initialState.destination.route) && isTabRoute(targetState.destination.route) -> tabExit()
-                            else -> pushExit()
+                            else -> pushExit(screenStyle)
                         }
                     },
                     popEnterTransition = {
                         when {
                             !livelyMotion -> EnterTransition.None
                             isTabRoute(initialState.destination.route) && isTabRoute(targetState.destination.route) -> tabEnter()
-                            else -> popEnter()
+                            else -> popEnter(screenStyle)
                         }
                     },
                     popExitTransition = {
                         when {
                             !livelyMotion -> ExitTransition.None
                             isTabRoute(initialState.destination.route) && isTabRoute(targetState.destination.route) -> tabExit()
-                            else -> popExit()
+                            else -> popExit(screenStyle)
                         }
                     }
                 ) {
-                composable(Tab.Home.route) { HomeScreen(nav, playerVm) }
-                composable(Tab.Search.route) { SearchScreen(nav, playerVm, searchVm) }
-                composable(Tab.Library.route) { LibraryScreen(nav, playerVm) }
-                composable(Tab.Settings.route) { SettingsScreen(nav) }
-                composable("settings/content/lyrics") { LyricsSettingsScreen(nav) }
-                // The updater's view model is the one the app shell holds, so
-                // the screen and the startup check share a single state: a
-                // check made here and the one made at launch cannot disagree
-                // about what the newest build is.
-                composable("settings/updates") { UpdatesSettingsScreen(nav, updateVm) }
-                composable("playlist/{id}") { PlaylistScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
-                composable("album/{id}") { AlbumScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
-                composable("artist/{id}") { ArtistScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
-                composable("podcast/{id}") { PodcastScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
-                composable("episode/{id}") { EpisodeScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
-                composable("channel/{id}") { ChannelScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
-                composable(
-                    route = "section/{kind}/{id}?params={params}&title={title}",
-                    arguments = listOf(
-                        navArgument("kind") { type = NavType.StringType },
-                        navArgument("id") { type = NavType.StringType },
-                        navArgument("params") { type = NavType.StringType; nullable = true; defaultValue = null },
-                        navArgument("title") { type = NavType.StringType; nullable = true; defaultValue = null }
-                    )
-                ) {
-                    SectionScreen(
-                        kind = it.arguments?.getString("kind") ?: "artist",
-                        browseId = it.arguments?.getString("id") ?: "",
-                        params = it.arguments?.getString("params"),
-                        title = it.arguments?.getString("title"),
-                        nav = nav,
-                        player = playerVm
-                    )
-                }
-                composable("localPlaylist/{id}") { LocalPlaylistDetailScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
-                composable("liked") { LikedScreen(nav, playerVm) }
-                composable("history") { HistoryScreen(nav, playerVm) }
-                composable("profile") { ProfileScreen(nav) }
-                composable("settings/appearance") { AppearanceScreen(nav) }
-                composable("settings/equalizer") { EqualizerScreen(nav) }
-                composable("settings/storage") { StorageScreen(nav) }
-                composable("downloads") { DownloadsScreen(nav, playerVm) }
-                composable("settings/appearance/tabs") { TabBarStyleScreen(nav) }
-                composable("settings/appearance/player") { PlayerBackgroundScreen(nav) }
-                composable("settings/appearance/lyrics") { LyricsAppearanceScreen(nav) }
-                composable("settings/appearance/motion") { MotionScreen(nav) }
-                // Debug-only route: a release build cannot reach a screen
-                // that does not exist in its graph.
-                if (BuildConfig.DEBUG) {
-                    composable("settings/debug/notification") { NotificationReportScreen(nav) }
-                }
-                }
-                }
+            composable(Tab.Home.route) { HomeScreen(nav, playerVm) }
+            composable(Tab.Search.route) { SearchScreen(nav, playerVm, searchVm) }
+            composable(Tab.Library.route) { LibraryScreen(nav, playerVm) }
+            composable(Tab.Settings.route) { SettingsScreen(nav) }
+            composable("settings/content/lyrics") { LyricsSettingsScreen(nav) }
+            // The updater's view model is the one the app shell holds, so
+            // the screen and the startup check share a single state: a
+            // check made here and the one made at launch cannot disagree
+            // about what the newest build is.
+            composable("settings/updates") { UpdatesSettingsScreen(nav, updateVm) }
+            composable("playlist/{id}") { PlaylistScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
+            composable("album/{id}") { AlbumScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
+            composable("artist/{id}") { ArtistScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
+            composable("podcast/{id}") { PodcastScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
+            composable("episode/{id}") { EpisodeScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
+            composable("channel/{id}") { ChannelScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
+            composable(
+                route = "section/{kind}/{id}?params={params}&title={title}",
+                arguments = listOf(
+                    navArgument("kind") { type = NavType.StringType },
+                    navArgument("id") { type = NavType.StringType },
+                    navArgument("params") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("title") { type = NavType.StringType; nullable = true; defaultValue = null }
+                )
+            ) {
+                SectionScreen(
+                    kind = it.arguments?.getString("kind") ?: "artist",
+                    browseId = it.arguments?.getString("id") ?: "",
+                    params = it.arguments?.getString("params"),
+                    title = it.arguments?.getString("title"),
+                    nav = nav,
+                    player = playerVm
+                )
+            }
+            composable("localPlaylist/{id}") { LocalPlaylistDetailScreen(it.arguments?.getString("id") ?: "", nav, playerVm) }
+            composable("liked") { LikedScreen(nav, playerVm) }
+            composable("history") { HistoryScreen(nav, playerVm) }
+            composable("profile") { ProfileScreen(nav) }
+            composable("settings/appearance") { AppearanceScreen(nav) }
+            composable("settings/equalizer") { EqualizerScreen(nav) }
+            composable("settings/storage") { StorageScreen(nav) }
+            composable("downloads") { DownloadsScreen(nav, playerVm) }
+            composable("settings/appearance/tabs") { TabBarStyleScreen(nav) }
+            composable("settings/appearance/player") { PlayerBackgroundScreen(nav) }
+            composable("settings/appearance/player-motion") { PlayerMotionScreen(nav) }
+            composable("settings/appearance/lyrics") { LyricsAppearanceScreen(nav) }
+            composable("settings/appearance/motion") { MotionScreen(nav) }
+            // Debug-only route: a release build cannot reach a screen
+            // that does not exist in its graph.
+            if (BuildConfig.DEBUG) {
+                composable("settings/debug/notification") { NotificationReportScreen(nav) }
+            }
+            }
                 }
             }
         }
@@ -661,30 +696,62 @@ private fun AppShell() {
                     Box(
                         Modifier.fillMaxWidth().padding(horizontal = 4.dp)
                             .onSizeChanged { pillH = it.height }
+                            // Drag the pill up and the player opens under the
+                            // finger — every frame is the same progress the
+                            // release animation starts from.
+                            .pointerInput(dragRangePx) {
+                                detectVerticalDragGestures(
+                                    onDragStart = { playerJob?.cancel() },
+                                    onVerticalDrag = { change, dy ->
+                                        change.consume()
+                                        val next = (playerProgress.floatValue - dy / dragRangePx)
+                                            .coerceIn(0f, 1f)
+                                        if (next > 0f) playerMounted = true
+                                        playerProgress.floatValue = next
+                                    },
+                                    onDragEnd = { settlePlayer(playerProgress.floatValue > 0.32f) },
+                                    onDragCancel = { settlePlayer(playerProgress.floatValue > 0.32f) }
+                                )
+                            }
+                            // The pill leaves the stage as the player takes it
+                            // over; on the way back it fades in under the
+                            // returning cover.
+                            .graphicsLayer { alpha = 1f - playerProgress.floatValue }
                     ) {
                         MiniPlayer(
                             state = playerState,
                             onToggle = playerVm::toggle,
                             onNext = playerVm::next,
-                            onExpand = { if (playerState.title.isNotEmpty()) showFullPlayer = true },
-                            sleepBadge = sleepBadge
+                            onExpand = { settlePlayer(true) },
+                            sleepBadge = sleepBadge,
+                            onArtworkBounds = { miniArtRect = it }
                         )
                     }
                 }
             }
         }
 
-        // Immersive full-screen player overlay — consumes clicks & back
-        // Faster than before (320ms full-height felt laggy): shorter travel
-        // reads as "snappy bottom sheet" and stays GPU-composited.
-        AnimatedVisibility(
-            visible = showFullPlayer && playerState.title.isNotEmpty(),
-            enter = sheetEnter(),
-            exit = sheetExit(),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            // Inner BackHandler ensures player collapses before nav pop
-            BackHandler(enabled = true) { showFullPlayer = false }
+        // Immersive full-screen player overlay — consumes clicks & back.
+        // Mounted while opening, open or closing: the progress value owns the
+        // motion, so the drag, the tap and the back gesture share one path.
+        if (playerMounted && playerState.title.isNotEmpty()) {
+            PredictiveBackHandler(enabled = playerBackEnabled) { backEvents ->
+                try {
+                    backEvents.collect { event ->
+                        // The finger pulls the player down in real time.
+                        playerJob?.cancel()
+                        playerProgress.floatValue = (1f - event.progress).coerceIn(0f, 1f)
+                    }
+                    // Committed: finish the last little bit of the collapse
+                    // from wherever the finger left it. A non-predictive back
+                    // (Android 12 and older) reports no progress, so this is
+                    // also the normal close animation there.
+                    settlePlayer(false)
+                } catch (_: CancellationException) {
+                    // Gesture cancelled: spring back open from where it was.
+                    settlePlayer(true)
+                }
+            }
             FullPlayer(
                 state = playerState,
                 contextLabel = contextLabel,
@@ -694,14 +761,22 @@ private fun AppShell() {
                 onSeek = playerVm::seekTo,
                 onToggleShuffle = playerVm::toggleShuffle,
                 onToggleRepeat = playerVm::toggleRepeat,
-                onCollapse = { showFullPlayer = false },
+                onCollapse = { settlePlayer(false) },
                 onShowQueue = { showQueueOverlay = true },
                 onShowComments = { playerState.videoId?.let { sheetVm.showComments(it) } },
                 onShowSleepTimer = { showSleepSheet = true },
-                onGoToArtist = { showFullPlayer = false; nav.navigateArtist(it) },
-                onOpenChannel = { showFullPlayer = false; nav.navigateChannel(it) },
-                onOpenPodcast = { showFullPlayer = false; nav.navigatePodcast(it) },
-                playerVm = playerVm
+                onGoToArtist = { dismissPlayerNow(); nav.navigateArtist(it) },
+                onOpenChannel = { dismissPlayerNow(); nav.navigateChannel(it) },
+                onOpenPodcast = { dismissPlayerNow(); nav.navigatePodcast(it) },
+                playerVm = playerVm,
+                progress = { playerProgress.floatValue },
+                openStyle = playerOpenStyle,
+                miniArt = miniArtRect,
+                // Dragging the open player down folds it back into the pill on
+                // the same progress value the animation uses, so the finger
+                // and the release can never disagree.
+                onDragTo = { playerJob?.cancel(); playerProgress.floatValue = it },
+                onDragSettle = { open -> settlePlayer(open) }
             )
         }
 

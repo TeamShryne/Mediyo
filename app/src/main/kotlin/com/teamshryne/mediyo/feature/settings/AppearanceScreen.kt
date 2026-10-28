@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Animation
 import androidx.compose.material.icons.filled.BlurOn
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Lyrics
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -44,6 +45,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.teamshryne.mediyo.data.appearance.AppearancePrefs
 import com.teamshryne.mediyo.data.appearance.PlayerBgStyle
+import com.teamshryne.mediyo.data.appearance.PlayerOpenStyle
+import com.teamshryne.mediyo.data.appearance.ScreenMotionStyle
 import com.teamshryne.mediyo.data.appearance.TabStyle
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -130,16 +133,24 @@ class AppearanceVm @Inject constructor(
         viewModelScope.launch { prefs.setMotion(enabled) }
     }
 
-    /** Predictive back preview during the system back gesture. */
-    val predictiveBack: StateFlow<Boolean> = prefs.predictiveBackFlow
-        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+    /** Shape of the screen-to-screen motion (and of the back-gesture preview). */
+    val screenStyle: StateFlow<ScreenMotionStyle> = prefs.screenStyleFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ScreenMotionStyle.Push)
 
-    fun setPredictiveBack(enabled: Boolean) {
-        viewModelScope.launch { prefs.setPredictiveBack(enabled) }
+    fun setScreenStyle(style: ScreenMotionStyle) {
+        viewModelScope.launch { prefs.setScreenStyle(style) }
+    }
+
+    /** How the full player arrives from the mini player. */
+    val playerOpenStyle: StateFlow<PlayerOpenStyle> = prefs.playerOpenStyleFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, PlayerOpenStyle.Slide)
+
+    fun selectPlayerOpenStyle(style: PlayerOpenStyle) {
+        viewModelScope.launch { prefs.setPlayerOpenStyle(style) }
     }
 }
 
-/** Hub: tab bar style, player background, lyrics look and motion, each opening its own screen. */
+/** Hub: tab bar style, player backdrop and animation, lyrics look and motion. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppearanceScreen(
@@ -151,7 +162,8 @@ fun AppearanceScreen(
     val bg by vm.bgStyle.collectAsState()
     val lyrics by lyricsVm.style.collectAsState()
     val motion by vm.motion.collectAsState()
-    val predictiveBack by vm.predictiveBack.collectAsState()
+    val screenStyle by vm.screenStyle.collectAsState()
+    val playerMotion by vm.playerOpenStyle.collectAsState()
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -200,6 +212,16 @@ fun AppearanceScreen(
                             color = MaterialTheme.colorScheme.surfaceContainerHighest
                         )
                         AppearanceHubRow(
+                            icon = Icons.Filled.Movie,
+                            title = "Player animation",
+                            subtitle = playerMotion.title,
+                            onClick = { nav?.navigate("settings/appearance/player-motion") }
+                        )
+                        HorizontalDivider(
+                            Modifier.padding(horizontal = 16.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest
+                        )
+                        AppearanceHubRow(
                             icon = Icons.Filled.Lyrics,
                             title = "Lyrics appearance",
                             subtitle = "${lyrics.fontSizeSp.roundToInt()}sp · ${lyrics.weight.label}",
@@ -212,7 +234,7 @@ fun AppearanceScreen(
                         AppearanceHubRow(
                             icon = Icons.Filled.Animation,
                             title = "Motion",
-                            subtitle = motionSummary(motion, predictiveBack),
+                            subtitle = motionSummary(motion, screenStyle),
                             onClick = { nav?.navigate("settings/appearance/motion") }
                         )
                     }
@@ -223,11 +245,9 @@ fun AppearanceScreen(
 }
 
 /** One line that says what motion will do, without making the user open it. */
-private fun motionSummary(motion: Boolean, predictiveBack: Boolean): String = when {
-    motion && predictiveBack -> "Smooth transitions · predictive back"
-    motion -> "Smooth transitions"
-    predictiveBack -> "Predictive back"
-    else -> "Off"
+private fun motionSummary(motion: Boolean, style: ScreenMotionStyle): String = when {
+    !motion -> "Off"
+    else -> "Transitions · ${style.title}"
 }
 
 @Composable

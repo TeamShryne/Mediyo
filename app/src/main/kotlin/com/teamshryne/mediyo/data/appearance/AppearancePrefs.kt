@@ -33,6 +33,41 @@ enum class PlayerBgStyle(val id: String, val title: String, val subtitle: String
     }
 }
 
+/**
+ * How the full player arrives from the mini player. Every style is driven by
+ * the same 0..1 progress value, so dragging the mini player up previews the
+ * arrival in real time and the choice only changes the shape of the motion.
+ *
+ * Slide is the default because it is the motion the app shipped with; the
+ * other styles are opt-in from Settings → Appearance.
+ */
+enum class PlayerOpenStyle(val id: String, val title: String, val subtitle: String) {
+    Slide("slide", "Slide", "Rises from the bottom edge"),
+    Fade("fade", "Fade", "Appears in place, no travel"),
+    Scale("scale", "Scale", "Grows out from the centre"),
+    Artwork("artwork", "Artwork flight", "The cover leaves the mini player and lands up top");
+
+    companion object {
+        fun fromId(id: String?): PlayerOpenStyle? = entries.find { it.id == id }
+    }
+}
+
+/**
+ * How one screen replaces another. Every style is driven by the same
+ * navigation transitions, so predictive back gives you exactly this motion
+ * under the finger — the style only changes its shape.
+ */
+enum class ScreenMotionStyle(val id: String, val title: String, val subtitle: String) {
+    Push("push", "Push", "The new screen slides in over the old one"),
+    Fade("fade", "Fade", "One screen dissolves into the next"),
+    Zoom("zoom", "Zoom", "The new screen grows in over the old one"),
+    Rise("rise", "Rise", "The new screen rises from the bottom");
+
+    companion object {
+        fun fromId(id: String?): ScreenMotionStyle? = entries.find { it.id == id }
+    }
+}
+
 @Singleton
 class AppearancePrefs @Inject constructor(@ApplicationContext private val ctx: Context) {
     private val K_TAB = stringPreferencesKey("tab_style")
@@ -42,7 +77,8 @@ class AppearancePrefs @Inject constructor(@ApplicationContext private val ctx: C
     private val K_DEPTH = floatPreferencesKey("player_bg_depth")
     private val K_TINT = booleanPreferencesKey("player_bg_tint")
     private val K_MOTION = booleanPreferencesKey("lively_motion")
-    private val K_PREDICTIVE_BACK = booleanPreferencesKey("predictive_back")
+    private val K_SCREEN_STYLE = stringPreferencesKey("screen_motion_style")
+    private val K_OPEN = stringPreferencesKey("player_open_style")
 
     val tabStyleFlow: Flow<TabStyle> = ctx.appearancePrefs.data.map { prefs ->
         TabStyle.fromId(prefs[K_TAB]) ?: TabStyle.Docked
@@ -92,13 +128,28 @@ class AppearancePrefs @Inject constructor(@ApplicationContext private val ctx: C
     }
 
     /**
-     * Predictive back: the current screen follows the back gesture and
-     * settles back into place when it is cancelled. Only meaningful on
-     * Android 13+, where the system reports gesture progress.
+     * Screen-to-screen motion, chosen in Settings → Motion. The transitions in
+     * Motion.kt read this, and predictive back uses those same transitions, so
+     * the gesture and the animation can never disagree.
      */
-    val predictiveBackFlow: Flow<Boolean> = ctx.appearancePrefs.data.map { it[K_PREDICTIVE_BACK] ?: true }
+    val screenStyleFlow: Flow<ScreenMotionStyle> = ctx.appearancePrefs.data.map { prefs ->
+        ScreenMotionStyle.fromId(prefs[K_SCREEN_STYLE]) ?: ScreenMotionStyle.Push
+    }
 
-    suspend fun setPredictiveBack(enabled: Boolean) {
-        ctx.appearancePrefs.edit { it[K_PREDICTIVE_BACK] = enabled }
+    suspend fun setScreenStyle(style: ScreenMotionStyle) {
+        ctx.appearancePrefs.edit { it[K_SCREEN_STYLE] = style.id }
+    }
+
+    /**
+     * Mini player → full player motion. Kept in Appearance, next to the player
+     * backdrop, because both are about how the player looks rather than about
+     * playback.
+     */
+    val playerOpenStyleFlow: Flow<PlayerOpenStyle> = ctx.appearancePrefs.data.map { prefs ->
+        PlayerOpenStyle.fromId(prefs[K_OPEN]) ?: PlayerOpenStyle.Slide
+    }
+
+    suspend fun setPlayerOpenStyle(style: PlayerOpenStyle) {
+        ctx.appearancePrefs.edit { it[K_OPEN] = style.id }
     }
 }
