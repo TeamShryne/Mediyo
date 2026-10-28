@@ -12,7 +12,6 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.ui.graphics.TransformOrigin
 import com.teamshryne.mediyo.data.appearance.ScreenMotionStyle
 
 /**
@@ -24,7 +23,9 @@ import com.teamshryne.mediyo.data.appearance.ScreenMotionStyle
  * multi-stop `keyframes` spec and runs fully on the GPU (translation, scale
  * and alpha only — never layout, never size/padding).
  *
- * Budgets: enter ≤ 200ms, exit ≤ 150ms. Anything longer reads as "slow".
+ * Budgets: chrome (tabs, sheets) enter ≤ 200ms, exit ≤ 150ms. A screen that
+ * travels a quarter of the width gets 300ms: at that distance anything
+ * shorter reads as a jump rather than a move.
  */
 
 // ── Easings (video-keyframe curves) ───────────────────────────────────────────
@@ -38,8 +39,11 @@ val EaseIn = CubicBezierEasing(0.42f, 0f, 1f, 1f)
 // ── Durations (ms) ────────────────────────────────────────────────────────────
 
 object Motion {
-    const val SlideEnter = 260
-    const val SlideExit = 200
+    /** A screen arriving from a quarter width away. */
+    const val ScreenEnter = 300
+
+    /** The screen being left, getting out of the way. */
+    const val ScreenExit = 260
     const val FadeEnter = 140
     const val FadeExit = 110
     const val TabEnter = 160
@@ -56,58 +60,53 @@ object Motion {
     const val PopPeek = 0.32f
 }
 
-// ── Nav transitions (push / pop, dynamic slide + scale + fade) ───────────────
+// ── Nav transitions (push / pop) ─────────────────────────────────────────────
 
 /**
- * Push enter: the new screen slides in from +12% width while growing from
- * 97% and fading in. The scale is what makes the push feel like depth rather
- * than a strip of pages sliding sideways. 12% stays proportional on every
- * screen size without composing anything offscreen.
+ * Push enter: the new screen travels a quarter of the way in from the right
+ * and nothing else moves. No scale, no fade — three motions at once is what
+ * made the old slide read as soft: the screen wobbled into place instead of
+ * arriving. A quarter of the width is far enough to feel like travel, and 300ms
+ * is the time that distance needs before it starts to look like a jump.
  */
-fun pushEnter(style: ScreenMotionStyle = ScreenMotionStyle.Slide): EnterTransition =
+fun pushEnter(style: ScreenMotionStyle = ScreenMotionStyle.Push): EnterTransition =
     when (style) {
-        ScreenMotionStyle.Slide ->
-            fadeIn(tween(Motion.FadeEnter, easing = EaseOutExpo)) +
-                slideInHorizontally(tween(Motion.SlideEnter, easing = EaseOutExpo)) {
-                    (it * 0.12f).toInt()
-                } +
-                scaleIn(
-                    animationSpec = tween(Motion.SlideEnter, easing = EaseOutExpo),
-                    initialScale = 0.97f
-                )
+        ScreenMotionStyle.Push ->
+            slideInHorizontally(tween(Motion.ScreenEnter, easing = EaseOutExpo)) {
+                (it * 0.25f).toInt()
+            }
         ScreenMotionStyle.Fade ->
-            fadeIn(tween(Motion.SlideEnter, easing = EaseOutExpo))
+            fadeIn(tween(Motion.ScreenEnter, easing = EaseOutExpo))
         ScreenMotionStyle.Zoom ->
             fadeIn(tween(Motion.FadeEnter, easing = EaseOutExpo)) +
                 scaleIn(
-                    animationSpec = tween(Motion.SlideEnter, easing = EaseOutExpo),
+                    animationSpec = tween(Motion.ScreenEnter, easing = EaseOutExpo),
                     initialScale = 0.90f
                 )
         ScreenMotionStyle.Rise ->
             fadeIn(tween(Motion.FadeEnter, easing = EaseOutExpo)) +
-                slideInVertically(tween(Motion.SlideEnter, easing = EaseOutExpo)) {
+                slideInVertically(tween(Motion.ScreenEnter, easing = EaseOutExpo)) {
                     (it * 0.12f).toInt()
                 }
     }
 
-/** Push exit: the old screen drifts back a little and fades — quick ease-in. */
-fun pushExit(style: ScreenMotionStyle = ScreenMotionStyle.Slide): ExitTransition =
+/**
+ * Push exit: the old screen gives way a little and is covered by the new one.
+ * It keeps its opacity the whole way — it is the incoming screen that hides it,
+ * so fading too would only make the push look muddy.
+ */
+fun pushExit(style: ScreenMotionStyle = ScreenMotionStyle.Push): ExitTransition =
     when (style) {
-        ScreenMotionStyle.Slide ->
-            fadeOut(tween(Motion.FadeExit, easing = EaseIn)) +
-                slideOutHorizontally(tween(Motion.SlideExit, easing = EaseIn)) {
-                    -(it * 0.05f).toInt()
-                } +
-                scaleOut(
-                    animationSpec = tween(Motion.SlideExit, easing = EaseIn),
-                    targetScale = 0.98f
-                )
+        ScreenMotionStyle.Push ->
+            slideOutHorizontally(tween(Motion.ScreenExit, easing = EaseIn)) {
+                -(it * 0.08f).toInt()
+            }
         ScreenMotionStyle.Fade ->
-            fadeOut(tween(Motion.FadeExit, easing = EaseIn))
+            fadeOut(tween(Motion.ScreenExit, easing = EaseIn))
         ScreenMotionStyle.Zoom ->
-            fadeOut(tween(Motion.SlideExit, easing = EaseIn)) +
+            fadeOut(tween(Motion.ScreenExit, easing = EaseIn)) +
                 scaleOut(
-                    animationSpec = tween(Motion.SlideExit, easing = EaseIn),
+                    animationSpec = tween(Motion.ScreenExit, easing = EaseIn),
                     targetScale = 1.04f
                 )
         ScreenMotionStyle.Rise ->
@@ -116,59 +115,51 @@ fun pushExit(style: ScreenMotionStyle = ScreenMotionStyle.Slide): ExitTransition
 
 /**
  * Pop enter: the screen being returned to. This is the one the back gesture
- * reveals, so it starts slightly offset and settles home as the finger moves.
+ * reveals, so it sits slightly to the left and settles home as the finger
+ * moves. It stays opaque: it is the ground the leaving screen moves across.
  */
-fun popEnter(style: ScreenMotionStyle = ScreenMotionStyle.Slide): EnterTransition =
+fun popEnter(style: ScreenMotionStyle = ScreenMotionStyle.Push): EnterTransition =
     when (style) {
-        ScreenMotionStyle.Slide ->
-            fadeIn(tween(Motion.FadeExit, easing = EaseOutExpo)) +
-                slideInHorizontally(tween(Motion.SlideEnter, easing = EaseOutExpo)) {
-                    -(it * 0.12f).toInt()
-                } +
-                scaleIn(
-                    animationSpec = tween(Motion.SlideEnter, easing = EaseOutExpo),
-                    initialScale = 0.97f,
-                    transformOrigin = TransformOrigin(1f, 0.5f)
-                )
+        ScreenMotionStyle.Push ->
+            slideInHorizontally(tween(Motion.ScreenEnter, easing = EaseOutExpo)) {
+                -(it * 0.08f).toInt()
+            }
         ScreenMotionStyle.Fade ->
-            fadeIn(tween(Motion.SlideEnter, easing = EaseOutExpo))
+            fadeIn(tween(Motion.ScreenEnter, easing = EaseOutExpo))
         ScreenMotionStyle.Zoom ->
             fadeIn(tween(Motion.FadeEnter, easing = EaseOutExpo)) +
                 scaleIn(
-                    animationSpec = tween(Motion.SlideEnter, easing = EaseOutExpo),
+                    animationSpec = tween(Motion.ScreenEnter, easing = EaseOutExpo),
                     initialScale = 0.92f
                 )
         ScreenMotionStyle.Rise ->
-            fadeIn(tween(Motion.SlideEnter, easing = EaseOutExpo))
+            fadeIn(tween(Motion.ScreenEnter, easing = EaseOutExpo))
     }
 
 /**
- * Pop exit: the screen leaving. It keeps its opacity and slides a third of the
- * way out, so during the back gesture you watch it move away and reveal the
- * screen underneath instead of watching it fade into nothing.
+ * Pop exit: the screen leaving. It slides a third of the way out and only then
+ * dims, so the first part of the back gesture is solid movement rather than a
+ * dissolve. The fade still has to land on zero by the end — the screen is
+ * disposed when the pop completes, and anything left on screen would blink out.
  */
-fun popExit(style: ScreenMotionStyle = ScreenMotionStyle.Slide): ExitTransition =
+fun popExit(style: ScreenMotionStyle = ScreenMotionStyle.Push): ExitTransition =
     when (style) {
-        ScreenMotionStyle.Slide ->
-            slideOutHorizontally(tween(Motion.SlideExit, easing = EaseIn)) {
+        ScreenMotionStyle.Push ->
+            slideOutHorizontally(tween(Motion.ScreenExit, easing = EaseIn)) {
                 (it * Motion.PopPeek).toInt()
             } +
-                scaleOut(
-                    animationSpec = tween(Motion.SlideExit, easing = EaseIn),
-                    targetScale = 0.97f,
-                    transformOrigin = TransformOrigin(0f, 0.5f)
-                )
+                fadeOut(tween(Motion.ScreenExit - 120, delayMillis = 120, easing = EaseIn))
         ScreenMotionStyle.Fade ->
-            fadeOut(tween(Motion.SlideExit, easing = EaseIn))
+            fadeOut(tween(Motion.ScreenExit, easing = EaseIn))
         ScreenMotionStyle.Zoom ->
-            fadeOut(tween(Motion.SlideExit, easing = EaseIn)) +
+            fadeOut(tween(Motion.ScreenExit, easing = EaseIn)) +
                 scaleOut(
-                    animationSpec = tween(Motion.SlideExit, easing = EaseIn),
+                    animationSpec = tween(Motion.ScreenExit, easing = EaseIn),
                     targetScale = 1.06f
                 )
         ScreenMotionStyle.Rise ->
             fadeOut(tween(Motion.FadeExit, easing = EaseIn)) +
-                slideOutVertically(tween(Motion.SlideExit, easing = EaseIn)) {
+                slideOutVertically(tween(Motion.ScreenExit, easing = EaseIn)) {
                     (it * 0.10f).toInt()
                 }
     }
