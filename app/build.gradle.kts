@@ -1,7 +1,5 @@
 @file:Suppress("UnstableApiUsage")
 
-import java.io.ByteArrayOutputStream
-
 plugins {
     id("com.android.application")
     kotlin("android")
@@ -118,16 +116,32 @@ ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
-/** Short HEAD SHA for BuildConfig. Safe fallback keeps configuration green without git. */
-fun gitSha(): String = try {
-    val out = ByteArrayOutputStream()
-    project.exec {
-        commandLine("git", "rev-parse", "--short", "HEAD")
-        standardOutput = out
+/**
+ * Short HEAD SHA for BuildConfig.
+ *
+ * Read from `GIT_SHA` when the environment provides it (CI does), otherwise
+ * from `.git` directly. Starting a process here would make the configuration
+ * cache non-storable, and this build runs with it on.
+ */
+fun gitSha(): String {
+    System.getenv("GIT_SHA")?.trim()?.takeIf { it.isNotEmpty() }?.let { return it.take(7) }
+    return try {
+        var gitDir = rootProject.file(".git")
+        if (gitDir.isFile) {
+            val pointer = gitDir.readText().trim().removePrefix("gitdir: ")
+            gitDir = rootProject.file(pointer)
+        }
+        val head = gitDir.resolve("HEAD").readText().trim()
+        val sha = if (head.startsWith("ref: ")) {
+            val refFile = gitDir.resolve(head.removePrefix("ref: "))
+            if (refFile.exists()) refFile.readText().trim() else ""
+        } else {
+            head
+        }
+        sha.take(7).ifEmpty { "unknown" }
+    } catch (_: Exception) {
+        "unknown"
     }
-    out.toString().trim().ifEmpty { "unknown" }
-} catch (_: Exception) {
-    "unknown"
 }
 
 dependencies {

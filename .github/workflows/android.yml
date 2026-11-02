@@ -57,6 +57,8 @@ jobs:
           cache-read-only: false
 
       - name: Build debug APK + lint
+        env:
+          GIT_SHA: ${{ github.sha }}
         run: |
           chmod +x gradlew || true
           ./gradlew --no-daemon --build-cache assembleFossDebug lintFossDebug --stacktrace
