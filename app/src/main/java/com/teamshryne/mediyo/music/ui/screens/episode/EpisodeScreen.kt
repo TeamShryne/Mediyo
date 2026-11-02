@@ -25,7 +25,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -62,6 +61,7 @@ import com.teamshryne.mediyo.music.extensions.togglePlayPause
 import com.teamshryne.mediyo.music.models.MediaMetadata
 import com.teamshryne.mediyo.music.playback.queues.ListQueue
 import com.teamshryne.mediyo.music.ui.component.NavigationTitle
+import com.teamshryne.mediyo.music.ui.component.IconButton
 import com.teamshryne.mediyo.music.ui.utils.backToMain
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch

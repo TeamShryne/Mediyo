@@ -28,7 +28,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -66,6 +65,7 @@ import com.teamshryne.mediyo.music.extensions.toMediaItem
 import com.teamshryne.mediyo.music.extensions.togglePlayPause
 import com.teamshryne.mediyo.music.playback.queues.ListQueue
 import com.teamshryne.mediyo.music.ui.component.NavigationTitle
+import com.teamshryne.mediyo.music.ui.component.IconButton
 import com.teamshryne.mediyo.music.ui.utils.backToMain
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
@@ -338,7 +338,7 @@ private fun EpisodeRow(
                 overflow = TextOverflow.Ellipsis
             )
         }
-        IconButton(onClick = onClick, modifier = Modifier.size(40.dp)) {
+        androidx.compose.material3.IconButton(onClick = onClick, modifier = Modifier.size(40.dp)) {
             Icon(
                 painterResource(if (isActive && isPlaying) R.drawable.pause else R.drawable.play),
                 contentDescription = null,
