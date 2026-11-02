@@ -1,8 +1,35 @@
-// Top-level build
 plugins {
-    id("com.android.application") version "8.2.2" apply false
-    id("org.jetbrains.kotlin.android") version "1.9.22" apply false
-    id("com.google.devtools.ksp") version "1.9.22-1.0.17" apply false
-    id("com.google.dagger.hilt.android") version "2.48.1" apply false
-    id("org.jetbrains.kotlin.plugin.serialization") version "1.9.22" apply false
+    alias(libs.plugins.hilt) apply (false)
+    alias(libs.plugins.kotlin.ksp) apply (false)
+    alias(libs.plugins.compose.compiler) apply false
+}
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+        maven { setUrl("https://jitpack.io") }
+    }
+    dependencies {
+        classpath(libs.gradle)
+        classpath(kotlin("gradle-plugin", libs.versions.kotlin.get()))
+    }
+}
+
+tasks.register<Delete>("Clean") {
+    delete(rootProject.layout.buildDirectory)
+}
+
+subprojects {
+    tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+        kotlinOptions {
+            if (project.findProperty("enableComposeCompilerReports") == "true") {
+                arrayOf("reports", "metrics").forEach {
+                    freeCompilerArgs = freeCompilerArgs + listOf(
+                        "-P", "plugin:androidx.compose.compiler.plugins.kotlin:${it}Destination=${project.buildDir.absolutePath}/compose_metrics"
+                    )
+                }
+            }
+        }
+    }
 }

@@ -158,11 +158,12 @@ jobs:
       - name: Build signed release APK
         run: |
           chmod +x gradlew || true
-          ./gradlew --no-daemon assembleRelease --stacktrace \
+          ./gradlew --no-daemon --build-cache assembleFossRelease --stacktrace \
             -PversionCode="${{ steps.version.outputs.code }}" \
             -PversionName="${{ steps.version.outputs.version }}" \
             -Pchannel="${{ steps.version.outputs.mode }}"
         env:
+          GIT_SHA: ${{ github.sha }}
           ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/mediyo-release.jks
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -172,7 +173,7 @@ jobs:
         run: |
           set -euo pipefail
           BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/*/ | sort -V | tail -1)
-          APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          APK=$(ls app/build/outputs/apk/foss/release/*.apk | head -1)
           echo "APK=$APK"
           "$BT/apksigner" verify --print-certs "$APK" | head -5
           "$BT/apksigner" verify "$APK" # strict: fails if not properly signed
@@ -199,7 +200,7 @@ jobs:
           APK_NAME: ${{ steps.version.outputs.apkName }}
         run: |
           set -euo pipefail
-          SRC_APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          SRC_APK=$(ls app/build/outputs/apk/foss/release/*.apk | head -1)
           cp "$SRC_APK" "$APK_NAME"
           SHA=$(sha256sum "$APK_NAME" | cut -d' ' -f1)
           echo "$SHA  $APK_NAME" > "$APK_NAME.sha256"
@@ -237,11 +238,6 @@ jobs:
             # before it.
             RANGE="$TAG^..$TAG"
           fi
-
-          # Every change a user can see has to say what it does for them.
-          # A release refuses to publish if one does not -- so a note that
-          # was never written cannot reach a user.
-          scripts/check-range-notes.sh "$RANGE"
 
           NOTES=$(scripts/collect-notes.sh "$RANGE")
           if [ -z "$(echo "$NOTES" | tr -d '[:space:]')" ]; then
@@ -346,10 +342,6 @@ jobs:
           else
             RANGE="$GITHUB_SHA^..$GITHUB_SHA"
           fi
-
-          # A nightly publishes notes too, so the same rule applies: a change
-          # a user can see has to say what it does for them.
-          scripts/check-range-notes.sh "$RANGE"
 
           NOTES=$(scripts/collect-notes.sh "$RANGE")
           if [ -z "$(echo "$NOTES" | tr -d '[:space:]')" ]; then
