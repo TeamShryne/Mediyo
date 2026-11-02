@@ -1,5 +1,6 @@
 package com.teamshryne.mediyo.data.mediyo
 
+import com.teamshryne.mediyo.innertube.models.Album
 import com.teamshryne.mediyo.innertube.models.AlbumItem
 import com.teamshryne.mediyo.innertube.models.Artist
 import com.teamshryne.mediyo.innertube.models.ArtistItem
