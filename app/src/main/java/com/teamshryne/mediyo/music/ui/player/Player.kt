@@ -391,7 +391,11 @@ fun BottomSheetPlayer(
                     ) {
                         Thumbnail(
                             sliderPositionProvider = { sliderPosition },
-                            modifier = Modifier.nestedScroll(state.preUpPostDownNestedScrollConnection)
+                            modifier = Modifier.nestedScroll(state.preUpPostDownNestedScrollConnection),
+                            onOpenLyricsAppearance = {
+                                state.collapseSoft()
+                                navController.navigate("settings/lyrics/appearance")
+                            }
                         )
                     }
 
@@ -425,7 +429,11 @@ fun BottomSheetPlayer(
                     ) {
                         Thumbnail(
                             sliderPositionProvider = { sliderPosition },
-                            modifier = Modifier.nestedScroll(state.preUpPostDownNestedScrollConnection)
+                            modifier = Modifier.nestedScroll(state.preUpPostDownNestedScrollConnection),
+                            onOpenLyricsAppearance = {
+                                state.collapseSoft()
+                                navController.navigate("settings/lyrics/appearance")
+                            }
                         )
                     }
 

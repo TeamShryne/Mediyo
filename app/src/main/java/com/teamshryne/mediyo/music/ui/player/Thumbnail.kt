@@ -32,6 +32,7 @@ import com.teamshryne.mediyo.music.utils.rememberPreference
 fun Thumbnail(
     sliderPositionProvider: () -> Long?,
     modifier: Modifier = Modifier,
+    onOpenLyricsAppearance: () -> Unit = {},
 ) {
     val playerConnection = LocalPlayerConnection.current ?: return
     val currentView = LocalView.current
@@ -89,7 +90,10 @@ fun Thumbnail(
             enter = fadeIn(),
             exit = fadeOut()
         ) {
-            Lyrics(sliderPositionProvider = sliderPositionProvider)
+            Lyrics(
+                sliderPositionProvider = sliderPositionProvider,
+                onOpenAppearance = onOpenLyricsAppearance
+            )
         }
 
         AnimatedVisibility(

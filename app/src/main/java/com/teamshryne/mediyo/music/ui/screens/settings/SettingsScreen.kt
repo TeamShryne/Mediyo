@@ -54,8 +54,15 @@ fun SettingsScreen(
         )
         PreferenceEntry(
             title = { Text("Lyrics") },
+            description = "Sources and priority",
             icon = { Icon(painterResource(R.drawable.lyrics), null) },
             onClick = { navController.navigate("settings/lyrics") }
+        )
+        PreferenceEntry(
+            title = { Text("Lyrics appearance") },
+            description = "Text size, weight and line spacing",
+            icon = { Icon(painterResource(R.drawable.lyrics), null) },
+            onClick = { navController.navigate("settings/lyrics/appearance") }
         )
         PreferenceEntry(
             title = { Text(stringResource(R.string.storage)) },
