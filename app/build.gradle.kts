@@ -1,28 +1,32 @@
-plugins {
-    alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.serialization)
-    alias(libs.plugins.ksp)
-    alias(libs.plugins.hilt)
-}
+@file:Suppress("UnstableApiUsage")
 
 import java.io.ByteArrayOutputStream
 
+plugins {
+    id("com.android.application")
+    kotlin("android")
+    kotlin("kapt")
+    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.hilt)
+    alias(libs.plugins.kotlin.ksp)
+    alias(libs.plugins.compose.compiler)
+}
+
 android {
     namespace = "com.teamshryne.mediyo"
-    compileSdk = 34
+    compileSdk = 35
+    buildToolsVersion = "35.0.0"
 
     // Version comes from the release workflow (-PversionCode/-PversionName from
-    // the git tag, e.g. v1.2.3). Falls back to local defaults for dev builds.
+    // the git tag). Falls back to the next release line for local builds.
     val appVersionCode =
         (project.findProperty("versionCode") as String?
-            ?: System.getenv("VERSION_CODE") ?: "1").toInt()
+            ?: System.getenv("VERSION_CODE") ?: "9000").toInt()
     val appVersionName =
         (project.findProperty("versionName") as String?
-            ?: System.getenv("VERSION_NAME") ?: "0.1.0") as String
+            ?: System.getenv("VERSION_NAME") ?: "0.9.0") as String
 
     // Release signing comes from env (CI decodes the keystore from secrets).
-    // When absent (local dev), release builds stay unsigned.
     val keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
 
     signingConfigs {
@@ -39,20 +43,10 @@ android {
     defaultConfig {
         applicationId = "com.teamshryne.mediyo"
         minSdk = 24
-        targetSdk = 34
+        targetSdk = 35
         versionCode = appVersionCode
         versionName = appVersionName
-        // Short commit SHA so any APK (especially CI artifacts) is
-        // identifiable in Settings. Never fails the build when git is
-        // unavailable (e.g. source export without .git).
         buildConfigField("String", "GIT_SHA", "\"${gitSha()}\"")
-        // Reported by the debug diagnostics screen; read from the catalog so
-        // it can never disagree with the version actually compiled in.
-        buildConfigField("String", "MEDIA3_VERSION", "\"${libs.versions.media3.get()}\"")
-        // Which update track this build belongs to: "stable" or "nightly".
-        // The nightly track is signed with the same key and shares the
-        // applicationId, so it replaces the release build in place rather
-        // than installing alongside it.
         val channel = (project.findProperty("channel") as String?) ?: "stable"
         buildConfigField("String", "CHANNEL", "\"$channel\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -64,53 +58,64 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            isCrunchPngs = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            manifestPlaceholders["appName"] = "Mediyo"
             if (!keystorePath.isNullOrBlank()) {
                 signingConfig = signingConfigs.getByName("release")
             }
         }
         debug {
-            isDebuggable = true
-            // Installable side-by-side with the release APK.
+            isCrunchPngs = false
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
-            manifestPlaceholders["appName"] = "Mediyo Debug"
-            // -PenableR8=true produces a minified, resource-shrunk APK that
-            // still uses the debug key and the .debug applicationId, so CI can
-            // rehearse the release build's R8 behaviour on every PR without
-            // ever touching the release keystore.
-            //
-            // Release-only shrinking is exactly the class of bug that builds
-            // clean and then crashes on a user's phone: a missing keep rule
-            // for a class reached only by reflection.
-            isMinifyEnabled = (project.findProperty("enableR8") as String?) == "true"
-            if (isMinifyEnabled) {
-                isShrinkResources = true
-                proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            }
         }
     }
 
+    flavorDimensions += "version"
+    productFlavors {
+        create("foss") {
+            dimension = "version"
+        }
+    }
+
+    buildFeatures {
+        buildConfig = true
+        compose = true
+    }
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-        isCoreLibraryDesugaringEnabled = true
     }
-    kotlinOptions { jvmTarget = "17" }
-
-    buildFeatures { compose = true; buildConfig = true }
-    composeOptions { kotlinCompilerExtensionVersion = "1.5.8" }
-
+    kotlin {
+        jvmToolchain(17)
+    }
+    kotlinOptions {
+        freeCompilerArgs = freeCompilerArgs + "-Xcontext-receivers"
+        jvmTarget = "17"
+    }
     packaging {
         jniLibs {
             useLegacyPackaging = true
         }
     }
-
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        unitTests.isReturnDefaultValues = true
+    }
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
     lint {
+        // Resolved against the module directory, so this is `app/lint.xml`.
+        lintConfig = file("lint.xml")
         disable += "NewApi"
     }
+}
+
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 /** Short HEAD SHA for BuildConfig. Safe fallback keeps configuration green without git. */
@@ -126,41 +131,62 @@ fun gitSha(): String = try {
 }
 
 dependencies {
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+    implementation(libs.guava)
+    implementation(libs.coroutines.guava)
+    implementation(libs.concurrent.futures)
 
-    implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.lifecycle.viewmodel.compose)
-    implementation(libs.androidx.navigation.compose)
-    // PredictiveBackHandler needs activity-compose 1.8; navigation 2.7.6
-    // only pulls in 1.7.0.
-    implementation(libs.androidx.activity.compose)
-    implementation(libs.androidx.datastore.preferences)
-    implementation(libs.androidx.room.runtime)
-    implementation(libs.androidx.room.ktx)
-    implementation(libs.androidx.paging.runtime)
-    implementation(libs.androidx.paging.compose)
-    ksp(libs.androidx.room.compiler)
-    implementation(libs.hilt.android)
-    implementation(libs.hilt.navigation.compose)
-    ksp(libs.hilt.compiler)
-    implementation(libs.coil.compose)
-    implementation(libs.androidx.palette.ktx)
-    implementation(libs.media3.exoplayer)
-    implementation(libs.media3.session)
-    implementation(libs.media3.common)
-    implementation(libs.kotlinx.serialization.json)
-    implementation(libs.kotlinx.coroutines.core)
-    implementation(libs.newpipe.extractor)
-    implementation(files("libs/mediyo.aar"))
+    implementation(libs.activity)
+    implementation(libs.navigation)
+    implementation(libs.hilt.navigation)
+    implementation(libs.datastore)
 
-    val bom = libs.compose.bom
-    implementation(platform(bom))
+    implementation(libs.compose.runtime)
+    implementation(libs.compose.foundation)
     implementation(libs.compose.ui)
-    implementation(libs.compose.ui.tooling.preview)
-    implementation(libs.compose.material3)
+    implementation(libs.compose.ui.util)
+    implementation(libs.compose.ui.tooling)
+    implementation(libs.compose.animation)
+    implementation(libs.compose.animation.graphics)
+    implementation(libs.compose.reorderable)
     implementation(libs.compose.material.icons)
 
-    debugImplementation("androidx.compose.ui:ui-tooling")
-    debugImplementation("androidx.compose.ui:ui-test-manifest")
+    implementation(libs.viewmodel)
+    implementation(libs.viewmodel.compose)
+
+    implementation(libs.material3)
+    implementation(libs.palette)
+    implementation(projects.materialColorUtilities)
+    implementation(libs.squigglyslider)
+
+    implementation(libs.coil)
+
+    implementation(libs.shimmer)
+
+    implementation(libs.media3)
+    implementation(libs.media3.session)
+    implementation(libs.media3.okhttp)
+
+    implementation(libs.room.runtime)
+    ksp(libs.room.compiler)
+    implementation(libs.room.ktx)
+
+    implementation(libs.apache.lang3)
+
+    implementation(libs.hilt)
+    kapt(libs.hilt.compiler)
+
+    implementation(projects.innertube)
+    implementation(projects.kugou)
+    implementation(projects.lrclib)
+
+    implementation(libs.ktor.client.core)
+
+    implementation(libs.kotlinx.serialization.json)
+
+    // Go core: search / artist / artist sections / podcast / episodes.
+    implementation(files("libs/mediyo.aar"))
+
+    coreLibraryDesugaring(libs.desugaring)
+
+    implementation(libs.timber)
 }
