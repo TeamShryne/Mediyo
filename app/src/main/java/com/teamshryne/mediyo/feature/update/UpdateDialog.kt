@@ -28,11 +28,12 @@ import com.teamshryne.mediyo.data.update.UpdateChannel
 fun UpdateDialog(vm: UpdateViewModel) {
     val context = LocalContext.current
     val state by vm.state.collectAsState()
+    val channel by vm.channel.collectAsState()
     val s = state as? UpdateViewModel.State.Available ?: return
     val updater = vm.updater
     // A nightly build is not an update in the same sense a release is, and
     // it should not be announced as one.
-    val nightly = vm.channel.value == UpdateChannel.NIGHTLY
+    val nightly = channel == UpdateChannel.NIGHTLY
 
     AlertDialog(
         onDismissRequest = { if (!s.downloading) vm.dismiss() },
