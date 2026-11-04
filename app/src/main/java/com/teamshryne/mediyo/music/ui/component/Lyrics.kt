@@ -9,11 +9,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -33,6 +30,7 @@ import com.teamshryne.mediyo.feature.lyrics.LyricsSearchSheet
 import com.teamshryne.mediyo.feature.lyrics.LyricsViewModel
 import com.teamshryne.mediyo.feature.lyrics.SyncedLyricsView
 import com.teamshryne.mediyo.music.LocalPlayerConnection
+import com.teamshryne.mediyo.music.ui.menu.LyricsMenu
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
@@ -78,7 +76,7 @@ fun Lyrics(
     }
 
     var showSearch by remember { mutableStateOf(false) }
-    var showMenu by remember { mutableStateOf(false) }
+    val menuState = LocalMenuState.current
 
     LaunchedEffect(track?.uniqueKey()) {
         track?.let { vm.load(it, mediaMetadata?.duration?.takeIf { d -> d > 0 }?.times(1000L)) }
@@ -111,7 +109,8 @@ fun Lyrics(
         )
 
         // The same three-dot menu the previous app had while lyrics were on
-        // screen. Kept here rather than in the lyrics feature so it can reach
+        // screen, shown as a bottom sheet like every other menu in the app.
+        // Kept here rather than in the lyrics feature so it can reach
         // the player's navigation and current duration.
         Box(
             modifier = Modifier
@@ -121,39 +120,26 @@ fun Lyrics(
                 .size(40.dp)
                 .background(Color.Black.copy(alpha = 0.22f), CircleShape)
         ) {
-            IconButton(onClick = { showMenu = true }) {
+            IconButton(onClick = {
+                menuState.show {
+                    LyricsMenu(
+                        onRefetch = {
+                            track?.let { current ->
+                                vm.refetch(current, durationMs.takeIf { d -> d > 0 })
+                            }
+                        },
+                        onSearch = { showSearch = true },
+                        onAppearance = onOpenAppearance,
+                        onDismiss = menuState::dismiss,
+                    )
+                }
+            }) {
                 Icon(
                     imageVector = Icons.Filled.MoreVert,
                     contentDescription = "Lyrics options",
                     tint = Color.White
                 )
             }
-        }
-        DropdownMenu(
-            expanded = showMenu,
-            onDismissRequest = { showMenu = false }
-        ) {
-            DropdownMenuItem(
-                text = { Text("Refetch lyrics") },
-                onClick = {
-                    showMenu = false
-                    track?.let { vm.refetch(it, durationMs.takeIf { d -> d > 0 }) }
-                }
-            )
-            DropdownMenuItem(
-                text = { Text("Search on another source") },
-                onClick = {
-                    showMenu = false
-                    showSearch = true
-                }
-            )
-            DropdownMenuItem(
-                text = { Text("Lyrics appearance") },
-                onClick = {
-                    showMenu = false
-                    onOpenAppearance()
-                }
-            )
         }
     }
 
