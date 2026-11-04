@@ -198,6 +198,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
 
     // Go core: search / artist / artist sections / podcast / episodes.
+    // CI downloads it (see scripts/fetch-mediyo-core.sh and gradle.properties).
     implementation(files("libs/mediyo.aar"))
 
     coreLibraryDesugaring(libs.desugaring)

@@ -5,12 +5,16 @@
 #
 # .github/workflows/ — the build, release and emulator pipelines. A bad change
 #   here can ship a broken APK, or quietly stop testing one.
-# app/libs/ — the vendored mediyo-core AAR. Binary, and the only copy of the
-#   Go core; a bad one is very hard to diagnose from the app's behaviour.
+# gradle.properties — pins mediyo.core.version and mediyo.core.sha256. A
+#   wrong version or checksum either breaks the fetch every build depends on,
+#   or ships a different core than the one the pin claims to be.
 # app/proguard-rules.pro — decides what R8 may strip. A missing keep rule
 #   breaks release builds only, and the debug tour will not catch it.
 # app/build.gradle.kts — signing, versioning, ABI filters.
+# scripts/fetch-mediyo-core.sh — what CI runs instead of a vendored core; it
+#   decides which binary ships without reviewable source.
 .github/workflows/ @TeamShryne
-/app/libs/ @TeamShryne
+/gradle.properties @TeamShryne
 /app/proguard-rules.pro @TeamShryne
 /app/build.gradle.kts @TeamShryne
+/scripts/fetch-mediyo-core.sh @TeamShryne

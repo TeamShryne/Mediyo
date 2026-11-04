@@ -7,7 +7,11 @@ Notes for agents and contributors working in this repository.
 Mediyo is an Android music player for YouTube Music: a single-module Android
 app (`app/`) written in Kotlin with Jetpack Compose, Hilt for injection, Media3
 for playback and Room for the local cache. The native core (`mediyo-core`) is
-vendored as an AAR in `app/libs/` and is not built from here.
+not built here and is not tracked here: CI fetches its AAR from the
+[mediyo-core releases](https://github.com/TeamShryne/mediyo-core/releases) at
+build time. The pinned version and its SHA‑256 live in `gradle.properties`
+(`mediyo.core.version` / `mediyo.core.sha256`) — bump them together when
+taking a new core, and never commit `app/libs/`.
 
 ## The loop
 
