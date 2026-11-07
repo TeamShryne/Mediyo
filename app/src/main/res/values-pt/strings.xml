@@ -202,8 +202,6 @@
     <string name="clear_search_history_confirm">Deseja limpar todo o histórico de pesquisa?</string>
     <string name="disable_screenshot">Desativar captura de ecrã</string>
     <string name="disable_screenshot_desc">Quando esta opção está ativada, as capturas de ecrã e a visualização da aplicação em \"Recentes\" estão desativadas.</string>
-    <string name="enable_lrclib">Ativar provedor de letras LrcLib</string>
-    <string name="enable_kugou">Ativar provedor de letras KuGou</string>
     <string name="hide_explicit">Ocultar conteúdo explícito</string>
     <string name="backup_restore">Cópia de segurança e restauro</string>
     <string name="audio_quality_low">Baixa</string>

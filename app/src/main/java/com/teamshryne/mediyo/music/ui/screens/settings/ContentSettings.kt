@@ -29,8 +29,6 @@ import com.teamshryne.mediyo.music.constants.AccountNameKey
 import com.teamshryne.mediyo.music.constants.ContentCountryKey
 import com.teamshryne.mediyo.music.constants.ContentLanguageKey
 import com.teamshryne.mediyo.music.constants.CountryCodeToName
-import com.teamshryne.mediyo.music.constants.EnableKugouKey
-import com.teamshryne.mediyo.music.constants.EnableLrcLibKey
 import com.teamshryne.mediyo.music.constants.HideExplicitKey
 import com.teamshryne.mediyo.music.constants.InnerTubeCookieKey
 import com.teamshryne.mediyo.music.constants.LanguageCodeToName
@@ -65,8 +63,6 @@ fun ContentSettings(
     val (contentLanguage, onContentLanguageChange) = rememberPreference(key = ContentLanguageKey, defaultValue = "system")
     val (contentCountry, onContentCountryChange) = rememberPreference(key = ContentCountryKey, defaultValue = "system")
     val (hideExplicit, onHideExplicitChange) = rememberPreference(key = HideExplicitKey, defaultValue = false)
-    val (enableKugou, onEnableKugouChange) = rememberPreference(key = EnableKugouKey, defaultValue = true)
-    val (enableLrcLib, onEnableLrcLibChange) = rememberPreference(key = EnableLrcLibKey, defaultValue = true)
 
     val (proxyEnabled, onProxyEnabledChange) = rememberPreference(key = ProxyEnabledKey, defaultValue = false)
     val (proxyType, onProxyTypeChange) = rememberEnumPreference(key = ProxyTypeKey, defaultValue = Proxy.Type.HTTP)
@@ -119,20 +115,6 @@ fun ContentSettings(
             icon = { Icon(painterResource(R.drawable.explicit), null) },
             checked = hideExplicit,
             onCheckedChange = onHideExplicitChange
-        )
-
-        SwitchPreference(
-            title = { Text(stringResource(R.string.enable_lrclib)) },
-            icon = { Icon(painterResource(R.drawable.lyrics), null) },
-            checked = enableLrcLib,
-            onCheckedChange = onEnableLrcLibChange
-        )
-
-        SwitchPreference(
-            title = { Text(stringResource(R.string.enable_kugou)) },
-            icon = { Icon(painterResource(R.drawable.lyrics), null) },
-            checked = enableKugou,
-            onCheckedChange = onEnableKugouChange
         )
 
         PreferenceGroupTitle(

@@ -206,7 +206,6 @@
     <string name="pause_search_history">Suchverlauf anhalten</string>
     <string name="clear_search_history">Suchverlauf löschen</string>
     <string name="clear_search_history_confirm">Bist du sicher, dass du den gesamten Suchverlauf löschen willst?</string>
-    <string name="enable_kugou">KuGou-Songtext-Anbieter aktivieren</string>
     <string name="backup_restore">Sichern und Wiederherstellen</string>
     <string name="action_backup">Sichern</string>
     <string name="action_restore">Wiederherstellen</string>
@@ -260,7 +259,6 @@
     <string name="disable_screenshot_desc">Wenn diese Option aktiviert ist, sind Screenshots und die App-Ansicht in „Zuletzt gesehen“ deaktiviert.</string>    <string name="squiggly">Schnörkelig</string>
     <string name="grid_cell_size">Größe der Rasterzellen</string>
     <string name="search_history">Suchverlauf</string>
-    <string name="enable_lrclib">LrcLib-Songtext-Anbieter aktivieren</string>
     <string name="hide_explicit">Explizite Inhalte ausblenden</string>    <string name="library_song_empty">Songs aus der Bibliothek werden hier angezeigt</string>
     <string name="remove_download_playlist_confirm">Möchtest du wirklich alle Songs der Playlist „%s“ aus dem Speicher für heruntergeladene Songs entfernen?</string>
     <string name="delete_playlist_confirm">Möchtest du die Playlist „%s“ wirklich löschen?</string>
