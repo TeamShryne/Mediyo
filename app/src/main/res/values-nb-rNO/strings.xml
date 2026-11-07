@@ -161,8 +161,6 @@
     <string name="clear_search_history">Fjern søkehistorikk</string>
     <string name="disable_screenshot">Skru av skjermavbildninger</string>
     <string name="disable_screenshot_desc">Når dette er aktivert, kan skjermavbildninger ikke utføres i programmet, og «Nylig» i programmet er avslått</string>
-    <string name="enable_lrclib">Slå på LrcLib-sangteksttilbyder</string>
-    <string name="enable_kugou">Slå på KuGou-sangteksttilbyder</string>
     <string name="action_backup">Sikkerhetskopier</string>    <string name="dismiss">Avvis</string>
     <string name="options">Innstillinger</string>
     <string name="login_failed">Innlogging mislyktes</string>    <string name="app_version">Programversjon</string>

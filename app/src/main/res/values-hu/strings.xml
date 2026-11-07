@@ -207,7 +207,6 @@
     <string name="pause_search_history">Keresési előzmények szüneteltetése</string>
     <string name="clear_search_history">Keresési előzmények ürítése</string>
     <string name="clear_search_history_confirm">Biztosan törli az összes keresési előzményt?</string>
-    <string name="enable_kugou">A KuGou dalszöveg szolgáltató engedélyezése</string>
     <string name="backup_restore">Biztonsági mentés és visszaállítás</string>
     <string name="action_backup">Biztonsági mentés</string>
     <string name="action_restore">Visszaállítás</string>
@@ -271,7 +270,6 @@
     <string name="use_login_for_browse_desc">Ez hatással lehet az ajánlott tartalomra. Például megjelenhetnek prémium albumok, ha prémium fiókkal jelentkezik be</string>
     <string name="disable_screenshot">Képernyőkép készítés kikapcsolása</string>
     <string name="disable_screenshot_desc">Ha ez be van kapcsolva, a képernyőkép készítés nem lehetséges, és az előzmények sem látszódnak.</string>
-    <string name="enable_lrclib">A LrcLib dalszöveg szolgáltató engedélyezése</string>
     <string name="hide_explicit">Felnőtt tartalom elrejtése</string>    <string name="dismiss">Elrejtés</string>
     <string name="options">Opciók</string>
     <string name="preview">Előnézet</string></resources>

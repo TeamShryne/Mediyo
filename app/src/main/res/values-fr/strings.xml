@@ -216,7 +216,6 @@
     <string name="pause_search_history">Suspendre l\'historique de recherche</string>
     <string name="clear_search_history">Effacer l\'historique de recherche</string>
     <string name="clear_search_history_confirm">Voulez-vous vraiment effacer tout l’historique des recherches ?</string>
-    <string name="enable_kugou">Activer le fournisseur de paroles KuGou</string>
     <string name="backup_restore">Sauvegarder et Restaurer</string>
     <string name="action_backup">Sauvegarder</string>
     <string name="action_restore">Restaurer</string>
@@ -238,7 +237,6 @@
     <string name="duplicates_description_multiple">%d titres sont déjà dans votre playlist</string>
     <string name="player_text_alignment">Alignement du texte du lecteur</string>
     <string name="sided">Sur le côté</string>
-    <string name="enable_lrclib">Activer le fournisseur de paroles LrcLib</string>
     <string name="hide_explicit">Masquer le contenu explicite</string>    <string name="dismiss">Abandonner</string>
     <string name="options">Options</string>
     <string name="preview">Prévisualisation</string>

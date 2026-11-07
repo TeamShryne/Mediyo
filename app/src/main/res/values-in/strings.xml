@@ -198,7 +198,6 @@
     <string name="pause_search_history">Jeda riwayat pencarian</string>
     <string name="clear_search_history">Bersihkan riwayat pencarian</string>
     <string name="clear_search_history_confirm">Apakah anda yakin ingin menghapus semua riwayat pencarian?</string>
-    <string name="enable_kugou">Aktifkan penyedia lirik KuGou</string>
     <string name="backup_restore">Cadangkan dan pulihkan</string>
     <string name="action_backup">Cadangkan</string>
     <string name="action_restore">Pulihkan</string>
@@ -261,7 +260,7 @@
     <string name="search_history">Riwayat pencarian</string>
     <string name="disable_screenshot">Nonaktifkan tangkapan layar</string>
     <string name="disable_screenshot_desc">Ketika pilihan ini diaktifkan, tangkapan layar dan tampilan aplikasi di Terkini dinonaktifkan.</string>
-    <string name="enable_lrclib">Aktifkan penyedia lirik LrcLib</string>    <string name="dismiss">Singkirkan</string>
+    <string name="dismiss">Singkirkan</string>
     <string name="preview">Pratinjau</string>    <string name="use_login_for_browse">Masuk untuk menjelajahi konten</string>
     <string name="use_login_for_browse_desc">Hal ini dapat memengaruhi konten yang Anda lihat dan misalnya menampilkan album khusus premium jika Anda masuk dengan akun Premium</string>
     <string name="action_login">Masuk</string>

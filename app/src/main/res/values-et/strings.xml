@@ -190,7 +190,6 @@
     <string name="clear_search_history_confirm">Kas sa oled kindel, et soovid kustutada kogu otsingute ajaloo?</string>
     <string name="disable_screenshot">Keela ekraanitõmmised</string>
     <string name="disable_screenshot_desc">Kui see eelistus on kasutusel, siis ekraanitõmmiste tegemine ja rakenduse vaade Viimaste rakenduste all on keelatud.</string>
-    <string name="enable_lrclib">Kasuta laulusõnade kuvamiseks teenusepakkujat LrcLib</string>
     <string name="dismiss">Loobu</string>
     <string name="preview">Eelvaade</string>    <string name="sort_by_create_date">Lisamise kuupäev</string>
     <string name="sort_by_name">Nime alusel</string>
@@ -260,7 +259,6 @@
     <string name="content">Sisu</string>
     <string name="login">Kasutajanimi</string>
     <string name="not_logged_in">Pole sisselogitud</string>
-    <string name="enable_kugou">Kasuta laulusõnade kuvamiseks teenusepakkujat KuGou</string>
     <string name="hide_explicit">Peida ebasobilik sisu</string>
     <string name="backup_restore">Varukoopia ja taastamine</string>
     <string name="action_backup">Varunda</string>
