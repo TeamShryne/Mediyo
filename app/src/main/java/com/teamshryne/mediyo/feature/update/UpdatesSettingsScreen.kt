@@ -6,9 +6,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -47,6 +48,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.teamshryne.mediyo.BuildConfig
 import com.teamshryne.mediyo.data.update.UpdateChannel
+import com.teamshryne.mediyo.music.LocalPlayerAwareWindowInsets
 
 /**
  * What this install is, and where its updates come from.
@@ -77,12 +79,16 @@ fun UpdatesSettingsScreen(
     }
 
     Scaffold(
-        // Zero insets: nested inside the outer app Scaffold, whose padding
-        // already clears the status bar (same fix as LyricsSettingsScreen).
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        // There is no outer Scaffold to inherit insets from: MainActivity puts
+        // the NavHost straight into a Box. Zeroing these insets is what put
+        // the title under the status bar, so the top bar keeps its own
+        // status-bar inset and the content clears the navigation bar and the
+        // mini player.
+        contentWindowInsets = LocalPlayerAwareWindowInsets.current.only(
+            WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom
+        ),
         topBar = {
             TopAppBar(
-                windowInsets = WindowInsets(0, 0, 0, 0),
                 title = { Text("App updates") },
                 navigationIcon = {
                     IconButton(onClick = { nav?.popBackStack() }) {

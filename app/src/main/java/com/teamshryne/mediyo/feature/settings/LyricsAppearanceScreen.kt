@@ -22,6 +22,7 @@ import androidx.lifecycle.ViewModel
 import com.teamshryne.mediyo.data.lyrics.LyricsFontWeight
 import com.teamshryne.mediyo.data.lyrics.LyricsStyle
 import com.teamshryne.mediyo.data.lyrics.LyricsStylePrefs
+import com.teamshryne.mediyo.music.LocalPlayerAwareWindowInsets
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
@@ -65,13 +66,16 @@ fun LyricsAppearanceScreen(
     val style by vm.style.collectAsState()
 
     Scaffold(
-        // Zero insets: this Scaffold is nested inside the outer app Scaffold,
-        // whose padding already clears the status bar. Defaults would stack a
-        // second status-bar height above the TopAppBar (the visible gap).
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        // There is no outer Scaffold to inherit insets from: MainActivity puts
+        // the NavHost straight into a Box. Zeroing these insets is what put
+        // the title under the status bar, so the top bar keeps its own
+        // status-bar inset and the content clears the navigation bar and the
+        // mini player.
+        contentWindowInsets = LocalPlayerAwareWindowInsets.current.only(
+            WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom
+        ),
         topBar = {
             TopAppBar(
-                windowInsets = WindowInsets(0, 0, 0, 0),
                 title = { Text("Lyrics appearance") },
                 navigationIcon = {
                     IconButton(onClick = { nav?.popBackStack() }) {
