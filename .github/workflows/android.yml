@@ -60,6 +60,13 @@ jobs:
           chmod +x gradlew || true
           ./gradlew --no-daemon --build-cache assembleFossDebug lintFossDebug --stacktrace
 
+      # The legacy-library import is the one part of the app whose only real
+      # test is a replay of an old database, so it runs on every change.
+      - name: Unit tests
+        env:
+          GIT_SHA: ${{ github.sha }}
+        run: ./gradlew --no-daemon --build-cache testFossDebugUnitTest --stacktrace
+
       - name: Verify debug identity (side-by-side with release)
         run: |
           set -euo pipefail

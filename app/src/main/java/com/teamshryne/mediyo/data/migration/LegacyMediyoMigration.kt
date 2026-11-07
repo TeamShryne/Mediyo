@@ -5,20 +5,27 @@ import android.content.Context
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import androidx.datastore.preferences.core.edit
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.teamshryne.mediyo.data.auth.AuthRepository
 import com.teamshryne.mediyo.data.mediyo.parseDurationSeconds
 import com.teamshryne.mediyo.music.constants.InnerTubeCookieKey
+import com.teamshryne.mediyo.music.constants.LegacyMigrationAttemptsKey
 import com.teamshryne.mediyo.music.constants.LegacyMigratedKey
 import com.teamshryne.mediyo.music.constants.VisitorDataKey
 import com.teamshryne.mediyo.music.db.MusicDatabase
 import com.teamshryne.mediyo.music.utils.dataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.io.File
 import java.security.MessageDigest
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -37,8 +44,13 @@ import javax.inject.Singleton
  * - every insert is idempotent (conflict-ignore, replace-by-playlist, and
  *   events deduplicated by their exact values), so a crash between the
  *   transaction and the cleanup cannot double the user's history;
- * - a failure leaves the legacy file in place for the next launch and never
- *   throws into `onCreate`.
+ * - a row that cannot be written is skipped and logged instead of taking the
+ *   rest of the library down with it, and an import that skips everything is
+ *   treated as a failure rather than a success;
+ * - a failure leaves the legacy file in place for the next launch, but the
+ *   number of launches is capped: a file that cannot be read will not heal,
+ *   and retrying forever slows every start with nothing to show for it;
+ * - nothing in here throws into `onCreate`.
  */
 @Singleton
 class LegacyMediyoMigration @Inject constructor(
@@ -52,6 +64,14 @@ class LegacyMediyoMigration @Inject constructor(
         const val LEGACY_DOWNLOAD_CACHE = "mediyo_downloads"
         const val DOWNLOAD_CACHE = "download"
 
+        /**
+         * How many launches the import may fail before it stops trying. A
+         * database that cannot be read, or an app database that cannot be
+         * written, is not going to heal on its own; the alternative is a
+         * broken import that runs on every start forever.
+         */
+        const val MAX_ATTEMPTS = 3
+
         /** Tables that mean this really is the previous app's database. */
         val LEGACY_TABLES = listOf(
             "liked_tracks",
@@ -64,10 +84,25 @@ class LegacyMediyoMigration @Inject constructor(
         )
     }
 
-    fun runOnce() = runBlocking(Dispatchers.IO) { run() }
+    private val started = AtomicBoolean(false)
+
+    /**
+     * Starts the import on a background thread.
+     *
+     * It used to run with `runBlocking` from `Application.onCreate`, which held
+     * the first frame hostage for as long as the import took — a large library
+     * could freeze the launch. Nothing here needs to finish before the UI can
+     * draw: every write is idempotent, and Room refreshes the screens that are
+     * watching `song.db` once the transaction commits.
+     */
+    fun start(scope: CoroutineScope) {
+        if (!started.compareAndSet(false, true)) return
+        scope.launch(Dispatchers.IO) { run() }
+    }
 
     suspend fun run() {
-        if (context.dataStore.data.first()[LegacyMigratedKey] == true) return
+        val prefs = runCatching { context.dataStore.data.first() }.getOrNull() ?: return
+        if (prefs[LegacyMigratedKey] == true) return
 
         val legacyDb = context.getDatabasePath(LEGACY_DB)
         if (!legacyDb.exists()) {
@@ -77,12 +112,38 @@ class LegacyMediyoMigration @Inject constructor(
             return
         }
 
-        val data = runCatching { readLegacy(legacyDb) }
-            .onFailure { Timber.e(it) }
-            .getOrNull()
-            ?: return
+        val attempt = (prefs[LegacyMigrationAttemptsKey] ?: 0) + 1
+        recordAttempt(attempt)
 
-        if (!runCatching { writeAll(data) }.onFailure { Timber.e(it) }.isSuccess) return
+        val data = try {
+            readLegacy(legacyDb)
+        } catch (e: NotLegacyDatabase) {
+            // Not our database (or one too old to know). Leave the file alone
+            // and stop looking at it: there is nothing to import from it.
+            Timber.w(e, "mediyo.db does not look like the previous app's database")
+            giveUp(attempt)
+            return
+        } catch (e: Exception) {
+            Timber.e(e, "Could not read mediyo.db (attempt $attempt of $MAX_ATTEMPTS)")
+            giveUp(attempt)
+            return
+        }
+
+        val songsWritten = try {
+            writeAll(data)
+        } catch (e: Exception) {
+            Timber.e(e, "Could not import mediyo.db (attempt $attempt of $MAX_ATTEMPTS)")
+            giveUp(attempt)
+            return
+        }
+
+        // Every song failing means the mapping itself is wrong, not that the
+        // user had an odd row. Retrying is the only honest answer.
+        if (data.songs.isNotEmpty() && songsWritten == 0) {
+            Timber.e("The import wrote no songs; treating it as a failure")
+            giveUp(attempt)
+            return
+        }
 
         // The database is committed. Move the bytes, keep the identity, and
         // only then remove the files — the order matters if the process dies
@@ -93,11 +154,11 @@ class LegacyMediyoMigration @Inject constructor(
             .getOrDefault(false)
         runCatching { migrateAuth() }.onFailure { Timber.e(it) }
 
-        // If the download bytes could not move (a non-empty target or a failed
-        // rename), keep the legacy database and do not mark the import done so
-        // the next launch tries again. Everything written above is idempotent.
+        // A rename that genuinely failed is worth one more go. Everything
+        // written above is idempotent, so the retry re-imports over itself.
         if (!downloadsMoved) {
             Timber.w("Legacy downloads still in place; retrying the import next launch")
+            giveUp(attempt)
             return
         }
 
@@ -109,11 +170,32 @@ class LegacyMediyoMigration @Inject constructor(
         markDone()
     }
 
+    /**
+     * Stops retrying once the attempt budget is spent, without deleting the
+     * legacy file: the import failed, but the user's only copy of it (and any
+     * download bytes next to it) stays where it is.
+     */
+    private suspend fun giveUp(attempt: Int) {
+        if (attempt < MAX_ATTEMPTS) return
+        Timber.e("Giving up on the mediyo.db import after $attempt attempts; the file is kept")
+        runCatching { markDone() }.onFailure { Timber.e(it) }
+        runCatching { migrateAuth() }.onFailure { Timber.e(it) }
+    }
+
+    private suspend fun recordAttempt(attempt: Int) {
+        runCatching {
+            context.dataStore.edit { it[LegacyMigrationAttemptsKey] = attempt }
+        }.onFailure { Timber.e(it) }
+    }
+
     private suspend fun markDone() {
         context.dataStore.edit { it[LegacyMigratedKey] = true }
     }
 
     // ── reading ────────────────────────────────────────────────────────────
+
+    /** A database that exists under our name but cannot be the old app's. */
+    private class NotLegacyDatabase(message: String) : Exception(message)
 
     /**
      * Opens a private copy of the legacy database. Copying `-wal` and `-shm`
@@ -134,10 +216,7 @@ class LegacyMediyoMigration @Inject constructor(
             SQLiteDatabase.openDatabase(copy.path, null, SQLiteDatabase.OPEN_READWRITE)
                 .use { legacy ->
                     if (LEGACY_TABLES.none { legacy.hasTable(it) }) {
-                        // Not our database (or one too old to know). Leave it
-                        // alone and try again next launch rather than deleting
-                        // something we did not understand.
-                        error("mediyo.db has none of the expected legacy tables")
+                        throw NotLegacyDatabase("mediyo.db has none of the expected legacy tables")
                     }
                     readTables(legacy)
                 }
@@ -354,91 +433,134 @@ class LegacyMediyoMigration @Inject constructor(
 
     // ── writing ────────────────────────────────────────────────────────────
 
-    private fun writeAll(data: LegacyData) {
+    /** @return how many songs were written, so the caller can spot a total failure. */
+    private fun writeAll(data: LegacyData): Int {
         val db = database.openHelper.writableDatabase
+        var written = 0
         db.beginTransaction()
         try {
             val albumStats = HashMap<String, AlbumStats>()
-            writeSongs(db, data.songs.values, albumStats)
+            data.songs.values.forEach { song ->
+                guard(db, "song ${song.id}") {
+                    writeSong(db, song, albumStats)
+                    written++
+                }
+            }
             writeAlbums(db, albumStats)
-            writePlaylists(db, data.playlists, data.playlistEntries)
-            writeEvents(db, data.events)
-            writeSearchHistory(db, data.searchQueries)
-            writeAlbumBookmarks(db, data.albumBookmarks)
-            writeArtistBookmarks(db, data.artistBookmarks)
+            data.playlists.forEach { playlist ->
+                guard(db, "playlist ${playlist.id}") {
+                    writePlaylist(db, playlist, data.playlistEntries[playlist.id].orEmpty())
+                }
+            }
+            data.events.forEach { event ->
+                guard(db, "play ${event.songId} at ${event.timestamp}") { writeEvent(db, event) }
+            }
+            data.searchQueries.forEach { query ->
+                guard(db, "search \"$query\"") { writeSearch(db, query) }
+            }
+            data.albumBookmarks.forEach { bookmark ->
+                guard(db, "album bookmark ${bookmark.id}") { writeAlbumBookmark(db, bookmark) }
+            }
+            data.artistBookmarks.forEach { bookmark ->
+                guard(db, "artist bookmark ${bookmark.id}") { writeArtistBookmark(db, bookmark) }
+            }
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
         }
+        return written
     }
 
-    private fun writeSongs(
-        db: androidx.sqlite.db.SupportSQLiteDatabase,
-        songs: Collection<LegacySong>,
-        albumStats: MutableMap<String, AlbumStats>,
-    ) {
-        songs.forEach { song ->
-            val libraryAt = song.inLibraryAt ?: song.likedAt
-            val values = ContentValues().apply {
-                put("id", song.id)
-                put("title", song.title.ifBlank { song.id })
-                put("duration", song.duration)
-                put("thumbnailUrl", song.artworkUrl)
-                put("albumId", song.albumId)
-                put("albumName", song.album)
-                put("liked", if (song.likedAt != null) 1 else 0)
-                put("totalPlayTime", song.totalPlayMs)
-                put("inLibrary", libraryAt)
-            }
-            db.insert("song", SQLiteDatabase.CONFLICT_IGNORE, values)
-
-            // A row that already existed (a retry, or a track that came from
-            // another table) still needs the stronger flags.
-            db.execSQL(
-                "UPDATE song SET liked = MAX(liked, ?), inLibrary = COALESCE(inLibrary, ?), " +
-                    "totalPlayTime = MAX(totalPlayTime, ?), thumbnailUrl = COALESCE(thumbnailUrl, ?), " +
-                    "albumId = COALESCE(albumId, ?), albumName = COALESCE(albumName, ?) WHERE id = ?",
-                arrayOf<Any?>(
-                    if (song.likedAt != null) 1 else 0,
-                    libraryAt,
-                    song.totalPlayMs,
-                    song.artworkUrl,
-                    song.albumId,
-                    song.album,
-                    song.id,
-                )
-            )
-
-            // The album row must exist before `album_artist_map` can point at
-            // it, because both tables are foreign-key constrained.
-            writeAlbum(db, song, albumStats)
-            writeArtists(db, song)
+    /**
+     * Runs one row's writes, and keeps the import alive if that row is bad.
+     *
+     * A failed statement does not by itself end a SQLite transaction, so the
+     * next row can still land. If the transaction is already gone — a full
+     * disk, an I/O error — there is nothing left to write into and the caller
+     * has to retry the whole thing, so the error is rethrown.
+     */
+    private inline fun guard(db: SupportSQLiteDatabase, label: String, block: () -> Unit) {
+        try {
+            block()
+        } catch (e: Exception) {
+            if (!db.inTransaction()) throw e
+            Timber.w(e, "Skipped $label")
         }
     }
 
+    private fun writeSong(
+        db: SupportSQLiteDatabase,
+        song: LegacySong,
+        albumStats: MutableMap<String, AlbumStats>,
+    ) {
+        val libraryAt = (song.inLibraryAt ?: song.likedAt)?.let { localWallClock(it) }
+        val values = ContentValues().apply {
+            put("id", song.id)
+            put("title", song.title.ifBlank { song.id })
+            put("duration", song.duration)
+            put("thumbnailUrl", song.artworkUrl)
+            put("albumId", song.albumId)
+            put("albumName", song.album)
+            put("liked", if (song.likedAt != null) 1 else 0)
+            put("totalPlayTime", song.totalPlayMs)
+            put("inLibrary", libraryAt)
+        }
+        db.insert("song", SQLiteDatabase.CONFLICT_IGNORE, values)
+
+        // A row that already existed (a retry, or a track that came from
+        // another table) still needs the stronger flags.
+        db.execSQL(
+            "UPDATE song SET liked = MAX(liked, ?), inLibrary = COALESCE(inLibrary, ?), " +
+                "totalPlayTime = MAX(totalPlayTime, ?), thumbnailUrl = COALESCE(thumbnailUrl, ?), " +
+                "albumId = COALESCE(albumId, ?), albumName = COALESCE(albumName, ?) WHERE id = ?",
+            arrayOf<Any?>(
+                if (song.likedAt != null) 1 else 0,
+                libraryAt,
+                song.totalPlayMs,
+                song.artworkUrl,
+                song.albumId,
+                song.album,
+                song.id,
+            )
+        )
+
+        // The album row must exist before `album_artist_map` can point at it,
+        // because both tables are foreign-key constrained.
+        writeAlbum(db, song, albumStats)
+        writeArtists(db, song)
+    }
+
     private fun writeArtists(
-        db: androidx.sqlite.db.SupportSQLiteDatabase,
+        db: SupportSQLiteDatabase,
         song: LegacySong,
     ) {
         val ids = song.artistIds.orEmpty().split(",").map { it.trim() }
             .filter { it.isNotEmpty() }
         val raw = song.artist.trim()
         if (raw.isEmpty()) return
+
         // The joined display string is ambiguous — "Earth, Wind & Fire" is one
-        // artist while "A, B" is two. The parallel id list settles the common
-        // single-artist case; otherwise split on the separator the old UI
-        // itself uses to build the string.
-        val names = if (ids.size == 1) {
-            listOf(raw)
-        } else {
-            raw.split(", ").map { it.trim() }.filter { it.isNotEmpty() }
+        // artist while "A, B" is two. The parallel id list settles it whenever
+        // it is there; splitting is only safe when the number of ids proves
+        // the separator was a list separator.
+        val credits = when {
+            ids.isEmpty() -> listOf(raw to localArtistId(raw))
+            ids.size == 1 -> listOf(raw to ids.first())
+            else -> {
+                val names = raw.split(", ").map { it.trim() }.filter { it.isNotEmpty() }
+                if (names.size == ids.size) {
+                    names.zip(ids)
+                } else {
+                    // The id list and the display string disagree (a name with
+                    // a comma in it, most likely). Trusting the ids would mean
+                    // inventing names, so keep the display string whole.
+                    Timber.d("Artist list does not line up for ${song.id}; keeping \"$raw\" as one credit")
+                    listOf(raw to ids.first())
+                }
+            }
         }
 
-        names.forEachIndexed { index, name ->
-            // YouTube channel ids pass through; anything else becomes a local
-            // artist. The fallback id is derived from the name so the same
-            // artist does not fragment into one row per song.
-            val id = ids.getOrNull(index)?.takeIf { it.isNotBlank() } ?: localArtistId(name)
+        credits.forEachIndexed { index, (name, id) ->
             db.insert(
                 "artist",
                 SQLiteDatabase.CONFLICT_IGNORE,
@@ -446,7 +568,7 @@ class LegacyMediyoMigration @Inject constructor(
                     put("id", id)
                     put("name", name)
                     put("thumbnailUrl", song.artworkUrl)
-                    put("lastUpdateTime", System.currentTimeMillis())
+                    put("lastUpdateTime", nowWallClock())
                     put("bookmarkedAt", null as Long?)
                 }
             )
@@ -466,21 +588,21 @@ class LegacyMediyoMigration @Inject constructor(
             // The song's artists are also the best album credit the legacy
             // data has; without this the album screen shows no artist at all.
             song.albumId?.takeIf { it.isNotBlank() }?.let { albumId ->
-                db.insert(
-                    "album_artist_map",
-                    SQLiteDatabase.CONFLICT_IGNORE,
-                    ContentValues().apply {
-                        put("albumId", albumId)
-                        put("artistId", id)
-                        put("order", index)
-                    }
+                // `order` is a reserved word, and `SQLiteDatabase.insert`
+                // pastes ContentValues keys into the statement unquoted, so
+                // going through it produces `... (albumId,artistId,order) ...`
+                // and SQLite refuses to even parse it. Raw SQL lets it be
+                // quoted, the same way `index` is below.
+                db.execSQL(
+                    "INSERT OR IGNORE INTO album_artist_map (albumId, artistId, `order`) VALUES (?, ?, ?)",
+                    arrayOf<Any>(albumId, id, index)
                 )
             }
         }
     }
 
     private fun writeAlbum(
-        db: androidx.sqlite.db.SupportSQLiteDatabase,
+        db: SupportSQLiteDatabase,
         song: LegacySong,
         albumStats: MutableMap<String, AlbumStats>,
     ) {
@@ -496,7 +618,7 @@ class LegacyMediyoMigration @Inject constructor(
                 put("themeColor", null as Int?)
                 put("songCount", 0)
                 put("duration", 0)
-                put("lastUpdateTime", System.currentTimeMillis())
+                put("lastUpdateTime", nowWallClock())
                 put("bookmarkedAt", null as Long?)
             }
         )
@@ -518,136 +640,121 @@ class LegacyMediyoMigration @Inject constructor(
     }
 
     private fun writeAlbums(
-        db: androidx.sqlite.db.SupportSQLiteDatabase,
+        db: SupportSQLiteDatabase,
         albumStats: Map<String, AlbumStats>,
     ) {
         albumStats.forEach { (id, stats) ->
+            // The legacy count only covers the songs the old app knew about.
+            // Taking the larger of the two keeps an album the new app has
+            // already seen from shrinking on import, and makes a retry a
+            // no-op instead of a downgrade.
             db.execSQL(
-                "UPDATE album SET songCount = ?, duration = ? WHERE id = ?",
+                "UPDATE album SET songCount = MAX(songCount, ?), duration = MAX(duration, ?) WHERE id = ?",
                 arrayOf<Any>(stats.songs, stats.duration, id)
             )
         }
     }
 
-    private fun writePlaylists(
-        db: androidx.sqlite.db.SupportSQLiteDatabase,
-        playlists: List<LegacyPlaylist>,
-        entries: Map<String, List<Pair<String, Int>>>,
+    private fun writePlaylist(
+        db: SupportSQLiteDatabase,
+        playlist: LegacyPlaylist,
+        entries: List<Pair<String, Int>>,
     ) {
-        playlists.forEach { playlist ->
-            val inserted = db.insert(
-                "playlist",
-                SQLiteDatabase.CONFLICT_IGNORE,
-                ContentValues().apply {
-                    put("id", playlist.id)
-                    put("name", playlist.name)
-                    put("browseId", null as String?)
-                }
-            )
-            // The id already belongs to a playlist this app knows (a retry, or
-            // an unchanged row): its entries are already correct, and
-            // replacing them would overwrite a playlist we do not own.
-            if (inserted == -1L) return@forEach
-            entries[playlist.id].orEmpty()
-                .sortedBy { it.second }
-                .forEachIndexed { index, (songId, _) ->
-                    db.insert(
-                        "playlist_song_map",
-                        SQLiteDatabase.CONFLICT_IGNORE,
-                        ContentValues().apply {
-                            put("playlistId", playlist.id)
-                            put("songId", songId)
-                            put("position", index)
-                        }
-                    )
-                }
-        }
-    }
-
-    private fun writeEvents(
-        db: androidx.sqlite.db.SupportSQLiteDatabase,
-        events: List<LegacyEvent>,
-    ) {
-        events.forEach { event ->
-            // The old table has no natural key, so deduplicate on the exact
-            // row an earlier attempt would have written.
-            db.execSQL(
-                "INSERT INTO event (songId, timestamp, playTime) " +
-                    "SELECT ?, ?, ? WHERE NOT EXISTS (" +
-                    "SELECT 1 FROM event WHERE songId = ? AND timestamp = ? AND playTime = ?)",
-                arrayOf<Any>(
-                    event.songId, event.timestamp, event.playTime,
-                    event.songId, event.timestamp, event.playTime,
+        val inserted = db.insert(
+            "playlist",
+            SQLiteDatabase.CONFLICT_IGNORE,
+            ContentValues().apply {
+                put("id", playlist.id)
+                put("name", playlist.name)
+                put("browseId", null as String?)
+            }
+        )
+        // The id already belongs to a playlist this app knows (a retry, or
+        // an unchanged row): its entries are already correct, and replacing
+        // them would overwrite a playlist we do not own.
+        if (inserted == -1L) return
+        entries.sortedBy { it.second }
+            .forEachIndexed { index, (songId, _) ->
+                db.insert(
+                    "playlist_song_map",
+                    SQLiteDatabase.CONFLICT_IGNORE,
+                    ContentValues().apply {
+                        put("playlistId", playlist.id)
+                        put("songId", songId)
+                        put("position", index)
+                    }
                 )
-            )
-        }
+            }
     }
 
-    private fun writeSearchHistory(
-        db: androidx.sqlite.db.SupportSQLiteDatabase,
-        queries: List<String>,
+    private fun writeEvent(
+        db: SupportSQLiteDatabase,
+        event: LegacyEvent,
     ) {
-        queries.forEach { query ->
-            db.insert(
-                "search_history",
-                SQLiteDatabase.CONFLICT_IGNORE,
-                ContentValues().apply { put("query", query) },
+        // The old table has no natural key, so deduplicate on the exact row an
+        // earlier attempt would have written.
+        val at = localWallClock(event.timestamp)
+        db.execSQL(
+            "INSERT INTO event (songId, timestamp, playTime) " +
+                "SELECT ?, ?, ? WHERE NOT EXISTS (" +
+                "SELECT 1 FROM event WHERE songId = ? AND timestamp = ? AND playTime = ?)",
+            arrayOf<Any>(
+                event.songId, at, event.playTime,
+                event.songId, at, event.playTime,
             )
-        }
+        )
     }
 
-    private fun writeAlbumBookmarks(
-        db: androidx.sqlite.db.SupportSQLiteDatabase,
-        bookmarks: List<LegacyBookmark>,
-    ) {
-        bookmarks.forEach { bookmark ->
-            val at = bookmark.savedAt.takeIf { it > 0 } ?: System.currentTimeMillis()
-            db.insert(
-                "album",
-                SQLiteDatabase.CONFLICT_IGNORE,
-                ContentValues().apply {
-                    put("id", bookmark.id)
-                    put("title", bookmark.name)
-                    put("year", null as Int?)
-                    put("thumbnailUrl", bookmark.artworkUrl)
-                    put("themeColor", null as Int?)
-                    put("songCount", 0)
-                    put("duration", 0)
-                    put("lastUpdateTime", at)
-                    put("bookmarkedAt", at)
-                }
-            )
-            db.execSQL(
-                "UPDATE album SET bookmarkedAt = COALESCE(bookmarkedAt, ?), " +
-                    "thumbnailUrl = COALESCE(thumbnailUrl, ?) WHERE id = ?",
-                arrayOf<Any?>(at, bookmark.artworkUrl, bookmark.id)
-            )
-        }
+    private fun writeSearch(db: SupportSQLiteDatabase, query: String) {
+        db.insert(
+            "search_history",
+            SQLiteDatabase.CONFLICT_IGNORE,
+            ContentValues().apply { put("query", query) },
+        )
     }
 
-    private fun writeArtistBookmarks(
-        db: androidx.sqlite.db.SupportSQLiteDatabase,
-        bookmarks: List<LegacyBookmark>,
-    ) {
-        bookmarks.forEach { bookmark ->
-            val at = bookmark.savedAt.takeIf { it > 0 } ?: System.currentTimeMillis()
-            db.insert(
-                "artist",
-                SQLiteDatabase.CONFLICT_IGNORE,
-                ContentValues().apply {
-                    put("id", bookmark.id)
-                    put("name", bookmark.name)
-                    put("thumbnailUrl", bookmark.artworkUrl)
-                    put("lastUpdateTime", at)
-                    put("bookmarkedAt", at)
-                }
-            )
-            db.execSQL(
-                "UPDATE artist SET bookmarkedAt = COALESCE(bookmarkedAt, ?), " +
-                    "thumbnailUrl = COALESCE(thumbnailUrl, ?) WHERE id = ?",
-                arrayOf<Any?>(at, bookmark.artworkUrl, bookmark.id)
-            )
-        }
+    private fun writeAlbumBookmark(db: SupportSQLiteDatabase, bookmark: LegacyBookmark) {
+        val at = bookmark.savedAt.takeIf { it > 0 }?.let { localWallClock(it) } ?: nowWallClock()
+        db.insert(
+            "album",
+            SQLiteDatabase.CONFLICT_IGNORE,
+            ContentValues().apply {
+                put("id", bookmark.id)
+                put("title", bookmark.name)
+                put("year", null as Int?)
+                put("thumbnailUrl", bookmark.artworkUrl)
+                put("themeColor", null as Int?)
+                put("songCount", 0)
+                put("duration", 0)
+                put("lastUpdateTime", at)
+                put("bookmarkedAt", at)
+            }
+        )
+        db.execSQL(
+            "UPDATE album SET bookmarkedAt = COALESCE(bookmarkedAt, ?), " +
+                "thumbnailUrl = COALESCE(thumbnailUrl, ?) WHERE id = ?",
+            arrayOf<Any?>(at, bookmark.artworkUrl, bookmark.id)
+        )
+    }
+
+    private fun writeArtistBookmark(db: SupportSQLiteDatabase, bookmark: LegacyBookmark) {
+        val at = bookmark.savedAt.takeIf { it > 0 }?.let { localWallClock(it) } ?: nowWallClock()
+        db.insert(
+            "artist",
+            SQLiteDatabase.CONFLICT_IGNORE,
+            ContentValues().apply {
+                put("id", bookmark.id)
+                put("name", bookmark.name)
+                put("thumbnailUrl", bookmark.artworkUrl)
+                put("lastUpdateTime", at)
+                put("bookmarkedAt", at)
+            }
+        )
+        db.execSQL(
+            "UPDATE artist SET bookmarkedAt = COALESCE(bookmarkedAt, ?), " +
+                "thumbnailUrl = COALESCE(thumbnailUrl, ?) WHERE id = ?",
+            arrayOf<Any?>(at, bookmark.artworkUrl, bookmark.id)
+        )
     }
 
     /**
@@ -660,22 +767,36 @@ class LegacyMediyoMigration @Inject constructor(
         val from = context.filesDir.resolve(LEGACY_DOWNLOAD_CACHE)
         val to = context.filesDir.resolve(DOWNLOAD_CACHE)
         if (!from.exists()) return true
-        if (to.exists()) {
-            // Only an empty directory is safe to remove; merging two caches
-            // whose UID does not match the index would make both unreadable,
-            // and deleting real downloads to make room would lose them.
-            if (!to.listFiles().isNullOrEmpty()) {
-                Timber.w("Download cache target is not empty; leaving both in place")
-                return false
+
+        if (!to.exists()) {
+            return from.renameTo(to).also {
+                if (!it) Timber.w("Could not move the legacy download cache")
             }
+        }
+
+        if (to.isDirectory && to.listFiles().isNullOrEmpty()) {
+            // An empty target is the only one that can be replaced outright.
             if (!to.deleteRecursively()) {
                 Timber.w("Could not clear the empty download cache target")
                 return false
             }
+            return from.renameTo(to).also {
+                if (!it) Timber.w("Could not move the legacy download cache")
+            }
         }
-        return from.renameTo(to).also {
-            if (!it) Timber.w("Could not move the legacy download cache")
+
+        // Merging is not possible: the two caches have different UIDs and the
+        // index of one would point at the other's files. Deleting the user's
+        // audio to make room is worse than keeping it, and blocking the import
+        // forever — which is what this used to do — means the library never
+        // arrives either. Move the old cache aside and let the import finish.
+        val aside = context.filesDir.resolve("$LEGACY_DOWNLOAD_CACHE.kept-${System.currentTimeMillis()}")
+        if (!from.renameTo(aside)) {
+            Timber.w("Could not move the legacy download cache out of the way")
+            return false
         }
+        Timber.w("The new download cache was not empty; the old one was kept at ${aside.name}")
+        return true
     }
 
     private suspend fun migrateAuth() {
@@ -718,6 +839,24 @@ class LegacyMediyoMigration @Inject constructor(
         val index = getColumnIndex(column)
         return if (index < 0 || isNull(index)) null else getInt(index)
     }
+
+    /**
+     * The new tables store a `LocalDateTime` as the wall clock re-read as if
+     * it were UTC (see `Converters`). The legacy columns are true epoch
+     * millis, so copying them raw would render every migrated timestamp
+     * shifted by the device's UTC offset — history grouped under the wrong
+     * day, bookmarks dated in the future or the past.
+     */
+    private fun localWallClock(epochMillis: Long): Long =
+        Instant.ofEpochMilli(epochMillis)
+            .atZone(ZoneId.systemDefault())
+            .toLocalDateTime()
+            .atZone(ZoneOffset.UTC)
+            .toInstant()
+            .toEpochMilli()
+
+    /** `System.currentTimeMillis()` in the same wall-clock convention. */
+    private fun nowWallClock(): Long = localWallClock(System.currentTimeMillis())
 
     /**
      * Merges a track row from another legacy table into the map. The first
