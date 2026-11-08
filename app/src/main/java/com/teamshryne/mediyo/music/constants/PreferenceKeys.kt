@@ -138,6 +138,13 @@ enum class SearchSource {
 
 /** Set once the previous app's `mediyo.db` has been imported into `song.db`. */
 val LegacyMigratedKey = booleanPreferencesKey("legacyMediyoMigrated")
+
+/**
+ * How many launches the legacy import has been attempted. The import stops
+ * retrying at a known limit so a database that cannot be read does not cost
+ * every start forever.
+ */
+val LegacyMigrationAttemptsKey = intPreferencesKey("legacyMediyoMigrationAttempts")
 val VisitorDataKey = stringPreferencesKey("visitorData")
 val InnerTubeCookieKey = stringPreferencesKey("innerTubeCookie")
 val AccountNameKey = stringPreferencesKey("accountName")

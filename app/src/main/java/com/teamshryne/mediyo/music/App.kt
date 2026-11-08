@@ -51,9 +51,10 @@ class App : Application(), ImageLoaderFactory {
         super.onCreate()
         Timber.plant(FileTree(this))
 
-        // Import the previous app's library before anything reads `song.db`.
-        // The import is guarded by a preference and never throws.
-        legacyMigration.runOnce()
+        // Import the previous app's library. The import is guarded by a
+        // preference, idempotent, and runs off the main thread: a large
+        // library used to hold the first frame while it was copied.
+        legacyMigration.start(GlobalScope)
 
         val locale = Locale.getDefault()
         val languageTag = locale.toLanguageTag().replace("-Hant", "") // replace zh-Hant-* to zh-*
