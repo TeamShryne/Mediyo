@@ -102,11 +102,15 @@ class LegacyMediyoMigrationTest {
             listOf(0, 1),
             ints(db, "SELECT `order` FROM album_artist_map WHERE albumId = 'album-two' ORDER BY `order`")
         )
-        assertFalse(db.query("PRAGMA foreign_key_check").use { it.moveToFirst() })
+        assertTrue(
+            "foreign key violations: ${fkViolations(db)}",
+            db.query("PRAGMA foreign_key_check").use { !it.moveToFirst() },
+        )
 
         // "One, Two" with two ids is two artists; "Earth, Wind & Fire" with no
-        // ids is one, not two.
-        assertEquals(6, count(db, "SELECT COUNT(*) FROM artist"))
+        // ids is one, not two. Five songs give six credits, plus the followed
+        // artist that is not attached to any song.
+        assertEquals(7, count(db, "SELECT COUNT(*) FROM artist"))
         assertEquals(1, count(db, "SELECT COUNT(*) FROM artist WHERE name = 'Earth, Wind & Fire'"))
         assertEquals(0, count(db, "SELECT COUNT(*) FROM artist WHERE name = 'Earth'"))
 
@@ -148,8 +152,8 @@ class LegacyMediyoMigrationTest {
         )
 
         // The import finished: the flag is set and the legacy file is gone.
-        assertTrue(context.dataStore.data.first()[LegacyMigratedKey] == true)
-        assertFalse(context.getDatabasePath("mediyo.db").exists())
+        assertEquals("the import never marked itself done", true, context.dataStore.data.first()[LegacyMigratedKey])
+        assertFalse("mediyo.db should be removed after a successful import", context.getDatabasePath("mediyo.db").exists())
     }
 
     @Test
@@ -286,6 +290,16 @@ class LegacyMediyoMigrationTest {
     private fun strings(db: SupportSQLiteDatabase, sql: String): List<String> =
         db.query(sql).use { cursor ->
             buildList { while (cursor.moveToNext()) add(cursor.getString(0)) }
+        }
+
+    /** `table rowid -> parent` for every broken reference, empty when clean. */
+    private fun fkViolations(db: SupportSQLiteDatabase): List<String> =
+        db.query("PRAGMA foreign_key_check").use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    add("${cursor.getString(0)} rowid=${cursor.getLong(1)} -> ${cursor.getString(2)}")
+                }
+            }
         }
 
     private companion object {
